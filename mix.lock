@@ -1,0 +1,2 @@
+%{"connection": {:hex, :connection, "1.0.4", "a1cae72211f0eef17705aaededacac3eb30e6625b04a6117c1b2db6ace7d5976", [:mix], []},
+  "db_connection": {:hex, :db_connection, "1.0.0-rc.5", "1d9ab6e01387bdf2de7a16c56866971f7c2f75aea7c69cae2a0346e4b537ae0d", [:mix], [{:connection, "~> 1.0.2", [hex: :connection, optional: false]}, {:poolboy, "~> 1.5", [hex: :poolboy, optional: true]}, {:sbroker, "~> 1.0.0-beta.3", [hex: :sbroker, optional: true]}]}}
