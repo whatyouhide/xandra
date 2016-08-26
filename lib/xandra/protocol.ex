@@ -1,4 +1,35 @@
 defmodule Xandra.Protocol do
+  def encode(statement) do
+    <<byte_size(statement)::32>> <>
+      statement <>
+      encode_consistency_level(:one) <>
+      encode_query_flags()
+  end
+
+  @consistency_levels %{
+    0x0000 => :any,
+    0x0001 => :one,
+    0x0002 => :two,
+    0x0003 => :three,
+    0x0004 => :quorum,
+    0x0005 => :all,
+    0x0006 => :local_quorum,
+    0x0007 => :each_quorum,
+    0x0008 => :serial,
+    0x0009 => :local_serial,
+    0x000A => :local_one,
+  }
+
+  for {spec, level} <- @consistency_levels do
+    defp encode_consistency_level(unquote(level)) do
+      <<unquote(spec)::16>>
+    end
+  end
+
+  defp encode_query_flags() do
+    <<0x00>>
+  end
+
   # ERROR
   def decode_response(<<_cql_version, _flags, _stream_id::16, 0x00>>, body) do
     <<code::32-signed>> <> rest = body
