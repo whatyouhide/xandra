@@ -93,6 +93,12 @@ defmodule Xandra.Protocol do
     {_keyspace, ""} = decode_string(rest)
   end
 
+  defp decode_result_response(<<0x0004::32-signed>> <> rest) do
+    <<byte_count::16, _query_id::bytes-size(byte_count)>> <> rest = rest
+    {nil, _column_specs, rest} = decode_metadata(rest)
+    {nil, _column_specs, _rest} = decode_metadata(rest)
+  end
+
   defp decode_metadata(<<flags::4-bytes, column_count::32-signed>> <> rest) do
     <<_::29, no_metadata::1, has_more_pages::1, global_tables_spec::1>> = flags
     0 = has_more_pages

@@ -1,12 +1,16 @@
 defmodule Xandra.Query do
-  defstruct [:statement]
+  defstruct [:name, :statement, :result]
 
-  def new(statement) do
-    {:ok, %__MODULE__{statement: statement}}
+  def new(name \\ nil, statement) do
+    {:ok, %__MODULE__{name: name, statement: statement}}
   end
 
   defimpl DBConnection.Query do
     alias Xandra.{Frame, Protocol}
+
+    def parse(query, _opts) do
+      query
+    end
 
     def encode(query, params, _opts) do
       body = Protocol.encode(query.statement, params)
@@ -14,6 +18,9 @@ defmodule Xandra.Query do
     end
 
     def decode(_query, _result, _opts) do
+    end
+
+    def describe(_query, _opts) do
     end
   end
 end

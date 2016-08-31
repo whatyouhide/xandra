@@ -31,6 +31,24 @@ defmodule Xandra.Connection do
     {:ok, state}
   end
 
+  def prepare(conn, _name, statement, opts \\ []) do
+    with {:ok, query} <- Query.new(statement) do
+      DBConnection.prepare(conn, query, opts)
+    end
+  end
+
+  def handle_prepare(%Query{statement: statement} = query, _opts, %{sock: sock} = state) do
+    body = <<byte_size(statement)::32>> <> statement
+    payload = %Frame{opcode: 0x09} |> Frame.encode(body)
+    case :gen_tcp.send(sock, payload) do
+      :ok ->
+        result = recv(sock)
+        {:ok, %{query | result: result}, state}
+      {:error, reason} ->
+        {:disconnect, reason, state}
+    end
+  end
+
   def execute(conn, statement, params, opts) do
     with {:ok, query} <- Query.new(statement) do
       DBConnection.execute(conn, query, params, opts)
@@ -44,6 +62,10 @@ defmodule Xandra.Connection do
       {:error, reason} ->
         {:disconnect, reason, state}
     end
+  end
+
+  def handle_close(query, _opts, state) do
+    {:ok, query, state}
   end
 
   defp startup_connection(sock, %{"CQL_VERSION" => [cql_version | _]}) do
