@@ -8,8 +8,8 @@ defmodule Xandra.Query do
   defimpl DBConnection.Query do
     alias Xandra.{Frame, Protocol}
 
-    def encode(query, _params, _opts) do
-      body = Protocol.encode(query.statement)
+    def encode(query, params, _opts) do
+      body = Protocol.encode(query.statement, params)
       %Frame{opcode: 0x07} |> Frame.encode(body)
     end
 

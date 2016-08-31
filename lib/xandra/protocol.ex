@@ -1,9 +1,12 @@
 defmodule Xandra.Protocol do
-  def encode(statement) do
+  use Bitwise
+
+  def encode(statement, params) do
     <<byte_size(statement)::32>> <>
       statement <>
       encode_consistency_level(:one) <>
-      encode_query_flags()
+      encode_query_flags(params) <>
+      encode_params(params)
   end
 
   @consistency_levels %{
@@ -26,8 +29,32 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_query_flags() do
+  defp encode_query_flags(params) when params == [] or map_size(params) == 0 do
     <<0x00>>
+  end
+
+  defp encode_query_flags(params) when is_list(params) do
+    <<0x01>>
+  end
+
+  defp encode_query_flags(params) when is_map(params) do
+    <<0x01 ||| 0x04>>
+  end
+
+  defp encode_params(params) when is_list(params) do
+    <<length(params)::16>> <>
+      Enum.map_join(params, fn value ->
+        value = encode_query_value(value)
+        <<byte_size(value)::32>> <> value
+      end)
+  end
+
+  defp encode_query_value(string) when is_binary(string) do
+    string
+  end
+
+  defp encode_query_value(int) when is_integer(int) do
+    <<int::32>>
   end
 
   # ERROR
