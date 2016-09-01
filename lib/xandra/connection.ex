@@ -56,9 +56,10 @@ defmodule Xandra.Connection do
   end
 
   def handle_execute(_query, frame, _opts, %{sock: sock} = state) do
-    case :gen_tcp.send(sock, frame) do
-      :ok ->
-        {:ok, recv_result(sock), state}
+    with :ok <- :gen_tcp.send(sock, frame),
+        {:ok, response} <- recv_response(sock) do
+      {:ok, response, state}
+    else
       {:error, reason} ->
         {:disconnect, reason, state}
     end
@@ -66,6 +67,10 @@ defmodule Xandra.Connection do
 
   def handle_close(query, _opts, state) do
     {:ok, query, state}
+  end
+
+  def disconnect(_exception, %{sock: sock}) do
+    :ok = :gen_tcp.close(sock)
   end
 
   defp startup_connection(sock, %{"CQL_VERSION" => [cql_version | _]}) do
@@ -114,19 +119,16 @@ defmodule Xandra.Connection do
     end
   end
 
-  defp recv_result(sock) do
-    case :gen_tcp.recv(sock, 9) do
-      {:ok, header} ->
-        case Frame.body_length(header) do
-          0 ->
-            {header, <<>>}
-          length ->
-            with {:ok, body} <- :gen_tcp.recv(sock, length) do
-              {header, body}
-            end
-        end
-      {:error, _reason} = error ->
-        error
+  defp recv_response(sock) do
+    with {:ok, header} <- :gen_tcp.recv(sock, 9) do
+      case Frame.body_length(header) do
+        0 ->
+          {:ok, {header, <<>>}}
+        length ->
+          with {:ok, body} <- :gen_tcp.recv(sock, length) do
+            {:ok, {header, body}}
+          end
+      end
     end
   end
 end
