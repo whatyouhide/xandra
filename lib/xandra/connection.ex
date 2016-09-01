@@ -58,7 +58,7 @@ defmodule Xandra.Connection do
   def handle_execute(_query, frame, _opts, %{sock: sock} = state) do
     case :gen_tcp.send(sock, frame) do
       :ok ->
-        {:ok, recv(sock), state}
+        {:ok, recv_result(sock), state}
       {:error, reason} ->
         {:disconnect, reason, state}
     end
@@ -99,15 +99,31 @@ defmodule Xandra.Connection do
 
   defp recv(sock) do
     case :gen_tcp.recv(sock, 9) do
-      {:ok, <<header::5-bytes, 0::32>>} ->
+      {:ok, <<_::5-bytes, 0::32>> = header} ->
         Protocol.decode_response(header, "")
 
-      {:ok, <<header::5-bytes, length::32>>} ->
+      {:ok, <<_::5-bytes, length::32>> = header} ->
         case :gen_tcp.recv(sock, length) do
           {:ok, body} ->
             Protocol.decode_response(header, body)
           {:error, _reason} = error ->
             error
+        end
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp recv_result(sock) do
+    case :gen_tcp.recv(sock, 9) do
+      {:ok, header} ->
+        case Frame.body_length(header) do
+          0 ->
+            {header, <<>>}
+          length ->
+            with {:ok, body} <- :gen_tcp.recv(sock, length) do
+              {header, body}
+            end
         end
       {:error, _reason} = error ->
         error

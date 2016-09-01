@@ -3,6 +3,10 @@ defmodule Xandra.Frame do
 
   @request_version 0x03
 
+  def body_length(<<_::5-bytes, length::32>>) do
+    length
+  end
+
   def encode(%__MODULE__{} = frame, body \\ "") do
     %{stream_id: stream_id, opcode: opcode,
       compression: compression, tracing: tracing} = frame

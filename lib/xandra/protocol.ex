@@ -58,41 +58,46 @@ defmodule Xandra.Protocol do
   end
 
   # ERROR
-  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x00>>, body) do
+  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x00, _::32>>, body) do
     <<code::32-signed>> <> rest = body
     {message, ""} = decode_string(rest)
-    {code, message}
+    Xandra.Error.new(code, message)
   end
 
   # READY
-  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x02>>, "") do
+  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x02, _::32>>, <<>>) do
     :ok
   end
 
   # SUPPORTED
-  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x06>>, body) do
+  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x06, _::32>>, body) do
     {content, ""} = decode_string_multimap(body)
     content
   end
 
   # RESULT
-  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x08>>, body) do
+  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x08, _::32>>, body) do
     decode_result_response(body)
   end
 
+  # Void
   defp decode_result_response(<<0x0001::32-signed>>) do
     :ok
   end
 
+  # Rows
   defp decode_result_response(<<0x0002::32-signed>> <> rest) do
     {nil, column_specs, rest} = decode_metadata(rest)
     decode_rows(rest, column_specs)
   end
 
+  # Set keyspace
   defp decode_result_response(<<0x0003::32-signed>> <> rest) do
-    {_keyspace, ""} = decode_string(rest)
+    {keyspace, ""} = decode_string(rest)
+    keyspace
   end
 
+  # Prepared
   defp decode_result_response(<<0x0004::32-signed>> <> rest) do
     <<byte_count::16, _query_id::bytes-size(byte_count)>> <> rest = rest
     {nil, _column_specs, rest} = decode_metadata(rest)

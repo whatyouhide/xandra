@@ -17,7 +17,8 @@ defmodule Xandra.Query do
       %Frame{opcode: 0x07} |> Frame.encode(body)
     end
 
-    def decode(_query, _result, _opts) do
+    def decode(_query, {header, body}, _opts) do
+      Protocol.decode_response(header, body)
     end
 
     def describe(_query, _opts) do
