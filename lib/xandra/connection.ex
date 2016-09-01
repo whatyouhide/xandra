@@ -6,8 +6,9 @@ defmodule Xandra.Connection do
   @default_timeout 5_000
   @default_sock_opts [packet: :raw, mode: :binary, active: false]
 
-  def start_link() do
-    DBConnection.start_link(__MODULE__, [host: "127.0.0.1"])
+  def start_link(opts \\ []) do
+    opts = Keyword.put_new(opts, :host, "127.0.0.1")
+    DBConnection.start_link(__MODULE__, opts)
   end
 
   def connect(opts) do
