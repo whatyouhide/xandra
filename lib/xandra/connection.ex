@@ -50,10 +50,12 @@ defmodule Xandra.Connection do
     end
   end
 
-  def execute(conn, statement, params, opts) do
-    with {:ok, query} <- Query.new(statement) do
-      DBConnection.execute(conn, query, params, opts)
-    end
+  def execute(conn, statement, params, opts) when is_binary(statement) do
+    DBConnection.execute(conn, %Query{statement: statement}, params, opts)
+  end
+
+  def execute(conn, %Query{} = query, params, opts) do
+    DBConnection.execute(conn, query, params, opts)
   end
 
   def handle_execute(_query, frame, _opts, %{sock: sock} = state) do

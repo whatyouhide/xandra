@@ -1,12 +1,14 @@
 defmodule Xandra.Protocol do
   use Bitwise
 
-  def encode(statement, params) do
-    <<byte_size(statement)::32>> <>
-      statement <>
-      encode_consistency_level(:one) <>
-      encode_query_flags(params) <>
-      encode_params(params)
+  def encode_query(statement, values) do
+    <<byte_size(statement)::32>> <> statement <>
+      encode_params(values)
+  end
+
+  def encode_prepared_query(id, values) do
+    <<byte_size(id)::16>> <> id <>
+      encode_params(values)
   end
 
   @consistency_levels %{
@@ -29,21 +31,27 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_query_flags(params) when params == [] or map_size(params) == 0 do
+  defp encode_query_flags(values) when values == [] or map_size(values) == 0 do
     <<0x00>>
   end
 
-  defp encode_query_flags(params) when is_list(params) do
+  defp encode_query_flags(values) when is_list(values) do
     <<0x01>>
   end
 
-  defp encode_query_flags(params) when is_map(params) do
+  defp encode_query_flags(values) when is_map(values) do
     <<0x01 ||| 0x04>>
   end
 
-  defp encode_params(params) when is_list(params) do
-    <<length(params)::16>> <>
-      Enum.map_join(params, fn value ->
+  defp encode_params(values) do
+    encode_consistency_level(:one) <>
+    encode_query_flags(values) <>
+    encode_values(values)
+  end
+
+  defp encode_values(values) when is_list(values) do
+    <<length(values)::16>> <>
+      Enum.map_join(values, fn value ->
         value = encode_query_value(value)
         <<byte_size(value)::32>> <> value
       end)
