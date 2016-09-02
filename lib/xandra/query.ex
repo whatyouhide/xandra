@@ -1,8 +1,8 @@
 defmodule Xandra.Query do
-  defstruct [:name, :statement, :result]
+  defstruct [:id, :statement, :metadata]
 
-  def new(name \\ nil, statement) do
-    {:ok, %__MODULE__{name: name, statement: statement}}
+  def new(statement) when is_binary(statement) do
+    {:ok, %__MODULE__{statement: statement}}
   end
 
   defimpl DBConnection.Query do
@@ -21,7 +21,8 @@ defmodule Xandra.Query do
       Protocol.decode_response(header, body)
     end
 
-    def describe(_query, _opts) do
+    def describe(query, _opts) do
+      query
     end
   end
 end

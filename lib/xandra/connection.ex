@@ -32,7 +32,7 @@ defmodule Xandra.Connection do
     {:ok, state}
   end
 
-  def prepare(conn, _name, statement, opts \\ []) do
+  def prepare(conn, statement, opts \\ []) do
     with {:ok, query} <- Query.new(statement) do
       DBConnection.prepare(conn, query, opts)
     end
@@ -43,8 +43,8 @@ defmodule Xandra.Connection do
     payload = %Frame{opcode: 0x09} |> Frame.encode(body)
     case :gen_tcp.send(sock, payload) do
       :ok ->
-        result = recv(sock)
-        {:ok, %{query | result: result}, state}
+        {query_id, metadata} = recv(sock)
+        {:ok, %{query | id: query_id, metadata: metadata}, state}
       {:error, reason} ->
         {:disconnect, reason, state}
     end
