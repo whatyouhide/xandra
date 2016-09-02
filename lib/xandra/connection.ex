@@ -32,10 +32,8 @@ defmodule Xandra.Connection do
     {:ok, state}
   end
 
-  def prepare(conn, statement, opts \\ []) do
-    with {:ok, query} <- Query.new(statement) do
-      DBConnection.prepare(conn, query, opts)
-    end
+  def prepare(conn, statement, opts \\ []) when is_binary(statement) do
+    DBConnection.prepare(conn, %Query{statement: statement}, opts)
   end
 
   def handle_prepare(%Query{statement: statement} = query, _opts, %{sock: sock} = state) do
@@ -66,6 +64,10 @@ defmodule Xandra.Connection do
       {:error, reason} ->
         {:disconnect, reason, state}
     end
+  end
+
+  def prepare_execute(conn, statement, params, opts) when is_binary(statement) do
+    DBConnection.prepare_execute(conn, %Query{statement: statement}, params, opts)
   end
 
   def handle_close(query, _opts, state) do

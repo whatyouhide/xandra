@@ -1,10 +1,6 @@
 defmodule Xandra.Query do
   defstruct [:id, :statement, :metadata]
 
-  def new(statement) when is_binary(statement) do
-    {:ok, %__MODULE__{statement: statement}}
-  end
-
   defimpl DBConnection.Query do
     alias Xandra.{Frame, Protocol}
 
