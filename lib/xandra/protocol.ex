@@ -40,7 +40,7 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_flags(values) when is_map(values) do
-    <<0x01 ||| 0x04>>
+    <<0x01 ||| 0x40>>
   end
 
   defp encode_params(values) do
@@ -50,11 +50,19 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_values(values) when is_list(values) do
-    <<length(values)::16>> <>
-      Enum.map_join(values, fn value ->
-        value = encode_query_value(value)
+    for value <- values, into: <<length(values)::16>> do
+      value = encode_query_value(value)
+      <<byte_size(value)::32>> <> value
+    end
+  end
+
+  defp encode_values(values) when is_map(values) do
+    for {name, value} <- values, into: <<map_size(values)::16>> do
+      name = to_string(name)
+      value = encode_query_value(value)
+      <<byte_size(name)::16>> <> name <>
         <<byte_size(value)::32>> <> value
-      end)
+    end
   end
 
   defp encode_query_value(string) when is_binary(string) do
