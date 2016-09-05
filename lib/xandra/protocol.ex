@@ -1,6 +1,8 @@
 defmodule Xandra.Protocol do
   use Bitwise
 
+  alias Xandra.{Result, Error}
+
   def encode_query(statement, values, opts) do
     <<byte_size(statement)::32>> <> statement <>
       encode_params(values, opts)
@@ -85,7 +87,7 @@ defmodule Xandra.Protocol do
   def decode_response(<<_cql_version, _flags, _stream_id::16, 0x00, _::32>>, body) do
     <<code::32-signed>> <> rest = body
     {message, ""} = decode_string(rest)
-    Xandra.Error.new(code, message)
+    Error.new(code, message)
   end
 
   # READY
@@ -111,8 +113,9 @@ defmodule Xandra.Protocol do
 
   # Rows
   defp decode_result_response(<<0x0002::32-signed>> <> rest) do
-    {nil, column_specs, rest} = decode_metadata(rest)
-    decode_rows(rest, column_specs)
+    {nil, column_specs, rest} = decode_metadata(%Result{}, rest)
+    rows = decode_rows(rest, column_specs)
+    %Result{rows: rows}
   end
 
   # Set keyspace
@@ -124,14 +127,15 @@ defmodule Xandra.Protocol do
   # Prepared
   defp decode_result_response(<<0x0004::32-signed>> <> rest) do
     <<byte_count::16, query_id::bytes-size(byte_count)>> <> rest = rest
-    {nil, _column_specs, rest} = decode_metadata(rest)
-    {nil, column_specs, <<>>} = decode_metadata(rest)
+    {nil, _column_specs, rest} = decode_metadata(%Result{}, rest)
+    {nil, column_specs, <<>>} = decode_metadata(%Result{}, rest)
     {query_id, column_specs}
   end
 
-  defp decode_metadata(<<flags::4-bytes, column_count::32-signed>> <> rest) do
+  defp decode_metadata(result, <<flags::4-bytes, column_count::32-signed>> <> rest) do
     <<_::29, no_metadata::1, has_more_pages::1, global_tables_spec::1>> = flags
-    0 = has_more_pages
+
+    {_result, rest} = decode_paging_state(result, has_more_pages, rest)
     cond do
       no_metadata == 1 ->
         {nil, nil, rest}
@@ -144,6 +148,15 @@ defmodule Xandra.Protocol do
         {column_specs, rest} = decode_column_specs(rest, column_count, nil, [])
         {nil, column_specs, rest}
     end
+  end
+
+  defp decode_paging_state(result, 0, buffer) do
+    {result, buffer}
+  end
+
+  defp decode_paging_state(result, 1, buffer) do
+    <<byte_count::32, paging_state::bytes-size(byte_count)>> <> rest = buffer
+    {%{result | paging_state: paging_state}, rest}
   end
 
   defp decode_rows(<<row_count::32-signed>> <> buffer, column_specs) do
