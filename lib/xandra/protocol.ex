@@ -1,14 +1,14 @@
 defmodule Xandra.Protocol do
   use Bitwise
 
-  def encode_query(statement, values) do
+  def encode_query(statement, values, opts) do
     <<byte_size(statement)::32>> <> statement <>
-      encode_params(values)
+      encode_params(values, opts)
   end
 
-  def encode_prepared_query(id, values) do
+  def encode_prepared_query(id, values, opts) do
     <<byte_size(id)::16>> <> id <>
-      encode_params(values)
+      encode_params(values, opts)
   end
 
   @consistency_levels %{
@@ -32,21 +32,29 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_flags(values) when values == [] or map_size(values) == 0 do
-    <<0x00>>
+    <<0x00 ||| 0x04>>
   end
 
   defp encode_query_flags(values) when is_list(values) do
-    <<0x01>>
+    <<0x01 ||| 0x04>>
   end
 
   defp encode_query_flags(values) when is_map(values) do
-    <<0x01 ||| 0x40>>
+    <<0x01 ||| 0x04 ||| 0x40>>
   end
 
-  defp encode_params(values) do
-    encode_consistency_level(:one) <>
-    encode_query_flags(values) <>
-    encode_values(values)
+  defp encode_params(values, opts) do
+    consistency = Keyword.get(opts, :consistency, :one)
+    page_size = Keyword.get(opts, :page_size, 10_000)
+
+    encode_consistency_level(consistency) <>
+      encode_query_flags(values) <>
+      encode_values(values) <>
+      <<page_size::32>>
+  end
+
+  defp encode_values(values) when values == [] or map_size(values) == 0 do
+    <<>>
   end
 
   defp encode_values(values) when is_list(values) do

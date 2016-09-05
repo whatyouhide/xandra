@@ -8,13 +8,13 @@ defmodule Xandra.Query do
       query
     end
 
-    def encode(%{id: nil} = query, params, _opts) do
-      body = Protocol.encode_query(query.statement, params)
+    def encode(%{id: nil} = query, values, opts) do
+      body = Protocol.encode_query(query.statement, values, opts)
       %Frame{opcode: 0x07} |> Frame.encode(body)
     end
 
-    def encode(query, params, _opts) do
-      body = Protocol.encode_prepared_query(query.id, params)
+    def encode(query, values, opts) do
+      body = Protocol.encode_prepared_query(query.id, values, opts)
       %Frame{opcode: 0x0A} |> Frame.encode(body)
     end
 
