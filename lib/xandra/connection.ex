@@ -41,7 +41,7 @@ defmodule Xandra.Connection do
     payload = %Frame{opcode: 0x09} |> Frame.encode(body)
     case :gen_tcp.send(sock, payload) do
       :ok ->
-        {query_id, metadata} = recv(sock)
+        {query_id, metadata} = recv_response(sock)
         {:ok, %{query | id: query_id, metadata: metadata}, state}
       {:error, reason} ->
         {:disconnect, reason, state}
@@ -58,7 +58,7 @@ defmodule Xandra.Connection do
 
   def handle_execute(_query, frame, _opts, %{sock: sock} = state) do
     with :ok <- :gen_tcp.send(sock, frame),
-        {:ok, response} <- recv_response(sock) do
+        {:ok, response} <- recv(sock) do
       {:ok, response, state}
     else
       {:error, reason} ->
@@ -83,7 +83,7 @@ defmodule Xandra.Connection do
     payload = %Frame{opcode: 0x01} |> Frame.encode(body)
     case :gen_tcp.send(sock, payload) do
       :ok ->
-        recv(sock)
+        recv_response(sock)
         :ok
       {:error, reason} ->
         reason
@@ -101,13 +101,13 @@ defmodule Xandra.Connection do
     payload = %Frame{opcode: 0x05} |> Frame.encode()
     case :gen_tcp.send(sock, payload) do
       :ok ->
-        recv(sock)
+        recv_response(sock)
       {:error, reason} ->
         reason
     end
   end
 
-  defp recv(sock) do
+  defp recv_response(sock) do
     case :gen_tcp.recv(sock, 9) do
       {:ok, <<_::5-bytes, 0::32>> = header} ->
         Protocol.decode_response(header, "")
@@ -124,7 +124,7 @@ defmodule Xandra.Connection do
     end
   end
 
-  defp recv_response(sock) do
+  defp recv(sock) do
     with {:ok, header} <- :gen_tcp.recv(sock, 9) do
       case Frame.body_length(header) do
         0 ->
