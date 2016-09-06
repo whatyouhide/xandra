@@ -1,7 +1,7 @@
 defmodule Xandra.Protocol do
   use Bitwise
 
-  alias Xandra.{Result, Error}
+  alias Xandra.{Query, Result, Error}
 
   def encode_query(statement, values, opts) do
     <<byte_size(statement)::32>> <> statement <>
@@ -84,48 +84,55 @@ defmodule Xandra.Protocol do
   end
 
   # ERROR
-  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x00, _::32>>, body) do
+
+  def decode_response(header, body, query \\ nil)
+
+  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x00, _::32>>, body, _query) do
     <<code::32-signed>> <> rest = body
     {message, ""} = decode_string(rest)
     Error.new(code, message)
   end
 
   # READY
-  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x02, _::32>>, <<>>) do
+  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x02, _::32>>, <<>>, nil) do
     :ok
   end
 
   # SUPPORTED
-  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x06, _::32>>, body) do
+  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x06, _::32>>, body, nil) do
     {content, ""} = decode_string_multimap(body)
     content
   end
 
   # RESULT
-  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x08, _::32>>, body) do
-    decode_result_response(body)
+  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x08, _::32>>, body, %Query{} = query) do
+    decode_result_response(body, query)
   end
 
   # Void
-  defp decode_result_response(<<0x0001::32-signed>>) do
+  defp decode_result_response(<<0x0001::32-signed>>, _query) do
     :ok
   end
 
   # Rows
-  defp decode_result_response(<<0x0002::32-signed>> <> rest) do
-    {result, rest} = decode_metadata(%Result{}, rest)
+  defp decode_result_response(<<0x0002::32-signed>> <> rest, query) do
+    result = case query.prepared do
+      {_query_id, result} -> result
+      nil -> %Result{}
+    end
+    {result, rest} = decode_metadata(result, rest)
     rows = decode_rows(rest, result.column_specs)
     %{result | rows: rows}
   end
 
   # Set keyspace
-  defp decode_result_response(<<0x0003::32-signed>> <> rest) do
+  defp decode_result_response(<<0x0003::32-signed>> <> rest, _query) do
     {keyspace, ""} = decode_string(rest)
     keyspace
   end
 
   # Prepared
-  defp decode_result_response(<<0x0004::32-signed>> <> rest) do
+  defp decode_result_response(<<0x0004::32-signed>> <> rest, _query) do
     <<byte_count::16, query_id::bytes-size(byte_count)>> <> rest = rest
     {_result, rest} = decode_metadata(%Result{}, rest)
     {result, <<>>} = decode_metadata(%Result{}, rest)
