@@ -5,12 +5,12 @@ defmodule Xandra.Protocol do
 
   def encode_query(statement, values, opts) do
     <<byte_size(statement)::32>> <> statement <>
-      encode_params(values, opts)
+      encode_params(values, opts, false)
   end
 
   def encode_prepared_query(id, values, opts) do
     <<byte_size(id)::16>> <> id <>
-      encode_params(values, opts)
+      encode_params(values, opts, true)
   end
 
   @consistency_levels %{
@@ -33,24 +33,38 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_query_flags(values) when values == [] or map_size(values) == 0 do
-    <<0x00 ||| 0x04>>
+  defp set_query_values(mask, values) do
+    cond do
+      values == [] ->
+        mask
+      is_list(values) ->
+        mask ||| 0x01
+      map_size(values) == 0 ->
+        mask
+      is_map(values) ->
+        mask ||| 0x01 ||| 0x40
+    end
   end
 
-  defp encode_query_flags(values) when is_list(values) do
-    <<0x01 ||| 0x04>>
+  defp set_metadata_presence(mask, skip_metadata?) do
+    if skip_metadata? do
+      mask ||| 0x02
+    else
+      mask
+    end
   end
 
-  defp encode_query_flags(values) when is_map(values) do
-    <<0x01 ||| 0x04 ||| 0x40>>
-  end
-
-  defp encode_params(values, opts) do
+  defp encode_params(values, opts, skip_metadata?) do
     consistency = Keyword.get(opts, :consistency, :one)
     page_size = Keyword.get(opts, :page_size, 10_000)
 
+    flag_mask =
+      set_query_values(0x00, values)
+      |> bor(0x04)
+      |> set_metadata_presence(skip_metadata?)
+
     encode_consistency_level(consistency) <>
-      encode_query_flags(values) <>
+      <<flag_mask>> <>
       encode_values(values) <>
       <<page_size::32>>
   end
@@ -267,7 +281,7 @@ defmodule Xandra.Protocol do
     decode_map(size - 1, buffer, key_type, value_type, [{key, value} | acc])
   end
 
-  defp decode_column_specs(rest, 0, _global_tables_spec, acc) do
+  defp decode_column_specs(rest, 0, _table_spec, acc) do
     {Enum.reverse(acc), rest}
   end
 
@@ -280,12 +294,12 @@ defmodule Xandra.Protocol do
     decode_column_specs(rest, column_count - 1, nil, [entry | acc])
   end
 
-  defp decode_column_specs(rest, column_count, global_tables_spec, acc) do
-    {keyspace_name, table_name} = global_tables_spec
+  defp decode_column_specs(rest, column_count, table_spec, acc) do
+    {keyspace_name, table_name} = table_spec
     {name, rest} = decode_string(rest)
     {type, rest} = decode_type(rest)
     entry = {keyspace_name, table_name, name, type}
-    decode_column_specs(rest, column_count - 1, global_tables_spec, [entry | acc])
+    decode_column_specs(rest, column_count - 1, table_spec, [entry | acc])
   end
 
   defp decode_type(<<0x0000::16>> <> rest) do
