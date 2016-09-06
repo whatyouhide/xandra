@@ -132,11 +132,11 @@ defmodule Xandra.Protocol do
   end
 
   # Prepared
-  defp decode_result_response(<<0x0004::32-signed>> <> rest, _query) do
+  defp decode_result_response(<<0x0004::32-signed>> <> rest, query) do
     <<byte_count::16, query_id::bytes-size(byte_count)>> <> rest = rest
     {_result, rest} = decode_metadata(%Result{}, rest)
     {result, <<>>} = decode_metadata(%Result{}, rest)
-    {query_id, result}
+    %{query | prepared: {query_id, result}}
   end
 
   defp decode_metadata(result, <<flags::4-bytes, column_count::32-signed>> <> rest) do

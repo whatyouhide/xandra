@@ -42,8 +42,7 @@ defmodule Xandra.Connection do
     case :gen_tcp.send(sock, payload) do
       :ok ->
         {:ok, {header, body}} = recv(sock)
-        {query_id, result} = Protocol.decode_response(header, body, query)
-        {:ok, %{query | prepared: {query_id, result}}, state}
+        {:ok, Protocol.decode_response(header, body, query), state}
       {:error, reason} ->
         {:disconnect, reason, state}
     end
