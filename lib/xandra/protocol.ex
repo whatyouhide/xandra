@@ -113,9 +113,9 @@ defmodule Xandra.Protocol do
 
   # Rows
   defp decode_result_response(<<0x0002::32-signed>> <> rest) do
-    {nil, column_specs, rest} = decode_metadata(%Result{}, rest)
-    rows = decode_rows(rest, column_specs)
-    %Result{rows: rows}
+    {result, rest} = decode_metadata(%Result{}, rest)
+    rows = decode_rows(rest, result.column_specs)
+    %{result | rows: rows}
   end
 
   # Set keyspace
@@ -127,26 +127,26 @@ defmodule Xandra.Protocol do
   # Prepared
   defp decode_result_response(<<0x0004::32-signed>> <> rest) do
     <<byte_count::16, query_id::bytes-size(byte_count)>> <> rest = rest
-    {nil, _column_specs, rest} = decode_metadata(%Result{}, rest)
-    {nil, column_specs, <<>>} = decode_metadata(%Result{}, rest)
-    {query_id, column_specs}
+    {_result, rest} = decode_metadata(%Result{}, rest)
+    {result, <<>>} = decode_metadata(%Result{}, rest)
+    {query_id, result}
   end
 
   defp decode_metadata(result, <<flags::4-bytes, column_count::32-signed>> <> rest) do
-    <<_::29, no_metadata::1, has_more_pages::1, global_tables_spec::1>> = flags
+    <<_::29, no_metadata::1, has_more_pages::1, global_table_spec::1>> = flags
 
     {_result, rest} = decode_paging_state(result, has_more_pages, rest)
     cond do
       no_metadata == 1 ->
-        {nil, nil, rest}
-      global_tables_spec == 1 ->
+        {result, rest}
+      global_table_spec == 1 ->
         {keyspace_name, rest} = decode_string(rest)
         {table_name, rest} = decode_string(rest)
         {column_specs, rest} = decode_column_specs(rest, column_count, {keyspace_name, table_name}, [])
-        {nil, column_specs, rest}
+        {%{result | column_specs: column_specs}, rest}
       true ->
         {column_specs, rest} = decode_column_specs(rest, column_count, nil, [])
-        {nil, column_specs, rest}
+        {%{result | column_specs: column_specs}, rest}
     end
   end
 
