@@ -32,6 +32,18 @@ defmodule Xandra.Connection do
     {:ok, state}
   end
 
+  def stream!(conn, query, params, opts \\ [])
+
+  def stream!(conn, statement, params, opts) when is_binary(statement) do
+    with {:ok, query} <- prepare(conn, statement, opts) do
+      stream(conn, query, params, opts)
+    end
+  end
+
+  def stream(conn, %Query{} = query, params, opts) do
+    %Xandra.Stream{conn: conn, query: query, params: params, opts: opts}
+  end
+
   def prepare(conn, statement, opts \\ []) when is_binary(statement) do
     DBConnection.prepare(conn, %Query{statement: statement}, opts)
   end

@@ -54,19 +54,38 @@ defmodule Xandra.Protocol do
     end
   end
 
+  defp set_paging_state(mask, value) do
+    if is_nil(value) do
+      mask
+    else
+      mask ||| 0x08
+    end
+  end
+
   defp encode_params(values, opts, skip_metadata?) do
     consistency = Keyword.get(opts, :consistency, :one)
     page_size = Keyword.get(opts, :page_size, 10_000)
+    paging_state = Keyword.get(opts, :paging_state)
 
     flag_mask =
       set_query_values(0x00, values)
       |> bor(0x04)
       |> set_metadata_presence(skip_metadata?)
+      |> set_paging_state(paging_state)
 
     encode_consistency_level(consistency) <>
       <<flag_mask>> <>
       encode_values(values) <>
-      <<page_size::32>>
+      <<page_size::32>> <>
+      encode_paging_state(paging_state)
+  end
+
+  defp encode_paging_state(value) do
+    if is_nil(value) do
+      <<>>
+    else
+      <<byte_size(value)::32>> <> value
+    end
   end
 
   defp encode_values(values) when values == [] or map_size(values) == 0 do
