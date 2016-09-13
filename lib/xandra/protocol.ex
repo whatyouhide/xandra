@@ -141,9 +141,8 @@ defmodule Xandra.Protocol do
     decode_result_response(body, query)
   end
 
-  # Void
   defp decode_result_response(<<0x0001::32-signed>>, _query) do
-    :ok
+    %Xandra.Void{}
   end
 
   # Rows
@@ -157,10 +156,9 @@ defmodule Xandra.Protocol do
     %{result | rows: rows}
   end
 
-  # Set keyspace
   defp decode_result_response(<<0x0003::32-signed>> <> rest, _query) do
     {keyspace, ""} = decode_string(rest)
-    keyspace
+    %Xandra.SetKeyspace{keyspace: keyspace}
   end
 
   # Prepared
@@ -171,23 +169,22 @@ defmodule Xandra.Protocol do
     %{query | prepared: {query_id, result}}
   end
 
-  # Schema change
   defp decode_result_response(<<0x0005::32-signed>> <> rest, _query) do
     {effect, rest} = decode_string(rest)
     {target, rest} = decode_string(rest)
-    options = decode_change_options(target, rest)
-    {effect, target, options}
+    options = decode_change_options(rest, target)
+    %Xandra.SchemaChange{effect: effect, target: target, options: options}
   end
 
-  defp decode_change_options("KEYSPACE", buffer) do
+  defp decode_change_options(buffer, "KEYSPACE") do
     {keyspace, ""} = decode_string(buffer)
-    keyspace
+    %{keyspace: keyspace}
   end
 
-  defp decode_change_options(target, buffer) when target in ["TABLE", "TYPE"] do
+  defp decode_change_options(buffer, target) when target in ["TABLE", "TYPE"] do
     {keyspace, rest} = decode_string(buffer)
     {subject, ""} = decode_string(rest)
-    {keyspace, subject}
+    %{keyspace: keyspace, subject: subject}
   end
 
   defp decode_metadata(result, <<flags::4-bytes, column_count::32-signed>> <> rest) do
