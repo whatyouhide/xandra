@@ -116,10 +116,9 @@ defmodule Xandra.Protocol do
     <<int::32>>
   end
 
-  # ERROR
-
   def decode_response(header, body, query \\ nil)
 
+  # ERROR
   def decode_response(<<_cql_version, _flags, _stream_id::16, 0x00, _::32>>, body, _query) do
     <<code::32-signed>> <> rest = body
     {message, ""} = decode_string(rest)
@@ -170,6 +169,25 @@ defmodule Xandra.Protocol do
     {_result, rest} = decode_metadata(%Result{}, rest)
     {result, <<>>} = decode_metadata(%Result{}, rest)
     %{query | prepared: {query_id, result}}
+  end
+
+  # Schema change
+  defp decode_result_response(<<0x0005::32-signed>> <> rest, _query) do
+    {effect, rest} = decode_string(rest)
+    {target, rest} = decode_string(rest)
+    options = decode_change_options(target, rest)
+    {effect, target, options}
+  end
+
+  defp decode_change_options("KEYSPACE", buffer) do
+    {keyspace, ""} = decode_string(buffer)
+    keyspace
+  end
+
+  defp decode_change_options(target, buffer) when target in ["TABLE", "TYPE"] do
+    {keyspace, rest} = decode_string(buffer)
+    {subject, ""} = decode_string(rest)
+    {keyspace, subject}
   end
 
   defp decode_metadata(result, <<flags::4-bytes, column_count::32-signed>> <> rest) do
