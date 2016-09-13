@@ -6,11 +6,6 @@ defmodule Xandra.Connection do
   @default_timeout 5_000
   @default_sock_opts [packet: :raw, mode: :binary, active: false]
 
-  def start_link(opts \\ []) do
-    opts = Keyword.put_new(opts, :host, "127.0.0.1")
-    DBConnection.start_link(__MODULE__, opts)
-  end
-
   def connect(opts) do
     host = Keyword.fetch!(opts, :host) |> to_char_list()
     port = Keyword.get(opts, :port, 9042)
@@ -32,22 +27,6 @@ defmodule Xandra.Connection do
     {:ok, state}
   end
 
-  def stream!(conn, query, params, opts \\ [])
-
-  def stream!(conn, statement, params, opts) when is_binary(statement) do
-    with {:ok, query} <- prepare(conn, statement, opts) do
-      stream(conn, query, params, opts)
-    end
-  end
-
-  def stream(conn, %Query{} = query, params, opts) do
-    %Xandra.Stream{conn: conn, query: query, params: params, opts: opts}
-  end
-
-  def prepare(conn, statement, opts \\ []) when is_binary(statement) do
-    DBConnection.prepare(conn, %Query{statement: statement}, opts)
-  end
-
   def handle_prepare(%Query{statement: statement} = query, _opts, %{sock: sock} = state) do
     body = <<byte_size(statement)::32>> <> statement
     payload = %Frame{opcode: 0x09} |> Frame.encode(body)
@@ -60,14 +39,6 @@ defmodule Xandra.Connection do
     end
   end
 
-  def execute(conn, statement, params, opts) when is_binary(statement) do
-    DBConnection.execute(conn, %Query{statement: statement}, params, opts)
-  end
-
-  def execute(conn, %Query{} = query, params, opts) do
-    DBConnection.execute(conn, query, params, opts)
-  end
-
   def handle_execute(_query, frame, _opts, %{sock: sock} = state) do
     with :ok <- :gen_tcp.send(sock, frame),
         {:ok, response} <- recv(sock) do
@@ -76,10 +47,6 @@ defmodule Xandra.Connection do
       {:error, reason} ->
         {:disconnect, reason, state}
     end
-  end
-
-  def prepare_execute(conn, statement, params, opts) when is_binary(statement) do
-    DBConnection.prepare_execute(conn, %Query{statement: statement}, params, opts)
   end
 
   def handle_close(query, _opts, state) do

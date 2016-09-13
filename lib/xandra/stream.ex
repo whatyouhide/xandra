@@ -26,7 +26,7 @@ defmodule Xandra.Stream do
 
     defp next(stream) do
       %{conn: conn, query: query, params: params, opts: opts} = stream
-      case Xandra.Connection.execute(conn, query, params, opts) |> elem(1) do
+      case Xandra.execute(conn, query, params, opts) |> elem(1) do
         %Result{paging_state: nil} = result ->
           {[result], %{stream | state: :done}}
         %Result{paging_state: paging_state} = result ->
