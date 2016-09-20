@@ -1,7 +1,7 @@
 defmodule Xandra.Protocol do
   use Bitwise
 
-  alias Xandra.{Query, Result, Error}
+  alias Xandra.{Query, Rows, Error}
 
   def encode_query(statement, values, opts) do
     <<byte_size(statement)::32>> <> statement <>
@@ -147,13 +147,13 @@ defmodule Xandra.Protocol do
 
   # Rows
   defp decode_result_response(<<0x0002::32-signed>> <> rest, query) do
-    result = case query.prepared do
-      {_query_id, result} -> result
-      nil -> %Result{}
+    rows = case query.prepared do
+      {_query_id, rows} -> rows
+      nil -> %Rows{}
     end
-    {result, rest} = decode_metadata(result, rest)
-    rows = decode_rows(rest, result.column_specs)
-    %{result | rows: rows}
+    {rows, rest} = decode_metadata(rows, rest)
+    content = decode_content(rest, rows.column_specs)
+    %{rows | content: content}
   end
 
   defp decode_result_response(<<0x0003::32-signed>> <> rest, _query) do
@@ -164,9 +164,9 @@ defmodule Xandra.Protocol do
   # Prepared
   defp decode_result_response(<<0x0004::32-signed>> <> rest, query) do
     {query_id, rest} = decode_string(rest)
-    {_result, rest} = decode_metadata(%Result{}, rest)
-    {result, <<>>} = decode_metadata(%Result{}, rest)
-    %{query | prepared: {query_id, result}}
+    {_rows, rest} = decode_metadata(%Rows{}, rest)
+    {rows, <<>>} = decode_metadata(%Rows{}, rest)
+    %{query | prepared: {query_id, rows}}
   end
 
   defp decode_result_response(<<0x0005::32-signed>> <> rest, _query) do
@@ -187,50 +187,50 @@ defmodule Xandra.Protocol do
     %{keyspace: keyspace, subject: subject}
   end
 
-  defp decode_metadata(result, <<flags::4-bytes, column_count::32-signed>> <> rest) do
+  defp decode_metadata(rows, <<flags::4-bytes, column_count::32-signed>> <> rest) do
     <<_::29, no_metadata::1, has_more_pages::1, global_table_spec::1>> = flags
 
-    {_result, rest} = decode_paging_state(result, has_more_pages, rest)
+    {rows, rest} = decode_paging_state(rows, has_more_pages, rest)
     cond do
       no_metadata == 1 ->
-        {result, rest}
+        {rows, rest}
       global_table_spec == 1 ->
         {keyspace_name, rest} = decode_string(rest)
         {table_name, rest} = decode_string(rest)
         {column_specs, rest} = decode_column_specs(rest, column_count, {keyspace_name, table_name}, [])
-        {%{result | column_specs: column_specs}, rest}
+        {%{rows | column_specs: column_specs}, rest}
       true ->
         {column_specs, rest} = decode_column_specs(rest, column_count, nil, [])
-        {%{result | column_specs: column_specs}, rest}
+        {%{rows | column_specs: column_specs}, rest}
     end
   end
 
-  defp decode_paging_state(result, 0, buffer) do
-    {result, buffer}
+  defp decode_paging_state(rows, 0, buffer) do
+    {rows, buffer}
   end
 
-  defp decode_paging_state(result, 1, buffer) do
+  defp decode_paging_state(rows, 1, buffer) do
     <<byte_count::32, paging_state::bytes-size(byte_count)>> <> rest = buffer
-    {%{result | paging_state: paging_state}, rest}
+    {%{rows | paging_state: paging_state}, rest}
   end
 
-  defp decode_rows(<<row_count::32-signed>> <> buffer, column_specs) do
-    {rows, ""} = decode_rows(row_count, buffer, column_specs, column_specs, [%{}])
-    rows
+  defp decode_content(<<row_count::32-signed>> <> buffer, column_specs) do
+    {content, ""} = decode_content(row_count, buffer, column_specs, column_specs, [%{}])
+    content
   end
 
-  def decode_rows(0, buffer, column_specs, column_specs, [_ | acc]) do
+  def decode_content(0, buffer, column_specs, column_specs, [_ | acc]) do
     {Enum.reverse(acc), buffer}
   end
 
-  def decode_rows(row_count, buffer, column_specs, [], acc) do
-    decode_rows(row_count - 1, buffer, column_specs, column_specs, [%{} | acc])
+  def decode_content(row_count, buffer, column_specs, [], acc) do
+    decode_content(row_count - 1, buffer, column_specs, column_specs, [%{} | acc])
   end
 
-  def decode_rows(row_count, <<size::32-signed>> <> buffer, column_specs, [{_, _, name, type} | rest], [row | acc]) do
+  def decode_content(row_count, <<size::32-signed>> <> buffer, column_specs, [{_, _, name, type} | rest], [row | acc]) do
     {value, buffer} = decode_value(size, buffer, type)
     row = Map.put(row, name, value)
-    decode_rows(row_count, buffer, column_specs, rest, [row | acc])
+    decode_content(row_count, buffer, column_specs, rest, [row | acc])
   end
 
   defp decode_value(<<size::32-signed>> <> buffer, type) do
