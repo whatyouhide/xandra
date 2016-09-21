@@ -215,7 +215,7 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_content(<<row_count::32-signed>> <> buffer, column_specs) do
-    {content, ""} = decode_content(row_count, buffer, column_specs, column_specs, [%{}])
+    {content, ""} = decode_content(row_count, buffer, column_specs, column_specs, [[]])
     content
   end
 
@@ -223,13 +223,13 @@ defmodule Xandra.Protocol do
     {Enum.reverse(acc), buffer}
   end
 
-  def decode_content(row_count, buffer, column_specs, [], acc) do
-    decode_content(row_count - 1, buffer, column_specs, column_specs, [%{} | acc])
+  def decode_content(row_count, buffer, column_specs, [], [row | acc]) do
+    decode_content(row_count - 1, buffer, column_specs, column_specs, [[], Enum.reverse(row) | acc])
   end
 
-  def decode_content(row_count, <<size::32-signed>> <> buffer, column_specs, [{_, _, name, type} | rest], [row | acc]) do
+  def decode_content(row_count, <<size::32-signed>> <> buffer, column_specs, [{_, _, type} | rest], [row | acc]) do
     {value, buffer} = decode_value(size, buffer, type)
-    row = Map.put(row, name, value)
+    row = [value | row]
     decode_content(row_count, buffer, column_specs, rest, [row | acc])
   end
 
