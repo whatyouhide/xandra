@@ -55,10 +55,10 @@ defmodule Xandra.Protocol do
   end
 
   defp set_paging_state(mask, value) do
-    if is_nil(value) do
-      mask
-    else
+    if value do
       mask ||| 0x08
+    else
+      mask
     end
   end
 
@@ -81,10 +81,10 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_paging_state(value) do
-    if is_nil(value) do
-      <<>>
-    else
+    if value do
       <<byte_size(value)::32>> <> value
+    else
+      <<>>
     end
   end
 
