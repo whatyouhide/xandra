@@ -11,7 +11,7 @@ defmodule Xandra.Connection do
     port = Keyword.get(opts, :port, 9042)
     case :gen_tcp.connect(host, port, @default_sock_opts, @default_timeout) do
       {:ok, sock} ->
-        options = request_options(sock)
+        {:ok, options} = request_options(sock)
         startup_connection(sock, options)
         {:ok, %{sock: sock}}
       {:error, reason} ->
@@ -62,7 +62,7 @@ defmodule Xandra.Connection do
     payload = %Frame{opcode: 0x01} |> Frame.encode(body)
     case :gen_tcp.send(sock, payload) do
       :ok ->
-        recv_response(sock)
+        {:ok, {_, <<>>}} = recv(sock)
         :ok
       {:error, reason} ->
         reason
@@ -80,26 +80,11 @@ defmodule Xandra.Connection do
     payload = %Frame{opcode: 0x05} |> Frame.encode()
     case :gen_tcp.send(sock, payload) do
       :ok ->
-        recv_response(sock)
+        with {:ok, {header, body}} <- recv(sock) do
+          {:ok, Protocol.decode_response(header, body)}
+        end
       {:error, reason} ->
         reason
-    end
-  end
-
-  defp recv_response(sock) do
-    case :gen_tcp.recv(sock, 9) do
-      {:ok, <<_::5-bytes, 0::32>> = header} ->
-        Protocol.decode_response(header, "")
-
-      {:ok, <<_::5-bytes, length::32>> = header} ->
-        case :gen_tcp.recv(sock, length) do
-          {:ok, body} ->
-            Protocol.decode_response(header, body)
-          {:error, _reason} = error ->
-            error
-        end
-      {:error, _reason} = error ->
-        error
     end
   end
 
