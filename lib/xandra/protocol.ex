@@ -120,8 +120,8 @@ defmodule Xandra.Protocol do
 
   # ERROR
   def decode_response(<<_cql_version, _flags, _stream_id::16, 0x00, _::32>>, body, _query) do
-    <<code::32-signed>> <> rest = body
-    {message, ""} = decode_string(rest)
+    <<code::32-signed>> <> buffer = body
+    {message, ""} = decode_string(buffer)
     Error.new(code, message)
   end
 
@@ -146,33 +146,33 @@ defmodule Xandra.Protocol do
   end
 
   # Rows
-  defp decode_result_response(<<0x0002::32-signed>> <> rest, query) do
+  defp decode_result_response(<<0x0002::32-signed>> <> buffer, query) do
     rows = case query.prepared do
       {_query_id, rows} -> rows
       nil -> %Rows{}
     end
-    {rows, rest} = decode_metadata(rows, rest)
-    content = decode_rows_content(rest, rows.column_specs)
+    {rows, buffer} = decode_metadata(rows, buffer)
+    content = decode_rows_content(buffer, rows.column_specs)
     %{rows | content: content}
   end
 
-  defp decode_result_response(<<0x0003::32-signed>> <> rest, _query) do
-    {keyspace, ""} = decode_string(rest)
+  defp decode_result_response(<<0x0003::32-signed>> <> buffer, _query) do
+    {keyspace, ""} = decode_string(buffer)
     %Xandra.SetKeyspace{keyspace: keyspace}
   end
 
   # Prepared
-  defp decode_result_response(<<0x0004::32-signed>> <> rest, query) do
-    {query_id, rest} = decode_string(rest)
-    {_rows, rest} = decode_metadata(%Rows{}, rest)
-    {rows, <<>>} = decode_metadata(%Rows{}, rest)
+  defp decode_result_response(<<0x0004::32-signed>> <> buffer, query) do
+    {query_id, buffer} = decode_string(buffer)
+    {_rows, buffer} = decode_metadata(%Rows{}, buffer)
+    {rows, <<>>} = decode_metadata(%Rows{}, buffer)
     %{query | prepared: {query_id, rows}}
   end
 
-  defp decode_result_response(<<0x0005::32-signed>> <> rest, _query) do
-    {effect, rest} = decode_string(rest)
-    {target, rest} = decode_string(rest)
-    options = decode_change_options(rest, target)
+  defp decode_result_response(<<0x0005::32-signed>> <> buffer, _query) do
+    {effect, buffer} = decode_string(buffer)
+    {target, buffer} = decode_string(buffer)
+    options = decode_change_options(buffer, target)
     %Xandra.SchemaChange{effect: effect, target: target, options: options}
   end
 
@@ -182,26 +182,26 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_change_options(buffer, target) when target in ["TABLE", "TYPE"] do
-    {keyspace, rest} = decode_string(buffer)
-    {subject, ""} = decode_string(rest)
+    {keyspace, buffer} = decode_string(buffer)
+    {subject, ""} = decode_string(buffer)
     %{keyspace: keyspace, subject: subject}
   end
 
-  defp decode_metadata(rows, <<flags::4-bytes, column_count::32-signed>> <> rest) do
+  defp decode_metadata(rows, <<flags::4-bytes, column_count::32-signed>> <> buffer) do
     <<_::29, no_metadata::1, has_more_pages::1, global_table_spec::1>> = flags
+    {rows, buffer} = decode_paging_state(rows, has_more_pages, buffer)
 
-    {rows, rest} = decode_paging_state(rows, has_more_pages, rest)
     cond do
       no_metadata == 1 ->
-        {rows, rest}
+        {rows, buffer}
       global_table_spec == 1 ->
-        {keyspace_name, rest} = decode_string(rest)
-        {table_name, rest} = decode_string(rest)
-        {column_specs, rest} = decode_column_specs(rest, column_count, {keyspace_name, table_name}, [])
-        {%{rows | column_specs: column_specs}, rest}
+        {keyspace_name, buffer} = decode_string(buffer)
+        {table_name, buffer} = decode_string(buffer)
+        {column_specs, buffer} = decode_column_specs(buffer, column_count, {keyspace_name, table_name}, [])
+        {%{rows | column_specs: column_specs}, buffer}
       true ->
-        {column_specs, rest} = decode_column_specs(rest, column_count, nil, [])
-        {%{rows | column_specs: column_specs}, rest}
+        {column_specs, buffer} = decode_column_specs(buffer, column_count, nil, [])
+        {%{rows | column_specs: column_specs}, buffer}
     end
   end
 
@@ -210,8 +210,8 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_paging_state(rows, 1, buffer) do
-    <<byte_count::32, paging_state::bytes-size(byte_count)>> <> rest = buffer
-    {%{rows | paging_state: paging_state}, rest}
+    <<byte_count::32, paging_state::bytes-size(byte_count)>> <> buffer = buffer
+    {%{rows | paging_state: paging_state}, buffer}
   end
 
   defp decode_rows_content(<<row_count::32-signed>> <> buffer, column_specs) do
@@ -315,138 +315,138 @@ defmodule Xandra.Protocol do
     decode_map(size - 1, buffer, key_type, value_type, [{key, value} | acc])
   end
 
-  defp decode_column_specs(rest, 0, _table_spec, acc) do
-    {Enum.reverse(acc), rest}
+  defp decode_column_specs(buffer, 0, _table_spec, acc) do
+    {Enum.reverse(acc), buffer}
   end
 
-  defp decode_column_specs(rest, column_count, nil, acc) do
-    {keyspace_name, rest} = decode_string(rest)
-    {table_name, rest} = decode_string(rest)
-    {name, rest} = decode_string(rest)
-    {type, rest} = decode_type(rest)
+  defp decode_column_specs(buffer, column_count, nil, acc) do
+    {keyspace_name, buffer} = decode_string(buffer)
+    {table_name, buffer} = decode_string(buffer)
+    {name, buffer} = decode_string(buffer)
+    {type, buffer} = decode_type(buffer)
     entry = {keyspace_name, table_name, name, type}
-    decode_column_specs(rest, column_count - 1, nil, [entry | acc])
+    decode_column_specs(buffer, column_count - 1, nil, [entry | acc])
   end
 
-  defp decode_column_specs(rest, column_count, table_spec, acc) do
+  defp decode_column_specs(buffer, column_count, table_spec, acc) do
     {keyspace_name, table_name} = table_spec
-    {name, rest} = decode_string(rest)
-    {type, rest} = decode_type(rest)
+    {name, buffer} = decode_string(buffer)
+    {type, buffer} = decode_type(buffer)
     entry = {keyspace_name, table_name, name, type}
-    decode_column_specs(rest, column_count - 1, table_spec, [entry | acc])
+    decode_column_specs(buffer, column_count - 1, table_spec, [entry | acc])
   end
 
-  defp decode_type(<<0x0000::16>> <> rest) do
-    {name, rest} = decode_string(rest)
-    {{:custom, name}, rest}
+  defp decode_type(<<0x0000::16>> <> buffer) do
+    {name, buffer} = decode_string(buffer)
+    {{:custom, name}, buffer}
   end
 
-  defp decode_type(<<0x0001::16>> <> rest) do
-    {:ascii, rest}
+  defp decode_type(<<0x0001::16>> <> buffer) do
+    {:ascii, buffer}
   end
 
-  defp decode_type(<<0x0002::16>> <> rest) do
-    {:bigint, rest}
+  defp decode_type(<<0x0002::16>> <> buffer) do
+    {:bigint, buffer}
   end
 
-  defp decode_type(<<0x0003::16>> <> rest) do
-    {:blob, rest}
+  defp decode_type(<<0x0003::16>> <> buffer) do
+    {:blob, buffer}
   end
 
-  defp decode_type(<<0x0004::16>> <> rest) do
-    {:boolean, rest}
+  defp decode_type(<<0x0004::16>> <> buffer) do
+    {:boolean, buffer}
   end
 
-  defp decode_type(<<0x0005::16>> <> rest) do
-    {:counter, rest}
+  defp decode_type(<<0x0005::16>> <> buffer) do
+    {:counter, buffer}
   end
 
-  defp decode_type(<<0x0006::16>> <> rest) do
-    {:decimal, rest}
+  defp decode_type(<<0x0006::16>> <> buffer) do
+    {:decimal, buffer}
   end
 
-  defp decode_type(<<0x0007::16>> <> rest) do
-    {:double, rest}
+  defp decode_type(<<0x0007::16>> <> buffer) do
+    {:double, buffer}
   end
 
-  defp decode_type(<<0x0008::16>> <> rest) do
-    {:float, rest}
+  defp decode_type(<<0x0008::16>> <> buffer) do
+    {:float, buffer}
   end
 
-  defp decode_type(<<0x0009::16>> <> rest) do
-    {:int, rest}
+  defp decode_type(<<0x0009::16>> <> buffer) do
+    {:int, buffer}
   end
 
-  defp decode_type(<<0x000B::16>> <> rest) do
-    {:timestamp, rest}
+  defp decode_type(<<0x000B::16>> <> buffer) do
+    {:timestamp, buffer}
   end
 
-  defp decode_type(<<0x000C::16>> <> rest) do
-    {:uuid, rest}
+  defp decode_type(<<0x000C::16>> <> buffer) do
+    {:uuid, buffer}
   end
 
-  defp decode_type(<<0x000D::16>> <> rest) do
-    {:varchar, rest}
+  defp decode_type(<<0x000D::16>> <> buffer) do
+    {:varchar, buffer}
   end
 
-  defp decode_type(<<0x000E::16>> <> rest) do
-    {:varint, rest}
+  defp decode_type(<<0x000E::16>> <> buffer) do
+    {:varint, buffer}
   end
 
-  defp decode_type(<<0x000F::16>> <> rest) do
-    {:timeuuid, rest}
+  defp decode_type(<<0x000F::16>> <> buffer) do
+    {:timeuuid, buffer}
   end
 
-  defp decode_type(<<0x0010::16>> <> rest) do
-    {:inet, rest}
+  defp decode_type(<<0x0010::16>> <> buffer) do
+    {:inet, buffer}
   end
 
-  defp decode_type(<<0x0020::16>> <> rest) do
-    {type, rest} = decode_type(rest)
-    {{:list, type}, rest}
+  defp decode_type(<<0x0020::16>> <> buffer) do
+    {type, buffer} = decode_type(buffer)
+    {{:list, type}, buffer}
   end
 
-  defp decode_type(<<0x0021::16>> <> rest) do
-    {key_type, rest} = decode_type(rest)
-    {value_type, rest} = decode_type(rest)
-    {{:map, key_type, value_type}, rest}
+  defp decode_type(<<0x0021::16>> <> buffer) do
+    {key_type, buffer} = decode_type(buffer)
+    {value_type, buffer} = decode_type(buffer)
+    {{:map, key_type, value_type}, buffer}
   end
 
-  defp decode_type(<<0x0022::16>> <> rest) do
-    {type, rest} = decode_type(rest)
-    {{:set, type}, rest}
+  defp decode_type(<<0x0022::16>> <> buffer) do
+    {type, buffer} = decode_type(buffer)
+    {{:set, type}, buffer}
   end
 
   # TODO: UDT
 
-  defp decode_string_multimap(<<size::16>> <> rest) do
-    decode_string_multimap(rest, size, %{})
+  defp decode_string_multimap(<<size::16>> <> buffer) do
+    decode_string_multimap(buffer, size, %{})
   end
 
-  defp decode_string_multimap(rest, 0, acc) do
-    {acc, rest}
+  defp decode_string_multimap(buffer, 0, acc) do
+    {acc, buffer}
   end
 
-  defp decode_string_multimap(rest, size, acc) do
-    {key, rest} = decode_string(rest)
-    {value, rest} = decode_string_list(rest)
-    decode_string_multimap(rest, size - 1, Map.put(acc, key, value))
+  defp decode_string_multimap(buffer, size, acc) do
+    {key, buffer} = decode_string(buffer)
+    {value, buffer} = decode_string_list(buffer)
+    decode_string_multimap(buffer, size - 1, Map.put(acc, key, value))
   end
 
-  defp decode_string(<<size::16, content::size(size)-bytes>> <> rest) do
-    {content, rest}
+  defp decode_string(<<size::16, content::size(size)-bytes>> <> buffer) do
+    {content, buffer}
   end
 
-  defp decode_string_list(<<size::16>> <> rest) do
-    decode_string_list(rest, size, [])
+  defp decode_string_list(<<size::16>> <> buffer) do
+    decode_string_list(buffer, size, [])
   end
 
-  defp decode_string_list(rest, 0, acc) do
-    {Enum.reverse(acc), rest}
+  defp decode_string_list(buffer, 0, acc) do
+    {Enum.reverse(acc), buffer}
   end
 
-  defp decode_string_list(rest, size, acc) do
-    {elem, rest} = decode_string(rest)
-    decode_string_list(rest, size - 1, [elem | acc])
+  defp decode_string_list(buffer, size, acc) do
+    {elem, buffer} = decode_string(buffer)
+    decode_string_list(buffer, size - 1, [elem | acc])
   end
 end
