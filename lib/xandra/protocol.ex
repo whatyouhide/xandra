@@ -195,9 +195,9 @@ defmodule Xandra.Protocol do
       no_metadata == 1 ->
         {rows, buffer}
       global_table_spec == 1 ->
-        {keyspace_name, buffer} = decode_string(buffer)
-        {table_name, buffer} = decode_string(buffer)
-        {column_specs, buffer} = decode_column_specs(buffer, column_count, {keyspace_name, table_name}, [])
+        {keyspace, buffer} = decode_string(buffer)
+        {table, buffer} = decode_string(buffer)
+        {column_specs, buffer} = decode_column_specs(buffer, column_count, {keyspace, table}, [])
         {%{rows | column_specs: column_specs}, buffer}
       true ->
         {column_specs, buffer} = decode_column_specs(buffer, column_count, nil, [])
@@ -320,19 +320,19 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_column_specs(buffer, column_count, nil, acc) do
-    {keyspace_name, buffer} = decode_string(buffer)
-    {table_name, buffer} = decode_string(buffer)
+    {keyspace, buffer} = decode_string(buffer)
+    {table, buffer} = decode_string(buffer)
     {name, buffer} = decode_string(buffer)
     {type, buffer} = decode_type(buffer)
-    entry = {keyspace_name, table_name, name, type}
+    entry = {keyspace, table, name, type}
     decode_column_specs(buffer, column_count - 1, nil, [entry | acc])
   end
 
   defp decode_column_specs(buffer, column_count, table_spec, acc) do
-    {keyspace_name, table_name} = table_spec
+    {keyspace, table} = table_spec
     {name, buffer} = decode_string(buffer)
     {type, buffer} = decode_type(buffer)
-    entry = {keyspace_name, table_name, name, type}
+    entry = {keyspace, table, name, type}
     decode_column_specs(buffer, column_count - 1, table_spec, [entry | acc])
   end
 
