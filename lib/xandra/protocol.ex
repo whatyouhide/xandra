@@ -420,17 +420,17 @@ defmodule Xandra.Protocol do
   # TODO: UDT
 
   defp decode_string_multimap(<<size::16>> <> buffer) do
-    decode_string_multimap(buffer, size, %{})
+    decode_string_multimap(buffer, size, [])
   end
 
   defp decode_string_multimap(buffer, 0, acc) do
-    {acc, buffer}
+    {Map.new(acc), buffer}
   end
 
   defp decode_string_multimap(buffer, size, acc) do
     {key, buffer} = decode_string(buffer)
     {value, buffer} = decode_string_list(buffer)
-    decode_string_multimap(buffer, size - 1, Map.put(acc, key, value))
+    decode_string_multimap(buffer, size - 1, [{key, value} | acc])
   end
 
   defp decode_string(<<size::16, content::size(size)-bytes>> <> buffer) do
