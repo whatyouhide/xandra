@@ -152,7 +152,7 @@ defmodule Xandra.Protocol do
       nil -> %Rows{}
     end
     {rows, rest} = decode_metadata(rows, rest)
-    content = decode_content(rest, rows.column_specs)
+    content = decode_rows_content(rest, rows.column_specs)
     %{rows | content: content}
   end
 
@@ -214,23 +214,23 @@ defmodule Xandra.Protocol do
     {%{rows | paging_state: paging_state}, rest}
   end
 
-  defp decode_content(<<row_count::32-signed>> <> buffer, column_specs) do
-    {content, ""} = decode_content(row_count, buffer, column_specs, column_specs, [[]])
+  defp decode_rows_content(<<row_count::32-signed>> <> buffer, column_specs) do
+    {content, ""} = decode_rows_content(row_count, buffer, column_specs, column_specs, [[]])
     content
   end
 
-  def decode_content(0, buffer, column_specs, column_specs, [_ | acc]) do
+  def decode_rows_content(0, buffer, column_specs, column_specs, [_ | acc]) do
     {Enum.reverse(acc), buffer}
   end
 
-  def decode_content(row_count, buffer, column_specs, [], [row | acc]) do
-    decode_content(row_count - 1, buffer, column_specs, column_specs, [[], Enum.reverse(row) | acc])
+  def decode_rows_content(row_count, buffer, column_specs, [], [values | acc]) do
+    decode_rows_content(row_count - 1, buffer, column_specs, column_specs, [[], Enum.reverse(values) | acc])
   end
 
-  def decode_content(row_count, <<size::32-signed>> <> buffer, column_specs, [{_, _, type} | rest], [row | acc]) do
+  def decode_rows_content(row_count, <<size::32-signed>> <> buffer, column_specs, [{_, _, _, type} | rest], [values | acc]) do
     {value, buffer} = decode_value(size, buffer, type)
-    row = [value | row]
-    decode_content(row_count, buffer, column_specs, rest, [row | acc])
+    values = [value | values]
+    decode_rows_content(row_count, buffer, column_specs, rest, [values | acc])
   end
 
   defp decode_value(<<size::32-signed>> <> buffer, type) do
