@@ -1,7 +1,7 @@
 defmodule Xandra.Protocol do
   use Bitwise
 
-  alias Xandra.{Query, Rows, Error}
+  alias Xandra.{Frame, Query, Rows, Error}
 
   def encode_query(statement, values, opts) do
     <<byte_size(statement)::32>> <> statement <>
@@ -116,28 +116,28 @@ defmodule Xandra.Protocol do
     <<int::32>>
   end
 
-  def decode_response(header, body, query \\ nil)
+  def decode_response(frame, query \\ nil)
 
   # ERROR
-  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x00, _::32>>, body, _query) do
+  def decode_response(%Frame{opcode: 0x00, body: body} , _query) do
     <<code::32-signed>> <> buffer = body
     {message, ""} = decode_string(buffer)
     Error.new(code, message)
   end
 
   # READY
-  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x02, _::32>>, <<>>, nil) do
+  def decode_response(%Frame{opcode: 0x02, body: <<>>}, nil) do
     :ok
   end
 
   # SUPPORTED
-  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x06, _::32>>, body, nil) do
+  def decode_response(%Frame{opcode: 0x06, body: body}, nil) do
     {content, ""} = decode_string_multimap(body)
     content
   end
 
   # RESULT
-  def decode_response(<<_cql_version, _flags, _stream_id::16, 0x08, _::32>>, body, %Query{} = query) do
+  def decode_response(%Frame{opcode: 0x08, body: body}, %Query{} = query) do
     decode_result_response(body, query)
   end
 

@@ -29,20 +29,20 @@ defmodule Xandra.Connection do
 
   def handle_prepare(%Query{statement: statement} = query, _opts, %{sock: sock} = state) do
     body = <<byte_size(statement)::32>> <> statement
-    payload = %Frame{opcode: 0x09} |> Frame.encode(body)
+    payload = Frame.new(:prepare, body) |> Frame.encode()
     case :gen_tcp.send(sock, payload) do
       :ok ->
-        {:ok, {header, body}} = recv(sock)
-        {:ok, Protocol.decode_response(header, body, query), state}
+        {:ok, frame} = recv(sock)
+        {:ok, Protocol.decode_response(frame, query), state}
       {:error, reason} ->
         {:disconnect, reason, state}
     end
   end
 
-  def handle_execute(_query, frame, _opts, %{sock: sock} = state) do
-    with :ok <- :gen_tcp.send(sock, frame),
-        {:ok, response} <- recv(sock) do
-      {:ok, response, state}
+  def handle_execute(_query, payload, _opts, %{sock: sock} = state) do
+    with :ok <- :gen_tcp.send(sock, payload),
+        {:ok, frame} <- recv(sock) do
+      {:ok, frame, state}
     else
       {:error, reason} ->
         {:disconnect, reason, state}
@@ -59,10 +59,10 @@ defmodule Xandra.Connection do
 
   defp startup_connection(sock, %{"CQL_VERSION" => [cql_version | _]}) do
     body = encode_string_map(%{"CQL_VERSION" => cql_version})
-    payload = %Frame{opcode: 0x01} |> Frame.encode(body)
+    payload = Frame.new(:startup, body) |> Frame.encode()
     case :gen_tcp.send(sock, payload) do
       :ok ->
-        {:ok, {_, <<>>}} = recv(sock)
+        {:ok, %{body: <<>>}} = recv(sock)
         :ok
       {:error, reason} ->
         reason
@@ -77,11 +77,11 @@ defmodule Xandra.Connection do
   end
 
   defp request_options(sock) do
-    payload = %Frame{opcode: 0x05} |> Frame.encode()
+    payload = Frame.new(:options) |> Frame.encode()
     case :gen_tcp.send(sock, payload) do
       :ok ->
-        with {:ok, {header, body}} <- recv(sock) do
-          {:ok, Protocol.decode_response(header, body)}
+        with {:ok, frame} <- recv(sock) do
+          {:ok, Protocol.decode_response(frame)}
         end
       {:error, reason} ->
         reason
@@ -89,13 +89,14 @@ defmodule Xandra.Connection do
   end
 
   defp recv(sock) do
-    with {:ok, header} <- :gen_tcp.recv(sock, 9) do
+    length = Frame.header_length()
+    with {:ok, header} <- :gen_tcp.recv(sock, length) do
       case Frame.body_length(header) do
         0 ->
-          {:ok, {header, <<>>}}
+          {:ok, Frame.decode(header)}
         length ->
           with {:ok, body} <- :gen_tcp.recv(sock, length) do
-            {:ok, {header, body}}
+            {:ok, Frame.decode(header, body)}
           end
       end
     end
