@@ -3,6 +3,18 @@ defmodule Xandra.Connection do
 
   alias Xandra.{Query, Frame, Protocol}
 
+  defmodule Error do
+    defexception [:action, :reason]
+
+    def message(%__MODULE__{} = exception) do
+      inspect(exception)
+    end
+
+    def exception(args) do
+      Kernel.struct!(%__MODULE__{}, args)
+    end
+  end
+
   @default_timeout 5_000
   @default_sock_opts [packet: :raw, mode: :binary, active: false]
 
@@ -15,7 +27,7 @@ defmodule Xandra.Connection do
         startup_connection(sock, options)
         {:ok, %{sock: sock}}
       {:error, reason} ->
-        {:error, "connect error: " <> inspect(reason)}
+        {:error, Error.exception(action: "connect", reason: reason)}
     end
   end
 
@@ -84,7 +96,7 @@ defmodule Xandra.Connection do
           {:ok, Protocol.decode_response(frame)}
         end
       {:error, reason} ->
-        reason
+        {:error, Error.exception(action: "request_options", reason: reason)}
     end
   end
 

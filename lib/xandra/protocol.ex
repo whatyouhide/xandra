@@ -67,14 +67,14 @@ defmodule Xandra.Protocol do
     page_size = Keyword.get(opts, :page_size, 10_000)
     paging_state = Keyword.get(opts, :paging_state)
 
-    flag_mask =
+    flags =
       set_query_values(0x00, values)
       |> bor(0x04)
       |> set_metadata_presence(skip_metadata?)
       |> set_paging_state(paging_state)
 
     encode_consistency_level(consistency) <>
-      <<flag_mask>> <>
+      <<flags>> <>
       encode_values(values) <>
       <<page_size::32>> <>
       encode_paging_state(paging_state)
