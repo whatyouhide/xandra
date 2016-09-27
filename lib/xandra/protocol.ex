@@ -13,6 +13,13 @@ defmodule Xandra.Protocol do
       encode_params(values, opts, true)
   end
 
+  def encode_string_map(map) do
+    for {key, value} <- map, into: <<map_size(map)::16>> do
+      key_size = byte_size(key)
+      <<key_size::16, key::size(key_size)-bytes, byte_size(value)::16, value::bytes>>
+    end
+  end
+
   @consistency_levels %{
     0x0000 => :any,
     0x0001 => :one,

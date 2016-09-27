@@ -70,7 +70,7 @@ defmodule Xandra.Connection do
   end
 
   defp startup_connection(sock, %{"CQL_VERSION" => [cql_version | _]}) do
-    body = encode_string_map(%{"CQL_VERSION" => cql_version})
+    body = Protocol.encode_string_map(%{"CQL_VERSION" => cql_version})
     payload = Frame.new(:startup, body) |> Frame.encode()
     case :gen_tcp.send(sock, payload) do
       :ok ->
@@ -78,13 +78,6 @@ defmodule Xandra.Connection do
         :ok
       {:error, reason} ->
         reason
-    end
-  end
-
-  defp encode_string_map(map) do
-    for {key, value} <- map, into: <<map_size(map)::16>> do
-      key_size = byte_size(key)
-      <<key_size::16, key::size(key_size)-bytes, byte_size(value)::16, value::bytes>>
     end
   end
 
