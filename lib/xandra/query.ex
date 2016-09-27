@@ -8,15 +8,11 @@ defmodule Xandra.Query do
       query
     end
 
-    def encode(%{prepared: nil} = query, values, opts) do
-      body = Protocol.encode_query(query.statement, values, opts)
-      Frame.new(:query, body) |> Frame.encode()
-    end
-
     def encode(query, values, opts) do
-      {query_id, _result} = query.prepared
-      body = Protocol.encode_prepared_query(query_id, values, opts)
-      Frame.new(:execute, body) |> Frame.encode()
+      body = Protocol.encode_query(query, values, opts)
+      operation = if query.prepared, do: :execute, else: :query
+      Frame.new(operation, body)
+      |> Frame.encode()
     end
 
     def decode(query, %Frame{} = frame, _opts) do

@@ -3,14 +3,14 @@ defmodule Xandra.Protocol do
 
   alias Xandra.{Frame, Query, Rows, Error}
 
-  def encode_query(statement, values, opts) do
-    <<byte_size(statement)::32>> <> statement <>
-      encode_params(values, opts, false)
-  end
-
-  def encode_prepared_query(id, values, opts) do
+  def encode_query(%Query{prepared: {id, _rows}}, values, opts) do
     <<byte_size(id)::16>> <> id <>
       encode_params(values, opts, true)
+  end
+
+  def encode_query(%Query{statement: statement}, values, opts) do
+    <<byte_size(statement)::32>> <> statement <>
+      encode_params(values, opts, false)
   end
 
   def encode_string_map(map) do
