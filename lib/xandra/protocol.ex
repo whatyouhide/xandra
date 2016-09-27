@@ -125,26 +125,22 @@ defmodule Xandra.Protocol do
 
   def decode_response(frame, query \\ nil)
 
-  # ERROR
-  def decode_response(%Frame{opcode: 0x00, body: body} , _query) do
+  def decode_response(%Frame{message: :error, body: body} , _query) do
     <<code::32-signed>> <> buffer = body
     {message, ""} = decode_string(buffer)
     Error.new(code, message)
   end
 
-  # READY
-  def decode_response(%Frame{opcode: 0x02, body: <<>>}, nil) do
+  def decode_response(%Frame{message: :ready, body: <<>>}, nil) do
     :ok
   end
 
-  # SUPPORTED
-  def decode_response(%Frame{opcode: 0x06, body: body}, nil) do
+  def decode_response(%Frame{message: :supported, body: body}, nil) do
     {content, ""} = decode_string_multimap(body)
     content
   end
 
-  # RESULT
-  def decode_response(%Frame{opcode: 0x08, body: body}, %Query{} = query) do
+  def decode_response(%Frame{message: :result, body: body}, %Query{} = query) do
     decode_result_response(body, query)
   end
 

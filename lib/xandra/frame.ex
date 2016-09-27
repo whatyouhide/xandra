@@ -1,9 +1,9 @@
 defmodule Xandra.Frame do
-  defstruct [:opcode, :compression, :body, stream_id: 0, tracing: false]
+  defstruct [:message, :compression, :body, stream_id: 0, tracing: false]
 
   @request_version 0x03
 
-  @opcodes %{
+  @request_opcodes %{
     :startup => 0x01,
     :options => 0x05,
     :query => 0x07,
@@ -11,9 +11,19 @@ defmodule Xandra.Frame do
     :execute => 0x0A,
   }
 
-  def new(operation, body \\ <<>>) do
-    opcode = Map.fetch!(@opcodes, operation)
-    %__MODULE__{opcode: opcode, body: body}
+  @response_version 0x83
+
+  @response_opcodes %{
+    0x00 => :error,
+    0x02 => :ready,
+    0x06 => :supported,
+    0x08 => :result,
+  }
+
+  def new(message, body \\ <<>>)
+
+  def new(message, body) do
+    %__MODULE__{message: message, body: body}
   end
 
   def header_length(), do: 9
@@ -24,15 +34,16 @@ defmodule Xandra.Frame do
 
   def encode(%__MODULE__{} = frame) do
     %{compression: compression, tracing: tracing?,
-      opcode: opcode, stream_id: stream_id, body: body} = frame
+      message: message, stream_id: stream_id, body: body} = frame
+    opcode = Map.fetch!(@request_opcodes, message)
     flags = encode_flags(compression, tracing?)
     body = maybe_compress_body(compression, body)
     <<@request_version, flags, stream_id::16, opcode, byte_size(body)::32, body::bytes>>
   end
 
   def decode(header, body \\ <<>>) do
-    <<_cql_version, _flags, _stream_id::16, opcode, _::32>> = header
-    %__MODULE__{opcode: opcode, body: body}
+    <<@response_version, _flags, _stream_id::16, opcode, _::32>> = header
+    @response_opcodes |> Map.fetch!(opcode) |> new(body)
   end
 
   defp encode_flags(nil, false), do: 0x00
