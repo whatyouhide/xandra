@@ -39,9 +39,12 @@ defmodule Xandra.Connection do
     {:ok, state}
   end
 
-  def handle_prepare(%Query{statement: statement} = query, _opts, %{sock: sock} = state) do
-    body = <<byte_size(statement)::32>> <> statement
-    payload = Frame.new(:prepare, body) |> Frame.encode()
+  def handle_prepare(%Query{} = query, _opts, %{sock: sock} = state) do
+    payload =
+      Frame.new(:prepare)
+      |> Protocol.encode_request(query)
+      |> Frame.encode()
+
     case :gen_tcp.send(sock, payload) do
       :ok ->
         {:ok, frame} = recv(sock)
@@ -69,9 +72,12 @@ defmodule Xandra.Connection do
     :ok = :gen_tcp.close(sock)
   end
 
-  defp startup_connection(sock, %{"CQL_VERSION" => [cql_version | _]}) do
-    body = Protocol.encode_string_map(%{"CQL_VERSION" => cql_version})
-    payload = Frame.new(:startup, body) |> Frame.encode()
+  defp startup_connection(sock, options) do
+    payload =
+      Frame.new(:startup)
+      |> Protocol.encode_request(options)
+      |> Frame.encode()
+
     case :gen_tcp.send(sock, payload) do
       :ok ->
         {:ok, %{body: <<>>}} = recv(sock)

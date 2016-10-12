@@ -3,14 +3,39 @@ defmodule Xandra.Protocol do
 
   alias Xandra.{Frame, Query, Rows, Error}
 
-  def encode_query(%Query{prepared: {id, _rows}}, values, opts) do
-    <<byte_size(id)::16>> <> id <>
-      encode_params(values, opts, true)
+  def encode_request(frame, params, opts \\ [])
+
+  def encode_request(%Frame{kind: :options} = frame, nil, _opts) do
+    %{frame | body: ""}
   end
 
-  def encode_query(%Query{statement: statement}, values, opts) do
-    <<byte_size(statement)::32>> <> statement <>
+  def encode_request(%Frame{kind: :startup} = frame, params, _opts) when is_map(params) do
+    %{"CQL_VERSION" => [cql_version | _]} = params
+    %{frame | body: encode_string_map(%{"CQL_VERSION" => cql_version})}
+  end
+
+  def encode_request(%Frame{kind: :query} = frame, %Query{} = query, opts) do
+    %{statement: statement, values: values} = query
+    body =
+      <<byte_size(statement)::32>> <>
+      statement <>
       encode_params(values, opts, false)
+    %{frame | body: body}
+  end
+
+  def encode_request(%Frame{kind: :prepare} = frame, %Query{} = query, _opts) do
+    %{statement: statement} = query
+    body = <<byte_size(statement)::32>> <> statement
+    %{frame | body: body}
+  end
+
+  def encode_request(%Frame{kind: :execute} = frame, %Query{} = query, opts) do
+    %{prepared: {id, _rows}, values: values} = query
+    body =
+      <<byte_size(id)::16>> <>
+      id <>
+      encode_params(values, opts, true)
+    %{frame | body: body}
   end
 
   def encode_string_map(map) do
