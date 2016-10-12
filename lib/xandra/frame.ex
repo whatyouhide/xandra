@@ -1,5 +1,5 @@
 defmodule Xandra.Frame do
-  defstruct [:message, :compression, :body, stream_id: 0, tracing: false]
+  defstruct [:kind, :compression, :body, stream_id: 0, tracing: false]
 
   @request_version 0x03
 
@@ -20,10 +20,10 @@ defmodule Xandra.Frame do
     0x08 => :result,
   }
 
-  def new(message, body \\ <<>>)
+  def new(kind, body \\ <<>>)
 
-  def new(message, body) do
-    %__MODULE__{message: message, body: body}
+  def new(kind, body) do
+    %__MODULE__{kind: kind, body: body}
   end
 
   def header_length(), do: 9
@@ -34,8 +34,8 @@ defmodule Xandra.Frame do
 
   def encode(%__MODULE__{} = frame) do
     %{compression: compression, tracing: tracing?,
-      message: message, stream_id: stream_id, body: body} = frame
-    opcode = Map.fetch!(@request_opcodes, message)
+      kind: kind, stream_id: stream_id, body: body} = frame
+    opcode = Map.fetch!(@request_opcodes, kind)
     flags = encode_flags(compression, tracing?)
     body = maybe_compress_body(compression, body)
     <<@request_version, flags, stream_id::16, opcode, byte_size(body)::32, body::bytes>>
