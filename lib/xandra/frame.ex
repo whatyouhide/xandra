@@ -20,10 +20,8 @@ defmodule Xandra.Frame do
     0x08 => :result,
   }
 
-  def new(kind, body \\ <<>>)
-
-  def new(kind, body) do
-    %__MODULE__{kind: kind, body: body}
+  def new(kind) do
+    %__MODULE__{kind: kind}
   end
 
   def header_length(), do: 9
@@ -41,9 +39,10 @@ defmodule Xandra.Frame do
     <<@request_version, flags, stream_id::16, opcode, byte_size(body)::32, body::bytes>>
   end
 
-  def decode(header, body \\ <<>>) do
+  def decode(header, body \\ <<>>) when is_binary(body) do
     <<@response_version, _flags, _stream_id::16, opcode, _::32>> = header
-    @response_opcodes |> Map.fetch!(opcode) |> new(body)
+    kind = Map.fetch!(@response_opcodes, opcode)
+    %__MODULE__{kind: kind, body: body}
   end
 
   defp encode_flags(nil, false), do: 0x00

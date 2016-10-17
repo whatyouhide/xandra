@@ -88,7 +88,11 @@ defmodule Xandra.Connection do
   end
 
   defp request_options(sock) do
-    payload = Frame.new(:options) |> Frame.encode()
+    payload =
+      Frame.new(:options)
+      |> Protocol.encode_request(nil)
+      |> Frame.encode()
+
     case :gen_tcp.send(sock, payload) do
       :ok ->
         with {:ok, frame} <- recv(sock) do
