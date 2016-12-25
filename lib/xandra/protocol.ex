@@ -265,8 +265,12 @@ defmodule Xandra.Protocol do
     decode_value(size, buffer, type)
   end
 
-  defp decode_value(value_size, buffer, :ascii) do
-    <<value::size(value_size), buffer::bytes>> = buffer
+  defp decode_value(-1, buffer, _type) do
+    {nil, buffer}
+  end
+
+  defp decode_value(size, buffer, :ascii) do
+    <<value::size(size)-bytes>> <> buffer = buffer
     {value, buffer}
   end
 
@@ -274,11 +278,20 @@ defmodule Xandra.Protocol do
     {value, buffer}
   end
 
-  defp decode_value(1, <<value::8>> <> buffer, :boolean) do
-    {value == 1, buffer}
+  defp decode_value(size, buffer, :blob) do
+    <<value::size(size)-bytes>> <> buffer = buffer
+    {value, buffer}
   end
 
-  # TODO: Decimal
+  defp decode_value(1, <<value::8>> <> buffer, :boolean) do
+    {value != 0, buffer}
+  end
+
+  defp decode_value(size, buffer, :decimal) do
+    {scale, buffer} = decode_value(4, buffer, :int)
+    {value, buffer} = decode_value(size - 4, buffer, :varint)
+    {{value, scale}, buffer}
+  end
 
   defp decode_value(8, <<value::64-float>> <> buffer, :double) do
     {value, buffer}
@@ -310,17 +323,26 @@ defmodule Xandra.Protocol do
     decode_map(size, buffer, key_type, value_type, [])
   end
 
-  defp decode_value(length, buffer, {:set, type}) do
-    {list, buffer} = decode_list(length, buffer, type, [])
+  defp decode_value(size, buffer, {:set, type}) do
+    {list, buffer} = decode_list(size, buffer, type, [])
     {MapSet.new(list), buffer}
   end
 
-  defp decode_value(length, buffer, :varchar) do
-     <<text::size(length)-bytes>> <> buffer = buffer
+  defp decode_value(size, buffer, :varchar) do
+    <<text::size(size)-bytes>> <> buffer = buffer
     {text, buffer}
   end
 
+  defp decode_value(size, buffer, :varint) do
+    <<int::size(size)-unit(8), buffer::bytes>> = buffer
+    {int, buffer}
+  end
+
   defp decode_value(8, <<value::64-signed>> <> buffer, :timestamp) do
+    {value, buffer}
+  end
+
+  defp decode_value(16, <<value::16-bytes>> <> buffer, type) when type in [:timeuuid, :uuid] do
     {value, buffer}
   end
 

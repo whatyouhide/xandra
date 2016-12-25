@@ -1,5 +1,5 @@
 defmodule Xandra do
-  alias __MODULE__.{Connection, Query}
+  alias __MODULE__.{Connection, Query, Error}
 
   def start_link(opts \\ []) do
     opts = Keyword.put_new(opts, :host, "127.0.0.1")
@@ -29,7 +29,9 @@ defmodule Xandra do
   end
 
   def execute(conn, %Query{} = query, params, opts) do
-    DBConnection.execute(conn, query, params, opts)
+    with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, opts) do
+      {:error, error}
+    end
   end
 
   def prepare_execute(conn, statement, params, opts \\ []) when is_binary(statement) do
