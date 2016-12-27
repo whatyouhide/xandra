@@ -411,17 +411,28 @@ defmodule Xandra.Protocol do
     {value, buffer}
   end
 
-  defp decode_value(length, buffer, {:list, type}) do
-    decode_list(length, buffer, type, [])
+  defp decode_value(size, buffer, {:list, [type]}) do
+    size = size - 4
+    <<length::32-signed, content::bytes-size(size)>> <> buffer = buffer
+    {decode_list(length, content, type, []), buffer}
   end
 
-  defp decode_value(size, buffer, {:map, key_type, value_type}) do
-    decode_map(size, buffer, key_type, value_type, [])
+  defp decode_value(size, buffer, {:map, [key_type, value_type]}) do
+    size = size - 4
+    <<count::32-signed, content::bytes-size(size)>> <> buffer = buffer
+    {decode_map(count, content, key_type, value_type, []), buffer}
   end
 
-  defp decode_value(size, buffer, {:set, type}) do
-    {list, buffer} = decode_list(size, buffer, type, [])
+  defp decode_value(size, buffer, {:set, [type]}) do
+    size = size - 4
+    <<length::32-signed, content::bytes-size(size)>> <> buffer = buffer
+    list = decode_list(length, content, type, [])
     {MapSet.new(list), buffer}
+  end
+
+  defp decode_value(size, buffer, {:tuple, types}) do
+    <<content::bytes-size(size)>> <> buffer = buffer
+    {decode_tuple(types, content, []), buffer}
   end
 
   defp decode_value(size, buffer, :varchar) do
@@ -442,8 +453,8 @@ defmodule Xandra.Protocol do
     {value, buffer}
   end
 
-  defp decode_list(0, buffer, _type, acc) do
-    {Enum.reverse(acc), buffer}
+  defp decode_list(0, <<>>, _type, acc) do
+    Enum.reverse(acc)
   end
 
   defp decode_list(length, buffer, type, acc) do
@@ -451,14 +462,23 @@ defmodule Xandra.Protocol do
     decode_list(length - 1, buffer, type, [elem | acc])
   end
 
-  defp decode_map(0, buffer, _key_type, _value_type, acc) do
-    {Map.new(acc), buffer}
+  defp decode_map(0, <<>>, _key_type, _value_type, acc) do
+    Map.new(acc)
   end
 
-  defp decode_map(size, buffer, key_type, value_type, acc) do
+  defp decode_map(count, buffer, key_type, value_type, acc) do
     {key, buffer} = decode_value(buffer, key_type)
     {value, buffer} = decode_value(buffer, value_type)
-    decode_map(size - 1, buffer, key_type, value_type, [{key, value} | acc])
+    decode_map(count - 1, buffer, key_type, value_type, [{key, value} | acc])
+  end
+
+  def decode_tuple([], <<>>, acc) do
+    acc |> Enum.reverse |> List.to_tuple
+  end
+
+  def decode_tuple([type | types], buffer, acc) do
+    {item, buffer} = decode_value(buffer, type)
+    decode_tuple(types, buffer, [item | acc])
   end
 
   defp decode_column_specs(buffer, 0, _table_spec, acc) do
@@ -549,21 +569,34 @@ defmodule Xandra.Protocol do
 
   defp decode_type(<<0x0020::16>> <> buffer) do
     {type, buffer} = decode_type(buffer)
-    {{:list, type}, buffer}
+    {{:list, [type]}, buffer}
   end
 
   defp decode_type(<<0x0021::16>> <> buffer) do
     {key_type, buffer} = decode_type(buffer)
     {value_type, buffer} = decode_type(buffer)
-    {{:map, key_type, value_type}, buffer}
+    {{:map, [key_type, value_type]}, buffer}
   end
 
   defp decode_type(<<0x0022::16>> <> buffer) do
     {type, buffer} = decode_type(buffer)
-    {{:set, type}, buffer}
+    {{:set, [type]}, buffer}
   end
 
   # TODO: UDT
+
+  defp decode_type(<<0x0031::16, count::16>> <> buffer) do
+    decode_type_tuple(count, buffer, [])
+  end
+
+  defp decode_type_tuple(0, buffer, acc) do
+    {{:tuple, Enum.reverse(acc)}, buffer}
+  end
+
+  defp decode_type_tuple(count, buffer, acc) do
+    {type, buffer} = decode_type(buffer)
+    decode_type_tuple(count - 1, buffer, [type | acc])
+  end
 
   defp decode_string_multimap(<<size::16>> <> buffer) do
     decode_string_multimap(buffer, size, [])

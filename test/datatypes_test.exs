@@ -38,7 +38,6 @@ defmodule DataTypesTest do
 
         {:ok, _} = Xandra.execute(conn, "INSERT INTO primitives (id) VALUES (1)", [], [])
         {:ok, rows} = Xandra.execute(conn, "SELECT * FROM primitives WHERE id = 1", [], [])
-
         assert [row] = Enum.to_list(rows)
         assert row["id"] == 1
         assert row["ascii"] == nil
@@ -170,6 +169,73 @@ defmodule DataTypesTest do
         assert row["varint"] == 6789065678192312391879827349
       after
         Xandra.execute(conn, "DROP TABLE primitives", [], [])
+      end
+    end)
+  end
+
+  test "collection datatypes" do
+    with_test_keyspace(fn conn ->
+      try do
+        statement = """
+        CREATE TABLE collections
+        (id int PRIMARY KEY,
+         list_of_int list<int>,
+         map_of_int_to_text map<int, text>,
+         set_of_int set<int>,
+         tuple_of_int_and_text tuple<int, text>)
+        """
+        {:ok, _} = Xandra.execute(conn, statement, [], [])
+
+        {:ok, _} = Xandra.execute(conn, "INSERT INTO collections (id) VALUES (1)", [], [])
+        {:ok, rows} = Xandra.execute(conn, "SELECT * FROM collections WHERE id = 1", [], [])
+        assert [row] = Enum.to_list(rows)
+        assert row["id"] == 1
+        assert row["list_of_int"] == nil
+        assert row["map_of_int_to_text"] == nil
+        assert row["set_of_int"] == nil
+        assert row["tuple_of_int_and_text"] == nil
+
+        statement = """
+        INSERT INTO collections
+        (id,
+         list_of_int,
+         map_of_int_to_text,
+         set_of_int)
+        VALUES
+        (1, [], {}, {})
+        """
+        {:ok, _} = Xandra.execute(conn, statement, [], [])
+        {:ok, rows} = Xandra.execute(conn, "SELECT * FROM collections WHERE id = 1", [], [])
+        assert [row] = Enum.to_list(rows)
+        assert row["id"] == 1
+        assert row["list_of_int"] == nil
+        assert row["map_of_int_to_text"] == nil
+        assert row["set_of_int"] == nil
+
+        statement = """
+        INSERT INTO collections
+        (id,
+         list_of_int,
+         map_of_int_to_text,
+         set_of_int,
+         tuple_of_int_and_text)
+        VALUES
+        (1,
+         [24, 42],
+         {24 : '24', 42 : '42'},
+         {42, 24},
+         (24, '42'))
+        """
+        {:ok, _} = Xandra.execute(conn, statement, [], [])
+        {:ok, rows} = Xandra.execute(conn, "SELECT * FROM collections WHERE id = 1", [], [])
+        assert [row] = Enum.to_list(rows)
+        assert row["id"] == 1
+        assert row["list_of_int"] == [24, 42]
+        assert row["map_of_int_to_text"] == %{24 => "24", 42 => "42"}
+        assert row["set_of_int"] == MapSet.new([42, 24])
+        assert row["tuple_of_int_and_text"] == {24, "42"}
+      after
+        Xandra.execute(conn, "DROP TABLE collections", [], [])
       end
     end)
   end
