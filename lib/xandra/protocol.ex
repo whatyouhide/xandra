@@ -1,7 +1,7 @@
 defmodule Xandra.Protocol do
   use Bitwise
 
-  alias Xandra.{Frame, Query, Rows, Error}
+  alias Xandra.{Frame, Query, Rows, Error, TypeParser}
 
   def encode_request(frame, params, opts \\ [])
 
@@ -140,68 +140,72 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_query_value({:ascii, value}) when is_binary(value) do
+  defp encode_query_value({type, value}) when is_binary(type) do
+    encode_typed_query_value(TypeParser.parse(type), value)
+  end
+
+  defp encode_typed_query_value(:ascii, value) when is_binary(value) do
     value
   end
 
-  defp encode_query_value({:bigint, value}) when is_integer(value) do
+  defp encode_typed_query_value(:bigint, value) when is_integer(value) do
     <<value::64>>
   end
 
-  defp encode_query_value({:blob, value}) when is_binary(value) do
+  defp encode_typed_query_value(:blob, value) when is_binary(value) do
     value
   end
 
-  defp encode_query_value({:boolean, value}) when is_boolean(value) do
+  defp encode_typed_query_value(:boolean, value) when is_boolean(value) do
     if value, do: <<1>>, else: <<0>>
   end
 
-  defp encode_query_value({:decimal, {value, scale}}) do
-    encode_query_value({:int, scale}) <> encode_query_value({:varint, value})
+  defp encode_typed_query_value(:decimal, {value, scale}) do
+    encode_typed_query_value(:int, scale) <> encode_typed_query_value(:varint, value)
   end
 
-  defp encode_query_value({:double, value}) when is_float(value) do
+  defp encode_typed_query_value(:double, value) when is_float(value) do
     <<value::64-float>>
   end
 
-  defp encode_query_value({:float, value}) when is_float(value) do
+  defp encode_typed_query_value(:float, value) when is_float(value) do
     <<value::32-float>>
   end
 
-  defp encode_query_value({:inet, {n1, n2, n3, n4} = _value}) do
+  defp encode_typed_query_value(:inet, {n1, n2, n3, n4} = _value) do
     <<n1, n2, n3, n4>>
   end
 
-  defp encode_query_value({:inet, {n1, n2, n3, n4, n5, n6, n7, n8}}) do
+  defp encode_typed_query_value(:inet, {n1, n2, n3, n4, n5, n6, n7, n8} = _value) do
     <<n1::4-bytes, n2::4-bytes, n3::4-bytes, n4::4-bytes,
       n5::4-bytes, n6::4-bytes, n7::4-bytes, n8::4-bytes>>
   end
 
-  defp encode_query_value({:int, value}) do
+  defp encode_typed_query_value(:int, value) do
     <<value::32>>
   end
 
-  defp encode_query_value({:list, value}) do
+  defp encode_typed_query_value(:list, value) do
     raise "pending type to encode: #{inspect(value)}"
   end
 
-  defp encode_query_value({:map, value}) do
+  defp encode_typed_query_value(:map, value) do
     raise "pending type to encode: #{inspect(value)}"
   end
 
-  defp encode_query_value({:set, value}) do
+  defp encode_typed_query_value(:set, value) do
     raise "pending type to encode: #{inspect(value)}"
   end
 
-  defp encode_query_value({:text, value}) when is_binary(value) do
+  defp encode_typed_query_value(:text, value) when is_binary(value) do
     value
   end
 
-  defp encode_query_value({:timestamp, value}) do
-    encode_query_value({:bigint, value})
+  defp encode_typed_query_value(:timestamp, value) do
+    encode_typed_query_value(:bigint, value)
   end
 
-  defp encode_query_value({:uuid, value}) when is_binary(value) do
+  defp encode_typed_query_value(:uuid, value) when is_binary(value) do
     <<part1::8-bytes, ?-,
       part2::4-bytes, ?-,
       part3::4-bytes, ?-,
@@ -215,20 +219,20 @@ defmodule Xandra.Protocol do
   end
 
   # Alias of :text
-  defp encode_query_value({:varchar, value}) do
-    encode_query_value({:text, value})
+  defp encode_typed_query_value(:varchar, value) do
+    encode_typed_query_value(:text, value)
   end
 
-  defp encode_query_value({:varint, value}) when is_integer(value) do
+  defp encode_typed_query_value(:varint, value) when is_integer(value) do
     size = varint_byte_size(value)
     <<value::size(size)-unit(8)>>
   end
 
-  defp encode_query_value({:timeuuid, value}) when is_binary(value) do
-    encode_query_value({:uuid, value})
+  defp encode_typed_query_value(:timeuuid, value) when is_binary(value) do
+    encode_typed_query_value(:uuid, value)
   end
 
-  defp encode_query_value({:tuple, value}) do
+  defp encode_typed_query_value(:tuple, value) do
     raise "pending type to encode: #{inspect(value)}"
   end
 
