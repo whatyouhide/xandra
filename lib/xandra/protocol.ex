@@ -202,11 +202,11 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_value({:uuid, value}) when is_binary(value) do
-    <<part1::8-bytes,
-      ?-, part2::4-bytes,
-      ?-, part3::4-bytes,
-      ?-, part4::4-bytes,
-      ?-, part5::12-bytes>> = value
+    <<part1::8-bytes, ?-,
+      part2::4-bytes, ?-,
+      part3::4-bytes, ?-,
+      part4::4-bytes, ?-,
+      part5::12-bytes>> = value
     <<decode_base16(part1)::4-bytes,
       decode_base16(part2)::2-bytes,
       decode_base16(part3)::2-bytes,
