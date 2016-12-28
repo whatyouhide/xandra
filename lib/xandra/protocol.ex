@@ -156,8 +156,8 @@ defmodule Xandra.Protocol do
     if value, do: <<1>>, else: <<0>>
   end
 
-  defp encode_query_value({:decimal, {unscaled, scale}}) do
-    encode_query_value({:int, scale}) <> encode_query_value({:varint, unscaled})
+  defp encode_query_value({:decimal, {value, scale}}) do
+    encode_query_value({:int, scale}) <> encode_query_value({:varint, value})
   end
 
   defp encode_query_value({:double, value}) when is_float(value) do
