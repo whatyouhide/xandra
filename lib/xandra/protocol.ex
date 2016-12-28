@@ -171,15 +171,10 @@ defmodule Xandra.Protocol do
   defp encode_query_value({:inet, {n1, n2, n3, n4} = _value}) do
     <<n1, n2, n3, n4>>
   end
+
   defp encode_query_value({:inet, {n1, n2, n3, n4, n5, n6, n7, n8}}) do
-    <<n1::4-bytes,
-      n2::4-bytes,
-      n3::4-bytes,
-      n4::4-bytes,
-      n5::4-bytes,
-      n6::4-bytes,
-      n7::4-bytes,
-      n8::4-bytes>>
+    <<n1::4-bytes, n2::4-bytes, n3::4-bytes, n4::4-bytes,
+      n5::4-bytes, n6::4-bytes, n7::4-bytes, n8::4-bytes>>
   end
 
   defp encode_query_value({:int, value}) do
@@ -206,21 +201,17 @@ defmodule Xandra.Protocol do
     encode_query_value({:bigint, value})
   end
 
-  defp encode_query_value({:uuid, value}) when byte_size(value) == 16 do
-    value
-  end
   defp encode_query_value({:uuid, value}) when is_binary(value) do
-    decode = &Base.decode16!(&1, case: :mixed)
     <<part1::8-bytes,
       ?-, part2::4-bytes,
       ?-, part3::4-bytes,
       ?-, part4::4-bytes,
       ?-, part5::12-bytes>> = value
-    <<decode.(part1)::4-bytes,
-      decode.(part2)::2-bytes,
-      decode.(part3)::2-bytes,
-      decode.(part4)::2-bytes,
-      decode.(part5)::6-bytes>>
+    <<decode_base16(part1)::4-bytes,
+      decode_base16(part2)::2-bytes,
+      decode_base16(part3)::2-bytes,
+      decode_base16(part4)::2-bytes,
+      decode_base16(part5)::6-bytes>>
   end
 
   # Alias of :text
@@ -229,7 +220,7 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_value({:varint, value}) when is_integer(value) do
-    size = number_of_bytes_to_represent_varint(value)
+    size = varint_byte_size(value)
     <<value::size(size)-unit(8)>>
   end
 
@@ -241,17 +232,16 @@ defmodule Xandra.Protocol do
     raise "pending type to encode: #{inspect(value)}"
   end
 
-  defp number_of_bytes_to_represent_varint(value) when value in -128..127 do
-    1
-  end
+  defp varint_byte_size(value) when value in -128..127,
+    do: 1
+  defp varint_byte_size(value) when value > 127,
+    do: 1 + varint_byte_size(value >>> 8)
+  defp varint_byte_size(value) when value < -128,
+    do: varint_byte_size(-value - 1)
 
-  defp number_of_bytes_to_represent_varint(value) when value > 127 do
-    shifted = value >>> 8
-    1 + number_of_bytes_to_represent_varint(shifted)
-  end
-
-  defp number_of_bytes_to_represent_varint(value) when value < -128 do
-    number_of_bytes_to_represent_varint(-value - 1)
+  @compile {:inline, decode_base16: 1}
+  defp decode_base16(value) do
+    Base.decode16!(value, case: :mixed)
   end
 
   def decode_response(frame, query \\ nil)
