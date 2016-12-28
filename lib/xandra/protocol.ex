@@ -145,7 +145,7 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_value({:bigint, value}) when is_integer(value) do
-    <<value::64-signed>>
+    <<value::64>>
   end
 
   defp encode_query_value({:blob, value}) when is_binary(value) do
@@ -183,7 +183,7 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_value({:int, value}) do
-    <<value::32-signed>>
+    <<value::32>>
   end
 
   defp encode_query_value({:list, value}) do
