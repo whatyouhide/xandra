@@ -111,6 +111,63 @@ defmodule DataTypesTest do
         assert row["uuid"] == <<0, 182, 145, 128, 208, 225, 17, 226, 139, 139, 8, 0, 32, 12, 154, 102>>
         assert row["varchar"] == "тоже эликсир"
         assert row["varint"] == 6789065678192312391879827349
+
+        statement = """
+        INSERT INTO primitives
+        (id,
+         ascii,
+         bigint,
+         blob,
+         boolean,
+         decimal,
+         double,
+         float,
+         inet,
+         int,
+         text,
+         timestamp,
+         timeuuid,
+         uuid,
+         varchar,
+         varint)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        values = [
+          {:int, 2},
+          {:ascii, "ascii"},
+          {:bigint, 1000000000},
+          {:blob, <<0x00FF::16>>},
+          {:boolean, true},
+          {:decimal, {1323, 2}},
+          {:double, 3.1415},
+          {:float, -1.25},
+          {:inet, {192, 168, 0, 1}},
+          {:int, 42},
+          {:text, "эликсир"},
+          {:timestamp, 2167219200},
+          {:timeuuid, "fe2b4360-28c6-11e2-81c1-0800200c9a66"},
+          {:uuid, "00b69180-d0e1-11e2-8b8b-0800200c9a66"},
+          {:varchar, "тоже эликсир"},
+          {:varint, 6789065678192312391879827349},
+        ]
+        {:ok, _} = Xandra.execute(conn, statement, values, [])
+        {:ok, rows} = Xandra.execute(conn, "SELECT * FROM primitives WHERE id = 2", [], [])
+        assert [row] = Enum.to_list(rows)
+        assert row["ascii"] == "ascii"
+        assert row["bigint"] == 1000000000
+        assert row["blob"] == <<0, 0xFF>>
+        assert row["boolean"] == true
+        assert row["decimal"] == {1323, 2}
+        assert row["double"] == 3.1415
+        assert row["float"] == -1.25
+        assert row["inet"] == {192, 168, 0, 1}
+        assert row["int"] == 42
+        assert row["text"] == "эликсир"
+        assert row["timestamp"] == 2167219200
+        assert row["timeuuid"] == <<254, 43, 67, 96, 40, 198, 17, 226, 129, 193, 8, 0, 32, 12, 154, 102>>
+        assert row["uuid"] == <<0, 182, 145, 128, 208, 225, 17, 226, 139, 139, 8, 0, 32, 12, 154, 102>>
+        assert row["varchar"] == "тоже эликсир"
+        assert row["varint"] == 6789065678192312391879827349
       after
         Xandra.execute(conn, "DROP TABLE primitives", [], [])
       end
