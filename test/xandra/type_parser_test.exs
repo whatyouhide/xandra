@@ -13,6 +13,7 @@ defmodule Xandra.TypeParserTest do
 
     # Mixed case
     assert parse("TEXT") == :text
-    assert parse("MAP<INT, SET<TEXT>>")
+    assert parse("MAP<INT, SET<TEXT>>") == {:map, :int, {:set, :text}}
+    assert parse("List<tExT>") == {:list, :text}
   end
 end
