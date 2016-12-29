@@ -34,103 +34,55 @@ defmodule Xandra.TypeParser do
 
   @spec parse(String.t) :: atom | tuple
   def parse(string) do
-    try do
-      string
-      |> String.downcase()
-      |> parse_node()
-      |> tree_to_simple_representation()
-    catch
-      :throw, {:error, message} when is_binary(message) ->
-        raise ArgumentError, "invalid type #{inspect(string)}: #{message}"
+    case :xandra_type_parser.parse(tokenize(string)) do
+      {:ok, parsed} ->
+        validate_types(parsed)
+      {:error, {line, _module, reason}} ->
+        raise ArgumentError, IO.chardata_to_string(reason)
     end
   end
 
-  defp tree_to_simple_representation(%{name: name, children: children}) when name in @builtin_types do
-    type = String.to_atom(name)
-
-    if children == [] do
-      type
-    else
-      List.to_tuple([type | Enum.map(children, &tree_to_simple_representation/1)])
-    end
+  defp tokenize(string) do
+    string
+    |> String.downcase()
+    |> tokenize(_tokens = [])
+    |> Enum.reverse()
   end
 
-  defp tree_to_simple_representation(%{name: name} = _node) do
-    throw({:error, "unknown type #{inspect(name)}"})
+  defp tokenize(<<" ", rest::binary>>, tokens) do
+    tokenize(rest, tokens)
   end
 
-  @node %{
-    name: "",
-    children: [],
-    parent: nil,
-  }
-
-  def parse_node(string) do
-    parse_node(string, _current = @node)
+  defp tokenize(<<char, rest::binary>>, tokens) when char in [?<, ?>, ?,] do
+    tokenize(rest, [{String.to_atom(<<char>>), 1} | tokens])
   end
 
-  # Starting the subtypes of the current type.
-  defp parse_node("<" <> rest, current_node) do
-    if current_node.name == "" do
-      throw({:error, "syntax error for children of empty type"})
-    else
-      first_child = %{@node | parent: current_node}
-      parse_node(rest, first_child)
-    end
+  defp tokenize(<<_char, _::binary>> = string, tokens) do
+    {word, rest} = next_word(string, _acc = "")
+    tokenize(rest, [{:type, 1, word} | tokens])
   end
 
-  # One subtype of "parent" finished, on to the next.
-  defp parse_node("," <> rest, current_node) do
-    assert_parent_and_not_empty_subtype(current_node)
-    parent = current_node.parent
-    parent = append_child_to_node(parent, current_node)
-    next_child = %{@node | parent: parent}
-    parse_node(rest, next_child)
+  defp tokenize(<<>>, tokens) do
+    tokens
   end
 
-  # Subtypes finished.
-  defp parse_node(">" <> rest, current_node) do
-    assert_parent_and_not_empty_subtype(current_node)
-    parent = current_node.parent
-    parent = append_child_to_node(parent, current_node)
-    parse_node(rest, parent)
+  defp next_word(<<char, rest::binary>>, acc)
+      when char in ?a..?z or char in ?A..?Z or char in ?0..?9,
+    do: next_word(rest, <<acc::binary, char>>)
+  defp next_word(rest, acc),
+    do: {acc, rest}
+
+  defp validate_types(collection) when is_list(collection) do
+    collection
+    |> Enum.map(&validate_types/1)
+    |> List.to_tuple()
   end
 
-  # We skip spaces.
-  defp parse_node(" " <> rest, current_node) do
-    parse_node(rest, current_node)
+  defp validate_types(type) when type in @builtin_types do
+    String.to_atom(type)
   end
 
-  defp parse_node(<<char, rest::binary>>, current_node) do
-    current_node = %{current_node | name: <<current_node.name::binary, char>>}
-    parse_node(rest, current_node)
-  end
-
-  defp parse_node("", current_node) do
-    case current_node do
-      %{name: ""} ->
-        throw({:error, "unexpected end of input"})
-      %{parent: parent} when not is_nil(parent) ->
-        throw({:error, "unexpected end of input"})
-      _other ->
-        current_node
-    end
-  end
-
-  defp append_child_to_node(%{children: children} = node, new_child) do
-    new_child = %{new_child | parent: nil}
-    %{node | children: children ++ [new_child]}
-  end
-
-  defp assert_parent_and_not_empty_subtype(%{parent: nil}) do
-    throw({:error, "syntax error for misplaced >"})
-  end
-
-  defp assert_parent_and_not_empty_subtype(%{name: ""}) do
-    throw({:error, "syntax error for empty subtype"})
-  end
-
-  defp assert_parent_and_not_empty_subtype(_node) do
-    :ok
+  defp validate_types(type) do
+    raise ArgumentError, "unknown type: #{inspect(type)}"
   end
 end
