@@ -33,56 +33,73 @@ defmodule Xandra.TypeParser do
   )
 
   @spec parse(String.t) :: atom | tuple
-  def parse(string) do
-    case :xandra_type_parser.parse(tokenize(string)) do
-      {:ok, parsed} ->
-        validate_types(parsed)
-      {:error, {line, _module, reason}} ->
-        raise ArgumentError, IO.chardata_to_string(reason)
+  def parse(string) when is_binary(string) do
+    {types, _rest = []} =
+      string
+      |> String.downcase()
+      |> tokenize(_acc = [])
+      |> parse_tokens(_acc = [], _nesting = 0)
+
+    case types do
+      [type] -> type
+      [] -> raise ArgumentError, "invalid type: no types"
+      _types -> raise ArgumentError, "invalid type: more than one type"
     end
   end
 
-  defp tokenize(string) do
-    string
-    |> String.downcase()
-    |> tokenize(_tokens = [])
-    |> Enum.reverse()
+  defp tokenize("", tokens),
+    do: Enum.reverse(tokens)
+
+  defp tokenize(" " <> rest, tokens),
+    do: tokenize(rest, tokens)
+
+  defp tokenize(<<keyword, rest::binary>>, tokens) when keyword in '<>,',
+    do: tokenize(rest, [String.to_atom(<<keyword>>) | tokens])
+
+  for type <- @builtin_types do
+    defp tokenize(unquote(type) <> rest, tokens),
+      do: tokenize(rest, [{:builtin, unquote(String.to_atom(type))} | tokens])
   end
 
-  defp tokenize(<<" ", rest::binary>>, tokens) do
-    tokenize(rest, tokens)
+  defp parse_tokens([{:builtin, builtin}, :< | rest], acc, nesting) do
+    {children, rest} = parse_tokens(rest, _acc = [], nesting + 1)
+    collection = List.to_tuple([builtin | children])
+    parse_tokens(rest, [collection | acc], nesting)
   end
 
-  defp tokenize(<<char, rest::binary>>, tokens) when char in [?<, ?>, ?,] do
-    tokenize(rest, [{String.to_atom(<<char>>), 1} | tokens])
+  defp parse_tokens([:< | _rest], _acc, _nesting) do
+    raise "missing type before <"
   end
 
-  defp tokenize(<<_char, _::binary>> = string, tokens) do
-    {word, rest} = next_word(string, _acc = "")
-    tokenize(rest, [{:type, 1, word} | tokens])
+  defp parse_tokens([:"," | [{:builtin, _builtin} | _] = _rest], _acc = [], _nesting) do
+    raise ArgumentError, "invalid type: unexpected ,"
   end
 
-  defp tokenize(<<>>, tokens) do
-    tokens
+  defp parse_tokens([:"," | [{:builtin, _builtin} | _] = rest], acc, nesting) do
+    parse_tokens(rest, acc, nesting)
   end
 
-  defp next_word(<<char, rest::binary>>, acc)
-      when char in ?a..?z or char in ?A..?Z or char in ?0..?9,
-    do: next_word(rest, <<acc::binary, char>>)
-  defp next_word(rest, acc),
-    do: {acc, rest}
-
-  defp validate_types(collection) when is_list(collection) do
-    collection
-    |> Enum.map(&validate_types/1)
-    |> List.to_tuple()
+  defp parse_tokens([:"," | _rest], _acc, _nesting) do
+    raise ArgumentError, "invalid type: unexpected ,"
   end
 
-  defp validate_types(type) when type in @builtin_types do
-    String.to_atom(type)
+  defp parse_tokens([{:builtin, builtin} | rest], acc, nesting) do
+    parse_tokens(rest, [builtin | acc], nesting)
   end
 
-  defp validate_types(type) do
-    raise ArgumentError, "unknown type: #{inspect(type)}"
+  defp parse_tokens([:> | _rest], _acc = [], _nesting) do
+    raise ArgumentError, "invalid type: unexpected >"
+  end
+
+  defp parse_tokens([:> | _rest], _acc, _nesting = 0) do
+    raise ArgumentError, "invalid type: unexpected >"
+  end
+
+  defp parse_tokens([:> | rest], acc, _nesting) do
+    {Enum.reverse(acc), rest}
+  end
+
+  defp parse_tokens([], acc, _nesting) do
+    {Enum.reverse(acc), []}
   end
 end

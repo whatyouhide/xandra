@@ -23,28 +23,28 @@ defmodule Xandra.TypeParserTest do
   end
 
   test "parse/1 with invalid types" do
-    assert_raise ArgumentError, ~s(invalid type " ": unexpected end of input), fn ->
+    assert_raise ArgumentError, ~s(invalid type: no types), fn ->
       parse(" ")
     end
 
-    assert_raise ArgumentError, ~s(invalid type "list<>": syntax error for empty subtype), fn ->
+    assert_raise ArgumentError, ~s(invalid type: unexpected >), fn ->
       parse("list<>")
     end
 
-    assert_raise ArgumentError, ~s(invalid type "list<int>>": syntax error for misplaced >), fn ->
+    assert_raise ArgumentError, ~s(invalid type: unexpected >), fn ->
       parse("list<int>>")
     end
 
-    assert_raise ArgumentError, ~s(invalid type "list<int,>": syntax error for empty subtype), fn ->
+    assert_raise ArgumentError, ~s(invalid type: unexpected ,), fn ->
       parse("list<int,>")
     end
 
-    assert_raise ArgumentError, ~s(invalid type "list< ,int>": syntax error for empty subtype), fn ->
+    assert_raise ArgumentError, ~s(invalid type: unexpected ,), fn ->
       parse("list< ,int>")
     end
 
-    assert_raise ArgumentError, ~s(invalid type "foo<bar>": unknown type "foo"), fn ->
-      parse("foo<bar>")
+    assert_raise ArgumentError, ~s(invalid type: more than one type), fn ->
+      parse("list<int>, int")
     end
   end
 end
