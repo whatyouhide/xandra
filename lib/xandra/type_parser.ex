@@ -31,17 +31,20 @@ defmodule Xandra.TypeParser do
   ]
 
   def parse(string) when is_binary(string) do
-    {type, rest} =
+    try do
       string
       |> String.replace(" ", "")
       |> String.downcase()
       |> parse_type()
-
-    if rest != "" do
-      raise "invalid type"
+    catch
+      :throw, :invalid ->
+        raise "invalid type: " <> inspect(string)
+    else
+      {type, ""} ->
+        type
+      {_, _rest} ->
+        raise "invalid type: " <> inspect(string)
     end
-
-    type
   end
 
   defp parse_type(chars) do
@@ -51,7 +54,7 @@ defmodule Xandra.TypeParser do
           {types, ">" <> rest} ->
             {{type, types}, rest}
           _ ->
-            raise "invalid type"
+            throw(:invalid)
         end
       {type, rest} ->
         {type, rest}
@@ -59,11 +62,13 @@ defmodule Xandra.TypeParser do
   end
 
   for type <- @builtin_types do
-    defp parse_plain_type(unquote(Atom.to_string(type)) <> rest), do: {unquote(type), rest}
+    defp parse_plain_type(unquote(Atom.to_string(type)) <> rest) do
+      {unquote(type), rest}
+    end
   end
 
   defp parse_plain_type(_other) do
-    raise "invalid type"
+    throw(:invalid)
   end
 
   defp parse_inner(chars) do

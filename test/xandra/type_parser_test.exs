@@ -23,27 +23,27 @@ defmodule Xandra.TypeParserTest do
   end
 
   test "parse/1 with invalid types" do
-    assert_raise RuntimeError, "invalid type", fn ->
+    assert_raise RuntimeError, ~s(invalid type: " "), fn ->
       parse(" ")
     end
 
-    assert_raise RuntimeError, "invalid type", fn ->
+    assert_raise RuntimeError, ~s(invalid type: "list<>"), fn ->
       parse("list<>")
     end
 
-    assert_raise RuntimeError, "invalid type", fn ->
+    assert_raise RuntimeError, ~s(invalid type: "list<int>>"), fn ->
       parse("list<int>>")
     end
 
-    assert_raise RuntimeError, "invalid type", fn ->
+    assert_raise RuntimeError, ~s(invalid type: "list<int,>"), fn ->
       parse("list<int,>")
     end
 
-    assert_raise RuntimeError, "invalid type", fn ->
+    assert_raise RuntimeError, ~s(invalid type: "list< ,int>"), fn ->
       parse("list< ,int>")
     end
 
-    assert_raise RuntimeError, "invalid type", fn ->
+    assert_raise RuntimeError, ~s(invalid type: "list<int>, int"), fn ->
       parse("list<int>, int")
     end
   end
