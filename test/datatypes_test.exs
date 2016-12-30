@@ -133,22 +133,22 @@ defmodule DataTypesTest do
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         values = [
-          {:int, 2},
-          {:ascii, "ascii"},
-          {:bigint, 1000000000},
-          {:blob, <<0x00FF::16>>},
-          {:boolean, true},
-          {:decimal, {1323, 2}},
-          {:double, 3.1415},
-          {:float, -1.25},
-          {:inet, {192, 168, 0, 1}},
-          {:int, 42},
-          {:text, "эликсир"},
-          {:timestamp, 2167219200},
-          {:timeuuid, "fe2b4360-28c6-11e2-81c1-0800200c9a66"},
-          {:uuid, "00b69180-d0e1-11e2-8b8b-0800200c9a66"},
-          {:varchar, "тоже эликсир"},
-          {:varint, 6789065678192312391879827349},
+          {"int", 2},
+          {"ascii", "ascii"},
+          {"bigint", 1000000000},
+          {"blob", <<0x00FF::16>>},
+          {"boolean", true},
+          {"decimal", {1323, 2}},
+          {"double", 3.1415},
+          {"float", -1.25},
+          {"inet", {192, 168, 0, 1}},
+          {"int", 42},
+          {"text", "эликсир"},
+          {"timestamp", 2167219200},
+          {"timeuuid", "fe2b4360-28c6-11e2-81c1-0800200c9a66"},
+          {"uuid", "00b69180-d0e1-11e2-8b8b-0800200c9a66"},
+          {"varchar", "тоже эликсир"},
+          {"varint", 6789065678192312391879827349},
         ]
         {:ok, _} = Xandra.execute(conn, statement, values, [])
         {:ok, rows} = Xandra.execute(conn, "SELECT * FROM primitives WHERE id = 2", [], [])
