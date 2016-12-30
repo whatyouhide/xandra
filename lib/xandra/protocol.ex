@@ -181,10 +181,10 @@ defmodule Xandra.Protocol do
     <<value::32>>
   end
 
-  defp encode_query_value({{:list, [elems_type]}, list}) when is_list(list) do
-    for elem <- list,
+  defp encode_query_value({{:list, [items_type]}, list}) when is_list(list) do
+    for item <- list,
         into: <<length(list)::32>>,
-        do: encode_bytes(encode_query_value({elems_type, elem}))
+        do: encode_bytes(encode_query_value({items_type, item}))
   end
 
   defp encode_query_value({{:map, [key_type, value_type]}, map}) when is_map(map) do
@@ -194,7 +194,7 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_query_value({{:set, [_elems_type] = child}, %MapSet{} = value}) do
+  defp encode_query_value({{:set, [_items_type] = child}, %MapSet{} = value}) do
     encode_query_value({{:list, child}, MapSet.to_list(value)})
   end
 
@@ -234,9 +234,9 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_value({{:tuple, types}, tuple}) when length(types) == tuple_size(tuple) do
-    for {type, elem} <- Enum.zip(types, Tuple.to_list(tuple)),
+    for {type, item} <- Enum.zip(types, Tuple.to_list(tuple)),
         into: <<>>,
-        do: encode_bytes(encode_query_value({type, elem}))
+        do: encode_bytes(encode_query_value({type, item}))
   end
 
   defp varint_byte_size(value) when value in -128..127,

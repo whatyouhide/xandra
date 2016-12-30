@@ -219,7 +219,7 @@ defmodule DataTypesTest do
         assert row["map_of_int_to_text"] == nil
         assert row["set_of_int"] == nil
 
-        # Collections with elements in them
+        # Collections with items in them
         statement = """
         INSERT INTO collections
         (id,
