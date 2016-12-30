@@ -141,76 +141,76 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_value({type, value}) when is_binary(type) do
-    encode_typed_query_value(TypeParser.parse(type), value)
+    encode_query_value(TypeParser.parse(type), value)
   end
 
-  defp encode_typed_query_value(:ascii, ascii) when is_binary(ascii) do
+  defp encode_query_value(:ascii, ascii) when is_binary(ascii) do
     ascii
   end
 
-  defp encode_typed_query_value(:bigint, bigint) when is_integer(bigint) do
+  defp encode_query_value(:bigint, bigint) when is_integer(bigint) do
     <<bigint::64>>
   end
 
-  defp encode_typed_query_value(:blob, blob) when is_binary(blob) do
+  defp encode_query_value(:blob, blob) when is_binary(blob) do
     blob
   end
 
-  defp encode_typed_query_value(:boolean, boolean) when is_boolean(boolean) do
+  defp encode_query_value(:boolean, boolean) when is_boolean(boolean) do
     if boolean, do: <<1>>, else: <<0>>
   end
 
-  defp encode_typed_query_value(:decimal, {value, scale}) do
-    encode_typed_query_value(:int, scale) <> encode_typed_query_value(:varint, value)
+  defp encode_query_value(:decimal, {value, scale}) do
+    encode_query_value(:int, scale) <> encode_query_value(:varint, value)
   end
 
-  defp encode_typed_query_value(:double, double) when is_float(double) do
+  defp encode_query_value(:double, double) when is_float(double) do
     <<double::64-float>>
   end
 
-  defp encode_typed_query_value(:float, float) when is_float(float) do
+  defp encode_query_value(:float, float) when is_float(float) do
     <<float::32-float>>
   end
 
-  defp encode_typed_query_value(:inet, {n1, n2, n3, n4} = _inet) do
+  defp encode_query_value(:inet, {n1, n2, n3, n4} = _inet) do
     <<n1, n2, n3, n4>>
   end
 
-  defp encode_typed_query_value(:inet, {n1, n2, n3, n4, n5, n6, n7, n8} = _inet) do
+  defp encode_query_value(:inet, {n1, n2, n3, n4, n5, n6, n7, n8} = _inet) do
     <<n1::4-bytes, n2::4-bytes, n3::4-bytes, n4::4-bytes,
       n5::4-bytes, n6::4-bytes, n7::4-bytes, n8::4-bytes>>
   end
 
-  defp encode_typed_query_value(:int, int) when is_integer(int) do
+  defp encode_query_value(:int, int) when is_integer(int) do
     <<int::32>>
   end
 
-  defp encode_typed_query_value({:list, [items_type]}, list) when is_list(list) do
+  defp encode_query_value({:list, [items_type]}, list) when is_list(list) do
     for item <- list,
         into: <<length(list)::32>>,
-        do: encode_bytes(encode_typed_query_value(items_type, item))
+        do: encode_bytes(encode_query_value(items_type, item))
   end
 
-  defp encode_typed_query_value({:map, [key_type, value_type]}, map) when is_map(map) do
+  defp encode_query_value({:map, [key_type, value_type]}, map) when is_map(map) do
     for {key, value} <- map, into: <<map_size(map)::32>> do
-      encode_bytes(encode_typed_query_value(key_type, key)) <>
-        encode_bytes(encode_typed_query_value(value_type, value))
+      encode_bytes(encode_query_value(key_type, key)) <>
+        encode_bytes(encode_query_value(value_type, value))
     end
   end
 
-  defp encode_typed_query_value({:set, [_items_type] = child}, %MapSet{} = set) do
-    encode_typed_query_value({:list, child}, MapSet.to_list(set))
+  defp encode_query_value({:set, inner_type}, %MapSet{} = set) do
+    encode_query_value({:list, inner_type}, MapSet.to_list(set))
   end
 
-  defp encode_typed_query_value(:text, text) when is_binary(text) do
+  defp encode_query_value(:text, text) when is_binary(text) do
     text
   end
 
-  defp encode_typed_query_value(:timestamp, timestamp) do
-    encode_typed_query_value(:bigint, timestamp)
+  defp encode_query_value(:timestamp, timestamp) do
+    encode_query_value(:bigint, timestamp)
   end
 
-  defp encode_typed_query_value(:uuid, uuid) when is_binary(uuid) do
+  defp encode_query_value(:uuid, uuid) when is_binary(uuid) do
     <<part1::8-bytes, ?-,
       part2::4-bytes, ?-,
       part3::4-bytes, ?-,
@@ -224,23 +224,23 @@ defmodule Xandra.Protocol do
   end
 
   # Alias of :text
-  defp encode_typed_query_value(:varchar, varchar) do
-    encode_typed_query_value(:text, varchar)
+  defp encode_query_value(:varchar, varchar) do
+    encode_query_value(:text, varchar)
   end
 
-  defp encode_typed_query_value(:varint, varint) when is_integer(varint) do
+  defp encode_query_value(:varint, varint) when is_integer(varint) do
     size = varint_byte_size(varint)
     <<varint::size(size)-unit(8)>>
   end
 
-  defp encode_typed_query_value(:timeuuid, timeuuid) when is_binary(timeuuid) do
-    encode_typed_query_value(:uuid, timeuuid)
+  defp encode_query_value(:timeuuid, timeuuid) when is_binary(timeuuid) do
+    encode_query_value(:uuid, timeuuid)
   end
 
-  defp encode_typed_query_value({:tuple, types}, tuple) when length(types) == tuple_size(tuple) do
+  defp encode_query_value({:tuple, types}, tuple) when length(types) == tuple_size(tuple) do
     for {type, item} <- Enum.zip(types, Tuple.to_list(tuple)),
         into: <<>>,
-        do: encode_bytes(encode_typed_query_value(type, item))
+        do: encode_bytes(encode_query_value(type, item))
   end
 
   defp varint_byte_size(value) when value in -128..127,
