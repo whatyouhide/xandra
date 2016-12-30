@@ -195,6 +195,7 @@ defmodule DataTypesTest do
         assert row["set_of_int"] == nil
         assert row["tuple_of_int_and_text"] == nil
 
+        # Empty collections
         statement = """
         INSERT INTO collections
         (id,
@@ -202,9 +203,15 @@ defmodule DataTypesTest do
          map_of_int_to_text,
          set_of_int)
         VALUES
-        (1, [], {}, {})
+        (?, ?, ?, ?)
         """
-        {:ok, _} = Xandra.execute(conn, statement, [], [])
+        values = [
+          {:int, 1},
+          {{:list, [:int]}, []},
+          {{:map, [:int, :text]}, %{}},
+          {{:set, [:int]}, MapSet.new([])},
+        ]
+        {:ok, _} = Xandra.execute(conn, statement, values, [])
         {:ok, rows} = Xandra.execute(conn, "SELECT * FROM collections WHERE id = 1", [], [])
         assert [row] = Enum.to_list(rows)
         assert row["id"] == 1
@@ -212,6 +219,7 @@ defmodule DataTypesTest do
         assert row["map_of_int_to_text"] == nil
         assert row["set_of_int"] == nil
 
+        # Collections with items in them
         statement = """
         INSERT INTO collections
         (id,
@@ -219,14 +227,16 @@ defmodule DataTypesTest do
          map_of_int_to_text,
          set_of_int,
          tuple_of_int_and_text)
-        VALUES
-        (1,
-         [24, 42],
-         {24 : '24', 42 : '42'},
-         {42, 24},
-         (24, '42'))
+        VALUES (?, ?, ?, ?, ?)
         """
-        {:ok, _} = Xandra.execute(conn, statement, [], [])
+        values = [
+          {:int, 1},
+          {{:list, [:int]}, [24, 42]},
+          {{:map, [:int, :text]}, %{24 => "24", 42 => "42"}},
+          {{:set, [:int]}, MapSet.new([42, 24])},
+          {{:tuple, [:int, :text]}, {24, "42"}},
+        ]
+        {:ok, _} = Xandra.execute(conn, statement, values, [])
         {:ok, rows} = Xandra.execute(conn, "SELECT * FROM collections WHERE id = 1", [], [])
         assert [row] = Enum.to_list(rows)
         assert row["id"] == 1

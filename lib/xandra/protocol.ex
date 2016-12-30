@@ -181,16 +181,21 @@ defmodule Xandra.Protocol do
     <<value::32>>
   end
 
-  defp encode_query_value({:list, value}) do
-    raise "pending type to encode: #{inspect(value)}"
+  defp encode_query_value({{:list, [items_type]}, list}) when is_list(list) do
+    for item <- list,
+        into: <<length(list)::32>>,
+        do: encode_bytes(encode_query_value({items_type, item}))
   end
 
-  defp encode_query_value({:map, value}) do
-    raise "pending type to encode: #{inspect(value)}"
+  defp encode_query_value({{:map, [key_type, value_type]}, map}) when is_map(map) do
+    for {key, value} <- map, into: <<map_size(map)::32>> do
+      encode_bytes(encode_query_value({key_type, key})) <>
+        encode_bytes(encode_query_value({value_type, value}))
+    end
   end
 
-  defp encode_query_value({:set, value}) do
-    raise "pending type to encode: #{inspect(value)}"
+  defp encode_query_value({{:set, [_items_type] = child}, %MapSet{} = value}) do
+    encode_query_value({{:list, child}, MapSet.to_list(value)})
   end
 
   defp encode_query_value({:text, value}) when is_binary(value) do
@@ -228,8 +233,10 @@ defmodule Xandra.Protocol do
     encode_query_value({:uuid, value})
   end
 
-  defp encode_query_value({:tuple, value}) do
-    raise "pending type to encode: #{inspect(value)}"
+  defp encode_query_value({{:tuple, types}, tuple}) when length(types) == tuple_size(tuple) do
+    for {type, item} <- Enum.zip(types, Tuple.to_list(tuple)),
+        into: <<>>,
+        do: encode_bytes(encode_query_value({type, item}))
   end
 
   defp varint_byte_size(value) when value in -128..127,
@@ -238,6 +245,10 @@ defmodule Xandra.Protocol do
     do: 1 + varint_byte_size(value >>> 8)
   defp varint_byte_size(value) when value < -128,
     do: varint_byte_size(-value - 1)
+
+  defp encode_bytes(bytes) do
+    <<byte_size(bytes)::32>> <> bytes
+  end
 
   @compile {:inline, decode_base16: 1}
   defp decode_base16(value) do
