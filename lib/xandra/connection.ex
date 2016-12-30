@@ -47,7 +47,7 @@ defmodule Xandra.Connection do
 
     case :gen_tcp.send(sock, payload) do
       :ok ->
-        {:ok, %Frame{} = frame} = Utils.recv_frame_blocking(sock)
+        {:ok, %Frame{} = frame} = Utils.recv_frame(sock)
         {:ok, Protocol.decode_response(frame, query), state}
       {:error, reason} ->
         {:disconnect, reason, state}
@@ -56,7 +56,7 @@ defmodule Xandra.Connection do
 
   def handle_execute(_query, payload, _opts, %{sock: sock} = state) do
     with :ok <- :gen_tcp.send(sock, payload),
-        {:ok, %Frame{} = frame} <- Utils.recv_frame_blocking(sock) do
+        {:ok, %Frame{} = frame} <- Utils.recv_frame(sock) do
       {:ok, frame, state}
     else
       {:error, reason} ->

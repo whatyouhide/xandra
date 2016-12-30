@@ -3,9 +3,9 @@ defmodule Xandra.Connection.Utils do
 
   alias Xandra.{Connection.Error, Frame, Protocol}
 
-  @spec recv_frame_blocking(:gen_tcp.socket) ::
+  @spec recv_frame(:gen_tcp.socket) ::
         {:ok, %Xandra.Frame{}} | {:error, :closed | :inet.posix}
-  def recv_frame_blocking(socket) do
+  def recv_frame(socket) do
     length = Frame.header_length()
 
     with {:ok, header} <- :gen_tcp.recv(socket, length) do
@@ -27,7 +27,7 @@ defmodule Xandra.Connection.Utils do
       |> Frame.encode()
 
     with :ok <- :gen_tcp.send(socket, payload),
-         {:ok, %Frame{} = frame} <- recv_frame_blocking(socket) do
+         {:ok, %Frame{} = frame} <- recv_frame(socket) do
       {:ok, Protocol.decode_response(frame)}
     else
       {:error, reason} ->
@@ -43,7 +43,7 @@ defmodule Xandra.Connection.Utils do
       |> Frame.encode()
 
     with :ok <- :gen_tcp.send(socket, payload),
-         {:ok, %Frame{body: <<>>}} <- recv_frame_blocking(socket) do
+         {:ok, %Frame{body: <<>>}} <- recv_frame(socket) do
        :ok
     else
       {:error, reason} ->
