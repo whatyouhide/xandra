@@ -21,13 +21,16 @@ defmodule Xandra.Connection do
   def connect(opts) do
     host = Keyword.fetch!(opts, :host) |> to_char_list()
     port = Keyword.get(opts, :port, 9042)
-    case :gen_tcp.connect(host, port, @default_sock_opts, @default_timeout) do
-      {:ok, sock} ->
-        {:ok, options} = Utils.request_options(sock)
-        :ok = Utils.startup_connection(sock, options)
-        {:ok, %{sock: sock}}
-      {:error, reason} ->
-        {:error, Error.exception(action: "connect", reason: reason)}
+
+    with {:ok, sock} <- :gen_tcp.connect(host, port, @default_sock_opts, @default_timeout),
+         {:ok, options} <- Utils.request_options(sock),
+         :ok <- Utils.startup_connection(sock, options) do
+      {:ok, %{sock: sock}}
+    else
+      {:error, %Error{}} = error ->
+        error
+      {:error, tcp_reason} ->
+        {:error, Error.exception(action: "connect", reason: tcp_reason)}
     end
   end
 
