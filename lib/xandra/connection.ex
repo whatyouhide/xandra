@@ -21,14 +21,11 @@ defmodule Xandra.Connection do
   def connect(opts) do
     host = Keyword.fetch!(opts, :host) |> to_char_list()
     port = Keyword.get(opts, :port, 9042)
-    case :gen_tcp.connect(host, port, @default_sock_opts, @default_timeout) do
-      {:ok, sock} ->
-        {:ok, options} = Utils.request_options(sock)
-        :ok = Utils.startup_connection(sock, options)
-        {:ok, %{sock: sock}}
-      {:error, reason} ->
-        {:error, Error.exception(action: "connect", reason: reason)}
-    end
+
+    with {:ok, sock} <- connect(host, port),
+         {:ok, options} <- Utils.request_options(sock),
+         :ok <- Utils.startup_connection(sock, options),
+         do: {:ok, %{sock: sock}}
   end
 
   def checkout(state) do
@@ -45,12 +42,12 @@ defmodule Xandra.Connection do
       |> Protocol.encode_request(query)
       |> Frame.encode()
 
-    case :gen_tcp.send(sock, payload) do
-      :ok ->
-        {:ok, %Frame{} = frame} = Utils.recv_frame(sock)
-        {:ok, Protocol.decode_response(frame, query), state}
+    with :ok <- :gen_tcp.send(sock, payload),
+         {:ok, %Frame{} = frame} = Utils.recv_frame(sock) do
+      {:ok, Protocol.decode_response(frame, query), state}
+    else
       {:error, reason} ->
-        {:disconnect, reason, state}
+        {:disconnect, Error.exception(action: "prepare", reason: reason), state}
     end
   end
 
@@ -60,7 +57,7 @@ defmodule Xandra.Connection do
       {:ok, frame, state}
     else
       {:error, reason} ->
-        {:disconnect, reason, state}
+        {:disconnect, Error.exception(action: "execute", reason: reason), state}
     end
   end
 
@@ -70,5 +67,10 @@ defmodule Xandra.Connection do
 
   def disconnect(_exception, %{sock: sock}) do
     :ok = :gen_tcp.close(sock)
+  end
+
+  defp connect(host, port) do
+    with {:error, reason} <- :gen_tcp.connect(host, port, @default_sock_opts, @default_timeout),
+         do: {:error, Error.exception(action: "TCP connect", reason: reason)}
   end
 end
