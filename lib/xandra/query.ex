@@ -1,5 +1,5 @@
 defmodule Xandra.Query do
-  defstruct [:statement, :prepared, :values]
+  defstruct [:statement, :values, :id, :bound_columns, :result_columns]
 
   defimpl DBConnection.Query do
     alias Xandra.{Frame, Protocol}
@@ -10,7 +10,7 @@ defmodule Xandra.Query do
 
     def encode(query, values, opts) do
       query = %{query | values: values}
-      kind = if query.prepared, do: :execute, else: :query
+      kind = if query.id, do: :execute, else: :query
       Frame.new(kind)
       |> Protocol.encode_request(query, opts)
       |> Frame.encode()

@@ -30,7 +30,7 @@ defmodule Xandra.Protocol do
   end
 
   def encode_request(%Frame{kind: :execute} = frame, %Query{} = query, opts) do
-    %{prepared: {id, _rows}, values: values} = query
+    %{id: id, values: values} = query
     body =
       <<byte_size(id)::16>> <>
       id <>
@@ -285,9 +285,10 @@ defmodule Xandra.Protocol do
 
   # Rows
   defp decode_result_response(<<0x0002::32-signed>> <> buffer, query) do
-    rows = case query.prepared do
-      {_query_id, rows} -> rows
-      nil -> %Rows{}
+    rows = if query.id do
+      %Rows{column_specs: query.result_columns}
+    else
+      %Rows{}
     end
     {rows, buffer} = decode_metadata(rows, buffer)
     content = decode_rows_content(buffer, rows.column_specs)
@@ -301,10 +302,10 @@ defmodule Xandra.Protocol do
 
   # Prepared
   defp decode_result_response(<<0x0004::32-signed>> <> buffer, query) do
-    {query_id, buffer} = decode_string(buffer)
-    {_rows, buffer} = decode_metadata(%Rows{}, buffer)
-    {rows, <<>>} = decode_metadata(%Rows{}, buffer)
-    %{query | prepared: {query_id, rows}}
+    {id, buffer} = decode_string(buffer)
+    {%{column_specs: bound_columns}, buffer} = decode_metadata(%Rows{}, buffer)
+    {%{column_specs: result_columns}, <<>>} = decode_metadata(%Rows{}, buffer)
+    %{query | id: id, bound_columns: bound_columns, result_columns: result_columns}
   end
 
   defp decode_result_response(<<0x0005::32-signed>> <> buffer, _query) do
