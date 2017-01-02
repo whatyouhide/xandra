@@ -1,19 +1,7 @@
 defmodule Xandra.Connection do
   use DBConnection
 
-  alias Xandra.{Connection.Utils, Query, Frame, Protocol}
-
-  defmodule Error do
-    defexception [:action, :reason]
-
-    def message(%__MODULE__{} = exception) do
-      inspect(exception)
-    end
-
-    def exception(args) do
-      Kernel.struct!(%__MODULE__{}, args)
-    end
-  end
+  alias Xandra.{Connection.Error, Connection.Utils, Query, Frame, Protocol}
 
   @default_timeout 5_000
   @default_sock_opts [packet: :raw, mode: :binary, active: false]
@@ -47,7 +35,7 @@ defmodule Xandra.Connection do
       {:ok, Protocol.decode_response(frame, query), state}
     else
       {:error, reason} ->
-        {:disconnect, Error.exception(action: "prepare", reason: reason), state}
+        {:disconnect, Error.new("prepare", reason), state}
     end
   end
 
@@ -57,7 +45,7 @@ defmodule Xandra.Connection do
       {:ok, frame, state}
     else
       {:error, reason} ->
-        {:disconnect, Error.exception(action: "execute", reason: reason), state}
+        {:disconnect, Error.new("execute", reason), state}
     end
   end
 
@@ -71,6 +59,6 @@ defmodule Xandra.Connection do
 
   defp connect(host, port) do
     with {:error, reason} <- :gen_tcp.connect(host, port, @default_sock_opts, @default_timeout),
-         do: {:error, Error.exception(action: "TCP connect", reason: reason)}
+         do: {:error, Error.new("TCP connect", reason)}
   end
 end
