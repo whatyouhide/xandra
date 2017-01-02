@@ -50,11 +50,11 @@ defmodule XandraTest do
       statement = "SELECT name FROM users WHERE code = :code"
       {:ok, query} = Xandra.prepare(conn, statement)
 
-      {:ok, result} = Xandra.execute(conn, query, %{"code" => {"int", 1}})
+      {:ok, result} = Xandra.execute(conn, query, [1])
       assert Enum.to_list(result) == [
         %{"name" => "Homer"}, %{"name" => "Lisa"}, %{"name" => "Marge"}
       ]
-      {:ok, result} = Xandra.execute(conn, query, %{"code" => {"int", 2}})
+      {:ok, result} = Xandra.execute(conn, query, %{"code" => 2})
       assert Enum.to_list(result) == [
         %{"name" => "Moe"}
       ]

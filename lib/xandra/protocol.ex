@@ -19,7 +19,7 @@ defmodule Xandra.Protocol do
     body =
       <<byte_size(statement)::32>> <>
       statement <>
-      encode_params(values, opts, false)
+      encode_params([], values, opts, false)
     %{frame | body: body}
   end
 
@@ -30,11 +30,11 @@ defmodule Xandra.Protocol do
   end
 
   def encode_request(%Frame{kind: :execute} = frame, %Query{} = query, opts) do
-    %{id: id, values: values} = query
+    %{id: id, bound_columns: columns, values: values} = query
     body =
       <<byte_size(id)::16>> <>
       id <>
-      encode_params(values, opts, true)
+      encode_params(columns, values, opts, true)
     %{frame | body: body}
   end
 
@@ -94,7 +94,7 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_params(values, opts, skip_metadata?) do
+  defp encode_params(columns, values, opts, skip_metadata?) do
     consistency = Keyword.get(opts, :consistency, :one)
     page_size = Keyword.get(opts, :page_size, 10_000)
     paging_state = Keyword.get(opts, :paging_state)
@@ -107,7 +107,7 @@ defmodule Xandra.Protocol do
 
     encode_consistency_level(consistency) <>
       <<flags>> <>
-      encode_query_values(values) <>
+      encode_query_values(columns, values) <>
       <<page_size::32>> <>
       encode_paging_state(paging_state)
   end
@@ -120,22 +120,42 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_query_values(values) when values == [] or map_size(values) == 0 do
+  defp encode_query_values([], values) when values == [] or map_size(values) == 0 do
     <<>>
   end
 
-  defp encode_query_values(values) when is_list(values) do
+  defp encode_query_values([], values) when is_list(values) do
     for value <- values, into: <<length(values)::16>> do
       encode_query_value(value)
     end
   end
 
-  defp encode_query_values(values) when is_map(values) do
+  defp encode_query_values([], values) when is_map(values) do
     for {name, value} <- values, into: <<map_size(values)::16>> do
       name = to_string(name)
-      <<byte_size(name)::16>> <> name <>
-        encode_query_value(value)
+      <<byte_size(name)::16>> <> name <> encode_query_value(value)
     end
+  end
+
+  defp encode_query_values(columns, values) when is_list(values) do
+    encode_bound_values(columns, values, [<<length(columns)::16>>])
+  end
+
+  defp encode_query_values(columns, values) when map_size(values) == length(columns) do
+    for {_keyspace, _table, name, type} <- columns, into: <<map_size(values)::16>> do
+      value = Map.fetch!(values, name)
+      <<byte_size(name)::16>> <> name <> encode_query_value(type, value)
+    end
+  end
+
+  defp encode_bound_values([], [], result) do
+    IO.iodata_to_binary(result)
+  end
+
+  defp encode_bound_values([column | columns], [value | values], result) do
+    {_keyspace, _table, _name, type} = column
+    result = [result | encode_query_value(type, value)]
+    encode_bound_values(columns, values, result)
   end
 
   defp encode_query_value({type, value}) when is_binary(type) do
