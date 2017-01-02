@@ -1,7 +1,8 @@
 defmodule Xandra.Connection do
   use DBConnection
 
-  alias Xandra.{Connection.Error, Connection.Utils, Query, Frame, Protocol}
+  alias Xandra.{Query, Frame, Protocol}
+  alias __MODULE__.{Error, Utils}
 
   @default_timeout 5_000
   @default_sock_opts [packet: :raw, mode: :binary, active: false]
