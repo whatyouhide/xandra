@@ -19,7 +19,7 @@ defmodule Xandra.Connection.Utils do
     end
   end
 
-  @spec request_options(:gen_tcp.socket) :: {:ok, term} | {:error, term}
+  @spec request_options(:gen_tcp.socket) :: {:ok, term} | {:error, Error.t}
   def request_options(socket) do
     payload =
       Frame.new(:options)
@@ -31,11 +31,11 @@ defmodule Xandra.Connection.Utils do
       {:ok, Protocol.decode_response(frame)}
     else
       {:error, reason} ->
-        {:error, Error.exception(action: "request_options", reason: reason)}
+        {:error, Error.new("request options", reason)}
     end
   end
 
-  @spec startup_connection(:gen_tcp.socket, map) :: :ok | {:error, term}
+  @spec startup_connection(:gen_tcp.socket, map) :: :ok | {:error, Error.t}
   def startup_connection(socket, options) do
     payload =
       Frame.new(:startup)
@@ -47,7 +47,7 @@ defmodule Xandra.Connection.Utils do
        :ok
     else
       {:error, reason} ->
-        {:error, Error.exception(action: "startup_connection", reason: reason)}
+        {:error, Error.new("startup connection", reason)}
     end
   end
 end
