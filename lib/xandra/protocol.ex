@@ -38,7 +38,7 @@ defmodule Xandra.Protocol do
     %{frame | body: body}
   end
 
-  def encode_string_map(map) do
+  defp encode_string_map(map) do
     for {key, value} <- map, into: <<map_size(map)::16>> do
       key_size = byte_size(key)
       <<key_size::16, key::size(key_size)-bytes, byte_size(value)::16, value::bytes>>
