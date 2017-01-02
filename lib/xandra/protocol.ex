@@ -306,12 +306,12 @@ defmodule Xandra.Protocol do
   # Rows
   defp decode_result_response(<<0x0002::32-signed>> <> buffer, query) do
     rows = if query.id do
-      %Rows{column_specs: query.result_columns}
+      %Rows{columns: query.result_columns}
     else
       %Rows{}
     end
     {rows, buffer} = decode_metadata(rows, buffer)
-    content = decode_rows_content(buffer, rows.column_specs)
+    content = decode_rows_content(buffer, rows.columns)
     %{rows | content: content}
   end
 
@@ -323,8 +323,8 @@ defmodule Xandra.Protocol do
   # Prepared
   defp decode_result_response(<<0x0004::32-signed>> <> buffer, query) do
     {id, buffer} = decode_string(buffer)
-    {%{column_specs: bound_columns}, buffer} = decode_metadata(%Rows{}, buffer)
-    {%{column_specs: result_columns}, <<>>} = decode_metadata(%Rows{}, buffer)
+    {%{columns: bound_columns}, buffer} = decode_metadata(%Rows{}, buffer)
+    {%{columns: result_columns}, <<>>} = decode_metadata(%Rows{}, buffer)
     %{query | id: id, bound_columns: bound_columns, result_columns: result_columns}
   end
 
@@ -356,11 +356,11 @@ defmodule Xandra.Protocol do
       global_table_spec == 1 ->
         {keyspace, buffer} = decode_string(buffer)
         {table, buffer} = decode_string(buffer)
-        {column_specs, buffer} = decode_column_specs(buffer, column_count, {keyspace, table}, [])
-        {%{rows | column_specs: column_specs}, buffer}
+        {columns, buffer} = decode_columns(buffer, column_count, {keyspace, table}, [])
+        {%{rows | columns: columns}, buffer}
       true ->
-        {column_specs, buffer} = decode_column_specs(buffer, column_count, nil, [])
-        {%{rows | column_specs: column_specs}, buffer}
+        {columns, buffer} = decode_columns(buffer, column_count, nil, [])
+        {%{rows | columns: columns}, buffer}
     end
   end
 
@@ -373,23 +373,23 @@ defmodule Xandra.Protocol do
     {%{rows | paging_state: paging_state}, buffer}
   end
 
-  defp decode_rows_content(<<row_count::32-signed>> <> buffer, column_specs) do
-    {content, ""} = decode_rows_content(row_count, buffer, column_specs, column_specs, [[]])
+  defp decode_rows_content(<<row_count::32-signed>> <> buffer, columns) do
+    {content, ""} = decode_rows_content(row_count, buffer, columns, columns, [[]])
     content
   end
 
-  def decode_rows_content(0, buffer, column_specs, column_specs, [_ | acc]) do
+  def decode_rows_content(0, buffer, columns, columns, [_ | acc]) do
     {Enum.reverse(acc), buffer}
   end
 
-  def decode_rows_content(row_count, buffer, column_specs, [], [values | acc]) do
-    decode_rows_content(row_count - 1, buffer, column_specs, column_specs, [[], Enum.reverse(values) | acc])
+  def decode_rows_content(row_count, buffer, columns, [], [values | acc]) do
+    decode_rows_content(row_count - 1, buffer, columns, columns, [[], Enum.reverse(values) | acc])
   end
 
-  def decode_rows_content(row_count, <<size::32-signed>> <> buffer, column_specs, [{_, _, _, type} | rest], [values | acc]) do
+  def decode_rows_content(row_count, <<size::32-signed>> <> buffer, columns, [{_, _, _, type} | rest], [values | acc]) do
     {value, buffer} = decode_value(size, buffer, type)
     values = [value | values]
-    decode_rows_content(row_count, buffer, column_specs, rest, [values | acc])
+    decode_rows_content(row_count, buffer, columns, rest, [values | acc])
   end
 
   defp decode_value(<<size::32-signed>> <> buffer, type) do
@@ -516,25 +516,25 @@ defmodule Xandra.Protocol do
     decode_tuple(types, buffer, [item | acc])
   end
 
-  defp decode_column_specs(buffer, 0, _table_spec, acc) do
+  defp decode_columns(buffer, 0, _table_spec, acc) do
     {Enum.reverse(acc), buffer}
   end
 
-  defp decode_column_specs(buffer, column_count, nil, acc) do
+  defp decode_columns(buffer, column_count, nil, acc) do
     {keyspace, buffer} = decode_string(buffer)
     {table, buffer} = decode_string(buffer)
     {name, buffer} = decode_string(buffer)
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
-    decode_column_specs(buffer, column_count - 1, nil, [entry | acc])
+    decode_columns(buffer, column_count - 1, nil, [entry | acc])
   end
 
-  defp decode_column_specs(buffer, column_count, table_spec, acc) do
+  defp decode_columns(buffer, column_count, table_spec, acc) do
     {keyspace, table} = table_spec
     {name, buffer} = decode_string(buffer)
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
-    decode_column_specs(buffer, column_count - 1, table_spec, [entry | acc])
+    decode_columns(buffer, column_count - 1, table_spec, [entry | acc])
   end
 
   defp decode_type(<<0x0000::16>> <> buffer) do
