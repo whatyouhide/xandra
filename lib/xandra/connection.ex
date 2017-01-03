@@ -10,8 +10,8 @@ defmodule Xandra.Connection do
   defstruct [:socket]
 
   def connect(opts) do
-    host = Keyword.fetch!(opts, :host) |> to_char_list()
-    port = Keyword.get(opts, :port, 9042)
+    host = Keyword.fetch!(opts, :host)
+    port = Keyword.fetch!(opts, :port)
 
     with {:ok, socket} <- connect(host, port),
          {:ok, options} <- Utils.request_options(socket),
