@@ -1,7 +1,7 @@
 defmodule Xandra.Error do
-  defstruct [:code, :message]
+  defexception [:reason, :message]
 
-  def new(code, message) when is_integer(code) and is_binary(message) do
-    %__MODULE__{code: code, message: message}
+  def new(reason, message) when is_atom(reason) and is_binary(message) do
+    %__MODULE__{reason: reason, message: message}
   end
 end

@@ -45,7 +45,7 @@ defmodule Xandra.Protocol do
     end
   end
 
-  @consistency_levels %{
+  consistency_levels = %{
     0x0000 => :any,
     0x0001 => :one,
     0x0002 => :two,
@@ -58,8 +58,7 @@ defmodule Xandra.Protocol do
     0x0009 => :local_serial,
     0x000A => :local_one,
   }
-
-  for {spec, level} <- @consistency_levels do
+  for {spec, level} <- consistency_levels do
     defp encode_consistency_level(unquote(level)) do
       <<unquote(spec)::16>>
     end
@@ -278,12 +277,39 @@ defmodule Xandra.Protocol do
     Base.decode16!(value, case: :mixed)
   end
 
+  error_codes = %{
+    0x0000 => :server_failure,
+    0x000A => :protocol_violation,
+    0x0100 => :invalid_credentials,
+    0x1000 => :unavailable,
+    0x1001 => :overloaded,
+    0x1002 => :bootstrapping,
+    0x1003 => :truncate_failure,
+    0x1100 => :write_timeout,
+    0x1200 => :read_timeout,
+    0x2000 => :invalid_syntax,
+    0x2100 => :unauthorized,
+    0x2200 => :invalid,
+    0x2300 => :invalid_config,
+    0x2400 => :already_exists,
+    0x2500 => :unprepared,
+  }
+  for {code, reason} <- error_codes do
+    defp decode_error_reason(<<unquote(code)::32-signed, buffer::bytes>>) do
+      {unquote(reason), buffer}
+    end
+  end
+
+  defp decode_error_message(_reason, buffer) do
+    {message, _buffer} = decode_string(buffer)
+    message
+  end
+
   def decode_response(frame, query \\ nil)
 
   def decode_response(%Frame{kind: :error, body: body} , _query) do
-    <<code::32-signed>> <> buffer = body
-    {message, ""} = decode_string(buffer)
-    Error.new(code, message)
+    {reason, buffer} = decode_error_reason(body)
+    Error.new(reason, decode_error_message(reason, buffer))
   end
 
   def decode_response(%Frame{kind: :ready, body: <<>>}, nil) do
