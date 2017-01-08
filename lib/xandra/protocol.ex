@@ -299,6 +299,7 @@ defmodule Xandra.Protocol do
     decode_result_response(body, query)
   end
 
+  # Void
   defp decode_result_response(<<0x0001::32-signed>>, _query) do
     %Xandra.Void{}
   end
@@ -315,6 +316,7 @@ defmodule Xandra.Protocol do
     %{rows | content: content}
   end
 
+  # SetKeyspace
   defp decode_result_response(<<0x0003::32-signed>> <> buffer, _query) do
     {keyspace, ""} = decode_string(buffer)
     %Xandra.SetKeyspace{keyspace: keyspace}
@@ -328,6 +330,7 @@ defmodule Xandra.Protocol do
     %{query | id: id, bound_columns: bound_columns, result_columns: result_columns}
   end
 
+  # SchemaChange
   defp decode_result_response(<<0x0005::32-signed>> <> buffer, _query) do
     {effect, buffer} = decode_string(buffer)
     {target, buffer} = decode_string(buffer)
