@@ -1,7 +1,7 @@
 defmodule Xandra.Protocol do
   use Bitwise
 
-  alias Xandra.{Frame, Query, Rows, Error, TypeParser}
+  alias Xandra.{Frame, Prepared, Query, Rows, Error, TypeParser}
 
   def encode_request(frame, params, opts \\ [])
 
@@ -23,14 +23,14 @@ defmodule Xandra.Protocol do
     %{frame | body: body}
   end
 
-  def encode_request(%Frame{kind: :prepare} = frame, %Query{} = query, _opts) do
-    %{statement: statement} = query
+  def encode_request(%Frame{kind: :prepare} = frame, %Prepared{} = prepared, _opts) do
+    %{statement: statement} = prepared
     body = <<byte_size(statement)::32>> <> statement
     %{frame | body: body}
   end
 
-  def encode_request(%Frame{kind: :execute} = frame, %Query{} = query, opts) do
-    %{id: id, bound_columns: columns, values: values} = query
+  def encode_request(%Frame{kind: :execute} = frame, %Prepared{} = prepared, opts) do
+    %{id: id, bound_columns: columns, values: values} = prepared
     body =
       <<byte_size(id)::16>> <>
       id <>
@@ -295,7 +295,8 @@ defmodule Xandra.Protocol do
     content
   end
 
-  def decode_response(%Frame{kind: :result, body: body}, %Query{} = query) do
+  def decode_response(%Frame{kind: :result, body: body}, %query_kind{} = query)
+      when query_kind in [Query, Prepared] do
     decode_result_response(body, query)
   end
 
@@ -305,12 +306,15 @@ defmodule Xandra.Protocol do
   end
 
   # Rows
-  defp decode_result_response(<<0x0002::32-signed>> <> buffer, query) do
-    rows = if query.id do
-      %Rows{columns: query.result_columns}
-    else
-      %Rows{}
-    end
+  defp decode_result_response(<<0x0002::32-signed>> <> buffer, query_or_prepared) do
+    rows =
+      case query_or_prepared do
+        %Query{} ->
+          %Rows{}
+        %Prepared{result_columns: result_columns} ->
+          %Rows{columns: result_columns}
+      end
+
     {rows, buffer} = decode_metadata(rows, buffer)
     content = decode_rows_content(buffer, rows.columns)
     %{rows | content: content}
@@ -323,11 +327,11 @@ defmodule Xandra.Protocol do
   end
 
   # Prepared
-  defp decode_result_response(<<0x0004::32-signed>> <> buffer, query) do
+  defp decode_result_response(<<0x0004::32-signed>> <> buffer, %Prepared{} = prepared) do
     {id, buffer} = decode_string(buffer)
     {%{columns: bound_columns}, buffer} = decode_metadata(%Rows{}, buffer)
     {%{columns: result_columns}, <<>>} = decode_metadata(%Rows{}, buffer)
-    %{query | id: id, bound_columns: bound_columns, result_columns: result_columns}
+    %{prepared | id: id, bound_columns: bound_columns, result_columns: result_columns}
   end
 
   # SchemaChange
