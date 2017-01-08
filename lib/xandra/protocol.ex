@@ -19,7 +19,7 @@ defmodule Xandra.Protocol do
     body =
       <<byte_size(statement)::32>> <>
       statement <>
-      encode_params(values, opts, false)
+      encode_params([], values, opts, false)
     %{frame | body: body}
   end
 
@@ -30,11 +30,11 @@ defmodule Xandra.Protocol do
   end
 
   def encode_request(%Frame{kind: :execute} = frame, %Query{} = query, opts) do
-    %{prepared: {id, _rows}, values: values} = query
+    %{id: id, bound_columns: columns, values: values} = query
     body =
       <<byte_size(id)::16>> <>
       id <>
-      encode_params(values, opts, true)
+      encode_params(columns, values, opts, true)
     %{frame | body: body}
   end
 
@@ -94,7 +94,7 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_params(values, opts, skip_metadata?) do
+  defp encode_params(columns, values, opts, skip_metadata?) do
     consistency = Keyword.get(opts, :consistency, :one)
     page_size = Keyword.get(opts, :page_size, 10_000)
     paging_state = Keyword.get(opts, :paging_state)
@@ -107,7 +107,7 @@ defmodule Xandra.Protocol do
 
     encode_consistency_level(consistency) <>
       <<flags>> <>
-      encode_query_values(values) <>
+      encode_query_values(columns, values) <>
       <<page_size::32>> <>
       encode_paging_state(paging_state)
   end
@@ -120,22 +120,42 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_query_values(values) when values == [] or map_size(values) == 0 do
+  defp encode_query_values([], values) when values == [] or map_size(values) == 0 do
     <<>>
   end
 
-  defp encode_query_values(values) when is_list(values) do
+  defp encode_query_values([], values) when is_list(values) do
     for value <- values, into: <<length(values)::16>> do
       encode_query_value(value)
     end
   end
 
-  defp encode_query_values(values) when is_map(values) do
+  defp encode_query_values([], values) when is_map(values) do
     for {name, value} <- values, into: <<map_size(values)::16>> do
       name = to_string(name)
-      <<byte_size(name)::16>> <> name <>
-        encode_query_value(value)
+      <<byte_size(name)::16>> <> name <> encode_query_value(value)
     end
+  end
+
+  defp encode_query_values(columns, values) when is_list(values) do
+    encode_bound_values(columns, values, [<<length(columns)::16>>])
+  end
+
+  defp encode_query_values(columns, values) when map_size(values) == length(columns) do
+    for {_keyspace, _table, name, type} <- columns, into: <<map_size(values)::16>> do
+      value = Map.fetch!(values, name)
+      <<byte_size(name)::16>> <> name <> encode_query_value(type, value)
+    end
+  end
+
+  defp encode_bound_values([], [], result) do
+    IO.iodata_to_binary(result)
+  end
+
+  defp encode_bound_values([column | columns], [value | values], result) do
+    {_keyspace, _table, _name, type} = column
+    result = [result | encode_query_value(type, value)]
+    encode_bound_values(columns, values, result)
   end
 
   defp encode_query_value({type, value}) when is_binary(type) do
@@ -285,12 +305,13 @@ defmodule Xandra.Protocol do
 
   # Rows
   defp decode_result_response(<<0x0002::32-signed>> <> buffer, query) do
-    rows = case query.prepared do
-      {_query_id, rows} -> rows
-      nil -> %Rows{}
+    rows = if query.id do
+      %Rows{columns: query.result_columns}
+    else
+      %Rows{}
     end
     {rows, buffer} = decode_metadata(rows, buffer)
-    content = decode_rows_content(buffer, rows.column_specs)
+    content = decode_rows_content(buffer, rows.columns)
     %{rows | content: content}
   end
 
@@ -301,10 +322,10 @@ defmodule Xandra.Protocol do
 
   # Prepared
   defp decode_result_response(<<0x0004::32-signed>> <> buffer, query) do
-    {query_id, buffer} = decode_string(buffer)
-    {_rows, buffer} = decode_metadata(%Rows{}, buffer)
-    {rows, <<>>} = decode_metadata(%Rows{}, buffer)
-    %{query | prepared: {query_id, rows}}
+    {id, buffer} = decode_string(buffer)
+    {%{columns: bound_columns}, buffer} = decode_metadata(%Rows{}, buffer)
+    {%{columns: result_columns}, <<>>} = decode_metadata(%Rows{}, buffer)
+    %{query | id: id, bound_columns: bound_columns, result_columns: result_columns}
   end
 
   defp decode_result_response(<<0x0005::32-signed>> <> buffer, _query) do
@@ -335,11 +356,11 @@ defmodule Xandra.Protocol do
       global_table_spec == 1 ->
         {keyspace, buffer} = decode_string(buffer)
         {table, buffer} = decode_string(buffer)
-        {column_specs, buffer} = decode_column_specs(buffer, column_count, {keyspace, table}, [])
-        {%{rows | column_specs: column_specs}, buffer}
+        {columns, buffer} = decode_columns(buffer, column_count, {keyspace, table}, [])
+        {%{rows | columns: columns}, buffer}
       true ->
-        {column_specs, buffer} = decode_column_specs(buffer, column_count, nil, [])
-        {%{rows | column_specs: column_specs}, buffer}
+        {columns, buffer} = decode_columns(buffer, column_count, nil, [])
+        {%{rows | columns: columns}, buffer}
     end
   end
 
@@ -352,23 +373,23 @@ defmodule Xandra.Protocol do
     {%{rows | paging_state: paging_state}, buffer}
   end
 
-  defp decode_rows_content(<<row_count::32-signed>> <> buffer, column_specs) do
-    {content, ""} = decode_rows_content(row_count, buffer, column_specs, column_specs, [[]])
+  defp decode_rows_content(<<row_count::32-signed>> <> buffer, columns) do
+    {content, ""} = decode_rows_content(row_count, buffer, columns, columns, [[]])
     content
   end
 
-  def decode_rows_content(0, buffer, column_specs, column_specs, [_ | acc]) do
+  def decode_rows_content(0, buffer, columns, columns, [_ | acc]) do
     {Enum.reverse(acc), buffer}
   end
 
-  def decode_rows_content(row_count, buffer, column_specs, [], [values | acc]) do
-    decode_rows_content(row_count - 1, buffer, column_specs, column_specs, [[], Enum.reverse(values) | acc])
+  def decode_rows_content(row_count, buffer, columns, [], [values | acc]) do
+    decode_rows_content(row_count - 1, buffer, columns, columns, [[], Enum.reverse(values) | acc])
   end
 
-  def decode_rows_content(row_count, <<size::32-signed>> <> buffer, column_specs, [{_, _, _, type} | rest], [values | acc]) do
+  def decode_rows_content(row_count, <<size::32-signed>> <> buffer, columns, [{_, _, _, type} | rest], [values | acc]) do
     {value, buffer} = decode_value(size, buffer, type)
     values = [value | values]
-    decode_rows_content(row_count, buffer, column_specs, rest, [values | acc])
+    decode_rows_content(row_count, buffer, columns, rest, [values | acc])
   end
 
   defp decode_value(<<size::32-signed>> <> buffer, type) do
@@ -495,25 +516,25 @@ defmodule Xandra.Protocol do
     decode_tuple(types, buffer, [item | acc])
   end
 
-  defp decode_column_specs(buffer, 0, _table_spec, acc) do
+  defp decode_columns(buffer, 0, _table_spec, acc) do
     {Enum.reverse(acc), buffer}
   end
 
-  defp decode_column_specs(buffer, column_count, nil, acc) do
+  defp decode_columns(buffer, column_count, nil, acc) do
     {keyspace, buffer} = decode_string(buffer)
     {table, buffer} = decode_string(buffer)
     {name, buffer} = decode_string(buffer)
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
-    decode_column_specs(buffer, column_count - 1, nil, [entry | acc])
+    decode_columns(buffer, column_count - 1, nil, [entry | acc])
   end
 
-  defp decode_column_specs(buffer, column_count, table_spec, acc) do
+  defp decode_columns(buffer, column_count, table_spec, acc) do
     {keyspace, table} = table_spec
     {name, buffer} = decode_string(buffer)
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
-    decode_column_specs(buffer, column_count - 1, table_spec, [entry | acc])
+    decode_columns(buffer, column_count - 1, table_spec, [entry | acc])
   end
 
   defp decode_type(<<0x0000::16>> <> buffer) do
