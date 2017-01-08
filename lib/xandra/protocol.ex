@@ -6,7 +6,7 @@ defmodule Xandra.Protocol do
   def encode_request(frame, params, opts \\ [])
 
   def encode_request(%Frame{kind: :options} = frame, nil, _opts) do
-    %{frame | body: ""}
+    %{frame | body: <<>>}
   end
 
   def encode_request(%Frame{kind: :startup} = frame, params, _opts) when is_map(params) do
@@ -317,7 +317,7 @@ defmodule Xandra.Protocol do
   end
 
   def decode_response(%Frame{kind: :supported, body: body}, nil) do
-    {content, ""} = decode_string_multimap(body)
+    {content, <<>>} = decode_string_multimap(body)
     content
   end
 
@@ -341,7 +341,7 @@ defmodule Xandra.Protocol do
 
   # SetKeyspace
   defp decode_result_response(<<0x0003::32-signed>> <> buffer, _query) do
-    {keyspace, ""} = decode_string(buffer)
+    {keyspace, <<>>} = decode_string(buffer)
     %Xandra.SetKeyspace{keyspace: keyspace}
   end
 
@@ -367,13 +367,13 @@ defmodule Xandra.Protocol do
     do: %Rows{columns: result_columns}
 
   defp decode_change_options(buffer, "KEYSPACE") do
-    {keyspace, ""} = decode_string(buffer)
+    {keyspace, <<>>} = decode_string(buffer)
     %{keyspace: keyspace}
   end
 
   defp decode_change_options(buffer, target) when target in ["TABLE", "TYPE"] do
     {keyspace, buffer} = decode_string(buffer)
-    {subject, ""} = decode_string(buffer)
+    {subject, <<>>} = decode_string(buffer)
     %{keyspace: keyspace, subject: subject}
   end
 
@@ -405,7 +405,7 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_rows_content(<<row_count::32-signed>> <> buffer, columns) do
-    {content, ""} = decode_rows_content(row_count, buffer, columns, columns, [[]])
+    {content, <<>>} = decode_rows_content(row_count, buffer, columns, columns, [[]])
     content
   end
 
