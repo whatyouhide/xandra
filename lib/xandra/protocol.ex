@@ -1,7 +1,7 @@
 defmodule Xandra.Protocol do
   use Bitwise
 
-  alias Xandra.{Frame, Prepared, Query, Rows, Error, TypeParser}
+  alias Xandra.{Batch, Frame, Prepared, Query, Rows, Error, TypeParser}
 
   def encode_request(frame, params, opts \\ [])
 
@@ -37,6 +37,31 @@ defmodule Xandra.Protocol do
       encode_params(columns, values, opts, true)
     %{frame | body: body}
   end
+
+  def encode_request(%Frame{kind: :batch} = frame, %Batch{} = batch, opts) do
+    %{queries: queries, type: type} = batch
+
+    consistency = Keyword.get(opts, :consistency, :one)
+    timestamp = Keyword.get(opts, :timestamp)
+
+    flags = set_default_timestamp(0x00, timestamp)
+
+    encoded_queries =
+      for query <- queries, into: <<length(queries)::16>>, do: encode_query_in_batch(query)
+
+    body =
+      encode_batch_type(type) <>
+      encoded_queries <>
+      encode_consistency_level(consistency) <>
+      <<flags>> <>
+      if(timestamp, do: <<timestamp::64>>, else: <<>>)
+
+    %{frame | body: body}
+  end
+
+  defp encode_batch_type(:logged), do: <<0>>
+  defp encode_batch_type(:unlogged), do: <<1>>
+  defp encode_batch_type(:counter), do: <<2>>
 
   defp encode_string_map(map) do
     for {key, value} <- map, into: <<map_size(map)::16>> do
@@ -93,6 +118,14 @@ defmodule Xandra.Protocol do
     end
   end
 
+  defp set_default_timestamp(mask, timestamp) do
+    if timestamp do
+      mask ||| 0x20
+    else
+      mask
+    end
+  end
+
   defp encode_params(columns, values, opts, skip_metadata?) do
     consistency = Keyword.get(opts, :consistency, :one)
     page_size = Keyword.get(opts, :page_size, 10_000)
@@ -104,9 +137,16 @@ defmodule Xandra.Protocol do
       |> set_metadata_presence(skip_metadata?)
       |> set_paging_state(paging_state)
 
+    encoded_values =
+      if values == [] or values == %{} do
+        <<>>
+      else
+        encode_query_values(columns, values)
+      end
+
     encode_consistency_level(consistency) <>
       <<flags>> <>
-      encode_query_values(columns, values) <>
+      encoded_values <>
       <<page_size::32>> <>
       encode_paging_state(paging_state)
   end
@@ -119,8 +159,16 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_query_values([], values) when values == [] or map_size(values) == 0 do
-    <<>>
+  defp encode_query_in_batch(%Query{statement: statement, values: values}) do
+    kind = <<0>>
+    encoded_statement = <<byte_size(statement)::32>> <> statement
+    kind <> encoded_statement <> encode_query_values([], values)
+  end
+
+  defp encode_query_in_batch(%Prepared{id: id, bound_columns: bound_columns, values: values}) do
+    kind = <<1>>
+    encoded_id = <<byte_size(id)::16>> <> id
+    kind <> encoded_id <> encode_query_values(bound_columns, values)
   end
 
   defp encode_query_values([], values) when is_list(values) do
@@ -322,7 +370,7 @@ defmodule Xandra.Protocol do
   end
 
   def decode_response(%Frame{kind: :result, body: body}, %kind{} = query)
-      when kind in [Query, Prepared] do
+      when kind in [Query, Prepared, Batch] do
     decode_result_response(body, query)
   end
 
@@ -361,6 +409,8 @@ defmodule Xandra.Protocol do
     %Xandra.SchemaChange{effect: effect, target: target, options: options}
   end
 
+  # Since SELECT statements are not allowed in BATCH queries, there's no need to
+  # support %Batch{} in this function.
   defp new_rows(%Query{}),
     do: %Rows{}
   defp new_rows(%Prepared{result_columns: result_columns}),
