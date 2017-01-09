@@ -3,10 +3,10 @@ ExUnit.start()
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
 
-  using [keyspace: keyspace] do
+  using do
     quote do
       setup_all do
-        keyspace = "xandra_test_" <> unquote(keyspace)
+        keyspace = "xandra_test_" <> Base.encode16(:crypto.strong_rand_bytes(16), case: :lower)
         unquote(__MODULE__).setup_keyspace(keyspace)
 
         %{keyspace: keyspace}
