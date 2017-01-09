@@ -22,7 +22,7 @@ defmodule Xandra do
     end
   end
 
-  def stream!(conn, %Query{} = query, params, opts) do
+  def stream!(conn, %Prepared{} = query, params, opts) do
     %Xandra.Stream{conn: conn, query: query, params: params, opts: opts}
   end
 
