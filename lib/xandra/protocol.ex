@@ -295,8 +295,8 @@ defmodule Xandra.Protocol do
     content
   end
 
-  def decode_response(%Frame{kind: :result, body: body}, %query_kind{} = query)
-      when query_kind in [Query, Prepared] do
+  def decode_response(%Frame{kind: :result, body: body}, %kind{} = query)
+      when kind in [Query, Prepared] do
     decode_result_response(body, query)
   end
 
@@ -306,15 +306,8 @@ defmodule Xandra.Protocol do
   end
 
   # Rows
-  defp decode_result_response(<<0x0002::32-signed>> <> buffer, query_or_prepared) do
-    rows =
-      case query_or_prepared do
-        %Query{} ->
-          %Rows{}
-        %Prepared{result_columns: result_columns} ->
-          %Rows{columns: result_columns}
-      end
-
+  defp decode_result_response(<<0x0002::32-signed>> <> buffer, query) do
+    rows = new_rows(query)
     {rows, buffer} = decode_metadata(rows, buffer)
     content = decode_rows_content(buffer, rows.columns)
     %{rows | content: content}
@@ -341,6 +334,9 @@ defmodule Xandra.Protocol do
     options = decode_change_options(buffer, target)
     %Xandra.SchemaChange{effect: effect, target: target, options: options}
   end
+
+  defp new_rows(%Query{}), do: %Rows{}
+  defp new_rows(%Prepared{result_columns: result_columns}), do: %Rows{columns: result_columns}
 
   defp decode_change_options(buffer, "KEYSPACE") do
     {keyspace, ""} = decode_string(buffer)

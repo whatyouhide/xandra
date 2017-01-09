@@ -2,7 +2,7 @@ defmodule Xandra.Stream do
   defstruct [:conn, :query, :params, :opts, state: :new]
 
   defimpl Enumerable do
-    alias Xandra.Rows
+    alias Xandra.{Prepared, Rows}
 
     def reduce(stream, acc, fun) do
       Stream.resource(fn() -> start(stream) end, &next/1, &close/1).(acc, fun)
@@ -25,8 +25,8 @@ defmodule Xandra.Stream do
     end
 
     defp next(stream) do
-      %{conn: conn, query: query, params: params, opts: opts} = stream
-      case Xandra.execute(conn, query, params, opts) |> elem(1) do
+      %{conn: conn, query: %Prepared{} = prepared, params: params, opts: opts} = stream
+      case Xandra.execute(conn, prepared, params, opts) |> elem(1) do
         %Rows{paging_state: nil} = rows ->
           {[rows], %{stream | state: :done}}
         %Rows{paging_state: paging_state} = rows ->

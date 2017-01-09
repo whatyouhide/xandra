@@ -28,7 +28,7 @@ defmodule Xandra do
     execute(conn, %Query{statement: statement}, params, opts)
   end
 
-  def execute(conn, %query_kind{} = query, params, opts) when query_kind in [Query, Prepared] do
+  def execute(conn, %kind{} = query, params, opts) when kind in [Query, Prepared] do
     with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, opts) do
       {:error, error}
     end
