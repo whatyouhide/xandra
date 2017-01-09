@@ -6,7 +6,7 @@ defmodule XandraTest.IntegrationCase do
   using do
     quote do
       setup_all do
-        keyspace = "xandra_test_" <> Base.encode16(:crypto.strong_rand_bytes(16), case: :lower)
+        keyspace = "xandra_test_" <> Base.encode16(:crypto.strong_rand_bytes(16))
         unquote(__MODULE__).setup_keyspace(keyspace)
 
         %{keyspace: keyspace}
