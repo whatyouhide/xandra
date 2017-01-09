@@ -335,8 +335,10 @@ defmodule Xandra.Protocol do
     %Xandra.SchemaChange{effect: effect, target: target, options: options}
   end
 
-  defp new_rows(%Query{}), do: %Rows{}
-  defp new_rows(%Prepared{result_columns: result_columns}), do: %Rows{columns: result_columns}
+  defp new_rows(%Query{}),
+    do: %Rows{}
+  defp new_rows(%Prepared{result_columns: result_columns}),
+    do: %Rows{columns: result_columns}
 
   defp decode_change_options(buffer, "KEYSPACE") do
     {keyspace, ""} = decode_string(buffer)
