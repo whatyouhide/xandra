@@ -1,5 +1,5 @@
 defmodule Xandra do
-  alias __MODULE__.{Connection, Prepared, Query, Error}
+  alias __MODULE__.{Connection, Error, Prepared, Query, Rows}
 
   @default_opts [
     host: "127.0.0.1",
@@ -37,6 +37,7 @@ defmodule Xandra do
   end
 
   def execute(conn, %kind{} = query, params, opts) when kind in [Query, Prepared] do
+    opts = put_paging_state(opts)
     with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, opts) do
       {:error, error}
     end
@@ -44,6 +45,15 @@ defmodule Xandra do
 
   def prepare_execute(conn, statement, params, opts \\ []) when is_binary(statement) do
     DBConnection.prepare_execute(conn, %Prepared{statement: statement}, params, opts)
+  end
+
+  defp put_paging_state(opts) do
+    case Keyword.pop(opts, :cursor) do
+      {%Rows{paging_state: paging_state}, opts} ->
+        Keyword.put(opts, :paging_state, paging_state)
+      {nil, opts} ->
+        opts
+    end
   end
 
   defp validate_opts(opts) do

@@ -37,7 +37,7 @@ defmodule PagingTest do
       %{"letter" => "Aa"}, %{"letter" => "Bb"}, %{"letter" => "Cc"}
     ]
 
-    assert {:ok, %Rows{} = rows} = Xandra.execute(conn, query, [], [page_size: 2, paging_state: rows.paging_state])
+    assert {:ok, %Rows{} = rows} = Xandra.execute(conn, query, [], [page_size: 2, cursor: rows])
     assert Enum.to_list(rows) == [
       %{"letter" => "Dd"}, %{"letter" => "Ee"}
     ]
