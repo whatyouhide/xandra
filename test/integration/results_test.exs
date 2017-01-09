@@ -4,50 +4,33 @@ defmodule ResultsTest do
   alias Xandra.{SchemaChange, SetKeyspace, Void}
 
   test "each possible result", %{conn: conn, keyspace: keyspace} do
-    {:ok, result} = Xandra.execute(conn, "USE #{keyspace}", [])
+    assert {:ok, result} = Xandra.execute(conn, "USE #{keyspace}", [])
     assert result == %SetKeyspace{keyspace: String.downcase(keyspace)}
 
-    statement = "CREATE TABLE users (code int, name text, PRIMARY KEY (code, name))"
-    {:ok, result} = Xandra.execute(conn, statement, [])
+    statement = "CREATE TABLE numbers (figure int PRIMARY KEY)"
+    assert {:ok, result} = Xandra.execute(conn, statement, [])
     assert result == %SchemaChange{
       effect: "CREATED",
       options: %{
         keyspace: String.downcase(keyspace),
-        subject: "users",
+        subject: "numbers",
       },
       target: "TABLE",
     }
 
-    statement = """
-    BEGIN BATCH
-    INSERT INTO users (code, name) VALUES (1, 'Marge');
-    INSERT INTO users (code, name) VALUES (1, 'Homer');
-    INSERT INTO users (code, name) VALUES (1, 'Lisa');
-    INSERT INTO users (code, name) VALUES (2, 'Moe');
-    INSERT INTO users (code, name) VALUES (3, 'Ned');
-    INSERT INTO users (code, name) VALUES (3, 'Burns');
-    INSERT INTO users (code, name) VALUES (4, 'Bob');
-    APPLY BATCH
-    """
-    {:ok, result} = Xandra.execute(conn, statement, [])
+    statement = "INSERT INTO numbers (figure) VALUES (123)"
+    assert {:ok, result} = Xandra.execute(conn, statement, [])
     assert result == %Void{}
 
-    statement = "SELECT name FROM users WHERE code = :code"
-    {:ok, result} = Xandra.execute(conn, statement, %{"code" => {"int", 3}})
-    assert Enum.to_list(result) == [
-      %{"name" => "Burns"}, %{"name" => "Ned"}
-    ]
+    statement = "SELECT * FROM numbers WHERE figure = ?"
+    assert {:ok, result} = Xandra.execute(conn, statement, [{"int", 123}])
+    assert Enum.to_list(result) == [%{"figure" => 123}]
 
-    statement = "SELECT name FROM users WHERE code = :code"
-    {:ok, query} = Xandra.prepare(conn, statement)
+    assert {:ok, result} = Xandra.execute(conn, statement, [{"int", 321}])
+    assert Enum.to_list(result) == []
 
-    {:ok, result} = Xandra.execute(conn, query, [1])
-    assert Enum.to_list(result) == [
-      %{"name" => "Homer"}, %{"name" => "Lisa"}, %{"name" => "Marge"}
-    ]
-    {:ok, result} = Xandra.execute(conn, query, %{"code" => 2})
-    assert Enum.to_list(result) == [
-      %{"name" => "Moe"}
-    ]
+    statement = "SELECT * FROM numbers WHERE figure = :figure"
+    assert {:ok, result} = Xandra.execute(conn, statement, %{"figure" => {"int", 123}})
+    assert Enum.to_list(result) == [%{"figure" => 123}]
   end
 end
