@@ -11,6 +11,7 @@ defmodule Xandra do
       @default_opts
       |> Keyword.merge(opts)
       |> validate_opts()
+      |> Keyword.put(:prepared_cache, Prepared.Cache.new)
     DBConnection.start_link(Connection, opts)
   end
 

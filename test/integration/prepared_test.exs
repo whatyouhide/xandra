@@ -27,6 +27,8 @@ defmodule PreparedTest do
   test "prepared functionality", %{conn: conn} do
     statement = "SELECT name FROM users WHERE code = :code"
     assert {:ok, prepared} = Xandra.prepare(conn, statement)
+    # Successive call to prepare uses cache.
+    assert {:ok, ^prepared} = Xandra.prepare(conn, statement)
 
     assert {:ok, rows} = Xandra.execute(conn, prepared, [1])
     assert Enum.to_list(rows) == [
@@ -47,7 +49,7 @@ defmodule PreparedTest do
       %{"name" => "Burns"}, %{"name" => "Ned"}
     ]
 
-    statement = "SELECT name FROM users WHERE code = ?"
+    # Successive call to prepare uses cache.
     assert {:ok, ^prepared, rows} = Xandra.prepare_execute(conn, statement, [4])
     assert Enum.to_list(rows) == [
       %{"name" => "Bob"}

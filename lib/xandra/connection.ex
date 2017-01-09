@@ -7,16 +7,17 @@ defmodule Xandra.Connection do
   @default_timeout 5_000
   @default_socket_opts [packet: :raw, mode: :binary, active: false]
 
-  defstruct [:socket]
+  defstruct [:socket, :prepared_cache]
 
   def connect(opts) do
     host = Keyword.fetch!(opts, :host)
     port = Keyword.fetch!(opts, :port)
+    prepared_cache = Keyword.fetch!(opts, :prepared_cache)
 
     with {:ok, socket} <- connect(host, port),
          {:ok, options} <- Utils.request_options(socket),
          :ok <- Utils.startup_connection(socket, options),
-         do: {:ok, %__MODULE__{socket: socket}}
+         do: {:ok, %__MODULE__{socket: socket, prepared_cache: prepared_cache}}
   end
 
   def checkout(state) do
@@ -28,20 +29,26 @@ defmodule Xandra.Connection do
   end
 
   def handle_prepare(%Prepared{} = prepared, _opts, %__MODULE__{socket: socket} = state) do
-    payload =
-      Frame.new(:prepare)
-      |> Protocol.encode_request(prepared)
-      |> Frame.encode()
+    case Prepared.Cache.lookup(state.prepared_cache, prepared) do
+      {:ok, prepared} ->
+        {:ok, prepared, state}
+      :error ->
+        payload =
+          Frame.new(:prepare)
+          |> Protocol.encode_request(prepared)
+          |> Frame.encode()
 
-    with :ok <- :gen_tcp.send(socket, payload),
-         {:ok, %Frame{} = frame} = Utils.recv_frame(socket),
-         %Prepared{} = prepared <- Protocol.decode_response(frame, prepared) do
-      {:ok, prepared, state}
-    else
-      {:error, reason} ->
-        {:disconnect, Error.new("prepare", reason), state}
-      %Xandra.Error{} = reason ->
-        {:error, reason, state}
+        with :ok <- :gen_tcp.send(socket, payload),
+             {:ok, %Frame{} = frame} = Utils.recv_frame(socket),
+             %Prepared{} = prepared <- Protocol.decode_response(frame, prepared) do
+          Prepared.Cache.insert(state.prepared_cache, prepared)
+          {:ok, prepared, state}
+        else
+          {:error, reason} ->
+            {:disconnect, Error.new("prepare", reason), state}
+          %Xandra.Error{} = reason ->
+            {:error, reason, state}
+        end
     end
   end
 
