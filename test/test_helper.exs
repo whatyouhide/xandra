@@ -36,6 +36,6 @@ defmodule XandraTest.IntegrationCase do
 
   def drop_keyspace(keyspace) do
     {:ok, conn} = Xandra.start_link()
-    {:ok, _void} = Xandra.execute(conn, "DROP KEYSPACE IF EXISTS #{keyspace}", [])
+    Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}", [])
   end
 end

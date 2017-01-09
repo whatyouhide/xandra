@@ -33,7 +33,7 @@ defmodule Xandra do
   def prepare!(conn, statement, opts \\ []) do
     case prepare(conn, statement, opts) do
       {:ok, result} -> result
-      {:error, error} -> raise(error)
+      {:error, exception} -> raise(exception)
     end
   end
 
@@ -53,7 +53,7 @@ defmodule Xandra do
   def execute!(conn, query, params, opts \\ []) do
     case execute(conn, query, params, opts) do
       {:ok, result} -> result
-      {:error, error} -> raise(error)
+      {:error, exception} -> raise(exception)
     end
   end
 
@@ -64,7 +64,7 @@ defmodule Xandra do
   def prepare_execute!(conn, statement, params, opts \\ []) do
     case prepare_execute(conn, statement, params, opts) do
       {:ok, prepared, result} -> {prepared, result}
-      {:error, error} -> raise(error)
+      {:error, exception} -> raise(exception)
     end
   end
 
