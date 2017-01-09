@@ -1,8 +1,16 @@
 defmodule Xandra do
   alias __MODULE__.{Connection, Prepared, Query, Error}
 
-  def start_link(opts \\ []) do
-    opts = Keyword.put_new(opts, :host, "127.0.0.1")
+  @default_opts [
+    host: "127.0.0.1",
+    port: 9042,
+  ]
+
+  def start_link(opts \\ []) when is_list(opts) do
+    opts =
+      @default_opts
+      |> Keyword.merge(opts)
+      |> validate_opts()
     DBConnection.start_link(Connection, opts)
   end
 
@@ -36,5 +44,22 @@ defmodule Xandra do
 
   def prepare_execute(conn, statement, params, opts \\ []) when is_binary(statement) do
     DBConnection.prepare_execute(conn, %Prepared{statement: statement}, params, opts)
+  end
+
+  defp validate_opts(opts) do
+    Enum.map(opts, fn
+      {:host, host} ->
+        if is_binary(host) do
+          {:host, String.to_charlist(host)}
+        else
+          raise ArgumentError, "expected a string as the value of the :host option, got: #{inspect(host)}"
+        end
+      {:port, port} ->
+        if is_integer(port) do
+          {:port, port}
+        else
+          raise ArgumentError, "expected an integer as the value of the :port option, got: #{inspect(port)}"
+        end
+    end)
   end
 end
