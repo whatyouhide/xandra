@@ -1,7 +1,7 @@
 defmodule Xandra.Connection do
   use DBConnection
 
-  alias Xandra.{Query, Frame, Protocol}
+  alias Xandra.{Prepared, Frame, Protocol}
   alias __MODULE__.{Error, Utils}
 
   @default_timeout 5_000
@@ -27,15 +27,15 @@ defmodule Xandra.Connection do
     {:ok, state}
   end
 
-  def handle_prepare(%Query{} = query, _opts, %__MODULE__{socket: socket} = state) do
+  def handle_prepare(%Prepared{} = prepared, _opts, %__MODULE__{socket: socket} = state) do
     payload =
       Frame.new(:prepare)
-      |> Protocol.encode_request(query)
+      |> Protocol.encode_request(prepared)
       |> Frame.encode()
 
     with :ok <- :gen_tcp.send(socket, payload),
          {:ok, %Frame{} = frame} = Utils.recv_frame(socket) do
-      {:ok, Protocol.decode_response(frame, query), state}
+      {:ok, Protocol.decode_response(frame, prepared), state}
     else
       {:error, reason} ->
         {:disconnect, Error.new("prepare", reason), state}
