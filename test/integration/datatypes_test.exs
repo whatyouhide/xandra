@@ -21,10 +21,10 @@ defmodule DataTypesTest do
      varchar varchar,
      varint varint)
     """
-    {:ok, _void} = Xandra.execute(conn, statement, [])
+    Xandra.execute!(conn, statement, [])
 
-    {:ok, _void} = Xandra.execute(conn, "INSERT INTO primitives (id) VALUES (1)", [])
-    {:ok, rows} = Xandra.execute(conn, "SELECT * FROM primitives WHERE id = 1", [])
+    Xandra.execute!(conn, "INSERT INTO primitives (id) VALUES (1)", [])
+    rows = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 1", [])
     assert [row] = Enum.to_list(rows)
     assert row["id"] == 1
     assert row["ascii"] == nil
@@ -81,8 +81,8 @@ defmodule DataTypesTest do
       {"varchar", "тоже эликсир"},
       {"varint", 6789065678192312391879827349},
     ]
-    {:ok, _void} = Xandra.execute(conn, statement, values)
-    {:ok, rows} = Xandra.execute(conn, "SELECT * FROM primitives WHERE id = 2", [])
+    Xandra.execute!(conn, statement, values)
+    rows = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 2", [])
     assert [row] = Enum.to_list(rows)
     assert row["ascii"] == "ascii"
     assert row["bigint"] == 1000000000
@@ -110,10 +110,10 @@ defmodule DataTypesTest do
      set_of_int set<int>,
      tuple_of_int_and_text tuple<int, text>)
     """
-    {:ok, _void} = Xandra.execute(conn, statement, [])
+    Xandra.execute!(conn, statement, [])
 
-    {:ok, _void} = Xandra.execute(conn, "INSERT INTO collections (id) VALUES (1)", [])
-    {:ok, rows} = Xandra.execute(conn, "SELECT * FROM collections WHERE id = 1", [])
+    Xandra.execute!(conn, "INSERT INTO collections (id) VALUES (1)", [])
+    rows = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
     assert [row] = Enum.to_list(rows)
     assert row["id"] == 1
     assert row["list_of_int"] == nil
@@ -137,8 +137,8 @@ defmodule DataTypesTest do
       {"map<int, text>", %{}},
       {"set<int>", MapSet.new([])},
     ]
-    {:ok, _void} = Xandra.execute(conn, statement, values)
-    {:ok, rows} = Xandra.execute(conn, "SELECT * FROM collections WHERE id = 1", [])
+    Xandra.execute!(conn, statement, values)
+    rows = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
     assert [row] = Enum.to_list(rows)
     assert row["id"] == 1
     assert row["list_of_int"] == nil
@@ -162,8 +162,8 @@ defmodule DataTypesTest do
       {"set<int>", MapSet.new([42, 24])},
       {"tuple<int, text>", {24, "42"}},
     ]
-    {:ok, _void} = Xandra.execute(conn, statement, values)
-    {:ok, rows} = Xandra.execute(conn, "SELECT * FROM collections WHERE id = 1", [])
+    Xandra.execute!(conn, statement, values)
+    rows = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
     assert [row] = Enum.to_list(rows)
     assert row["id"] == 1
     assert row["list_of_int"] == [24, 42]
