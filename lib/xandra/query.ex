@@ -1,5 +1,5 @@
 defmodule Xandra.Query do
-  defstruct [:statement, :values, :result_columns]
+  defstruct [:statement, :values]
 
   defimpl DBConnection.Query do
     alias Xandra.{Frame, Protocol}
