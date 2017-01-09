@@ -1,5 +1,5 @@
 defmodule ResultsTest do
-  use XandraTest.IntegrationCase, keyspace: "xandra"
+  use XandraTest.IntegrationCase
 
   alias Xandra.{SchemaChange, Void}
 
@@ -9,7 +9,7 @@ defmodule ResultsTest do
     assert result == %SchemaChange{
       effect: "CREATED",
       options: %{
-        keyspace: keyspace,
+        keyspace: String.downcase(keyspace),
         subject: "users",
       },
       target: "TABLE",
