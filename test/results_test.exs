@@ -1,9 +1,9 @@
-defmodule XandraTest do
+defmodule ResultsTest do
   use XandraTest.IntegrationCase, keyspace: "xandra"
 
   alias Xandra.{SchemaChange, Void}
 
-  test "basic interactions", %{conn: conn, keyspace: keyspace} do
+  test "each possible result", %{conn: conn, keyspace: keyspace} do
     statement = "CREATE TABLE users (code int, name text, PRIMARY KEY (code, name))"
     {:ok, result} = Xandra.execute(conn, statement, [])
     assert result == %SchemaChange{
