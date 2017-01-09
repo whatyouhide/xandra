@@ -1,5 +1,5 @@
 defmodule ResultsTest do
-  use XandraTest.IntegrationCase
+  use XandraTest.IntegrationCase, async: true
 
   alias Xandra.{SchemaChange, SetKeyspace, Void}
 

@@ -1,5 +1,5 @@
 defmodule DataTypesTest do
-  use XandraTest.IntegrationCase
+  use XandraTest.IntegrationCase, async: true
 
   test "primitive datatypes", %{conn: conn} do
     statement = """
