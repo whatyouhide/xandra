@@ -1,9 +1,12 @@
 defmodule ResultsTest do
   use XandraTest.IntegrationCase
 
-  alias Xandra.{SchemaChange, Void}
+  alias Xandra.{SchemaChange, SetKeyspace, Void}
 
   test "each possible result", %{conn: conn, keyspace: keyspace} do
+    {:ok, result} = Xandra.execute(conn, "USE #{keyspace}", [])
+    assert result == %SetKeyspace{keyspace: String.downcase(keyspace)}
+
     statement = "CREATE TABLE users (code int, name text, PRIMARY KEY (code, name))"
     {:ok, result} = Xandra.execute(conn, statement, [])
     assert result == %SchemaChange{
