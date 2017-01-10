@@ -22,4 +22,9 @@ defmodule Xandra.Prepared.Cache do
         :error
     end
   end
+
+  def delete(table, %Prepared{statement: statement}) do
+    :ets.delete(table, statement)
+    :ok
+  end
 end

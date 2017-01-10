@@ -44,7 +44,19 @@ defmodule Xandra do
     execute(conn, %Query{statement: statement}, params, opts)
   end
 
-  def execute(conn, %kind{} = query, params, opts) when kind in [Query, Prepared] do
+  def execute(conn, %Prepared{} = prepared, params, opts) do
+    opts = put_paging_state(opts)
+    case DBConnection.execute(conn, prepared, params, opts) do
+      {:ok, %Error{reason: :unprepared}} ->
+        run_prepare_execute(conn, prepared, params, Keyword.put(opts, :force, true))
+      {:ok, %Error{} = error} ->
+        {:error, error}
+      other ->
+        other
+    end
+  end
+
+  def execute(conn, %Query{} = query, params, opts) do
     opts = put_paging_state(opts)
     with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, opts) do
       {:error, error}
@@ -60,6 +72,12 @@ defmodule Xandra do
 
   def prepare_execute(conn, statement, params, opts \\ []) when is_binary(statement) do
     prepared = %Prepared{statement: statement}
+    with {:error, %Error{reason: :unprepared}} <- run_prepare_execute(conn, prepared, params, opts) do
+      run_prepare_execute(conn, prepared, params, Keyword.put(opts, :force, true))
+    end
+  end
+
+  defp run_prepare_execute(conn, %Prepared{} = prepared, params, opts) do
     with {:ok, _prepared, %Error{} = error} <- DBConnection.prepare_execute(conn, prepared, params, opts) do
       {:error, error}
     end

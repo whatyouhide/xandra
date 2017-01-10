@@ -14,10 +14,6 @@ defmodule ErrorsTest do
     assert {:error, reason} = Xandra.execute(conn, "CREATE TABLE errors (id int PRIMARY KEY)", [])
     assert %Error{reason: :already_exists} = reason
 
-    query = Xandra.prepare!(conn, "SELECT * FROM errors", [])
-    assert {:error, reason} = Xandra.execute(conn, %{query | id: <<>>}, [])
-    assert %Error{reason: :unprepared} = reason
-
     assert {:error, reason} = Xandra.prepare(conn, "SELECT * FROM unknown", [])
     assert %Error{reason: :invalid} = reason
 

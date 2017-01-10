@@ -28,8 +28,9 @@ defmodule Xandra.Connection do
     {:ok, state}
   end
 
-  def handle_prepare(%Prepared{} = prepared, _opts, %__MODULE__{socket: socket} = state) do
-    case Prepared.Cache.lookup(state.prepared_cache, prepared) do
+  def handle_prepare(%Prepared{} = prepared, opts, %__MODULE__{socket: socket} = state) do
+    force? = Keyword.get(opts, :force, false)
+    case prepared_cache_lookup(state, prepared, force?) do
       {:ok, prepared} ->
         {:ok, prepared, state}
       :error ->
@@ -68,6 +69,15 @@ defmodule Xandra.Connection do
 
   def disconnect(_exception, %__MODULE__{socket: socket}) do
     :ok = :gen_tcp.close(socket)
+  end
+
+  def prepared_cache_lookup(state, prepared, true) do
+    Prepared.Cache.delete(state.prepared_cache, prepared)
+    :error
+  end
+
+  def prepared_cache_lookup(state, prepared, false) do
+    Prepared.Cache.lookup(state.prepared_cache, prepared)
   end
 
   defp connect(host, port) do
