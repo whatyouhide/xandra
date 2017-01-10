@@ -58,7 +58,10 @@ defmodule Xandra do
   end
 
   def prepare_execute(conn, statement, params, opts \\ []) when is_binary(statement) do
-    DBConnection.prepare_execute(conn, %Prepared{statement: statement}, params, opts)
+    prepared = %Prepared{statement: statement}
+    with {:ok, _prepared, %Error{} = error} <- DBConnection.prepare_execute(conn, prepared, params, opts) do
+      {:error, error}
+    end
   end
 
   def prepare_execute!(conn, statement, params, opts \\ []) do

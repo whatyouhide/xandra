@@ -10,7 +10,7 @@ defmodule ErrorsTest do
     assert {:error, reason} = Xandra.execute(conn, "USE unknown", [])
     assert %Error{reason: :invalid} = reason
 
-    Xandra.execute!(conn, "CREATE TABLE errors (id int PRIMARY KEY)", [])
+    Xandra.execute!(conn, "CREATE TABLE errors (id int PRIMARY KEY, reason text)", [])
     assert {:error, reason} = Xandra.execute(conn, "CREATE TABLE errors (id int PRIMARY KEY)", [])
     assert %Error{reason: :already_exists} = reason
 
@@ -19,6 +19,11 @@ defmodule ErrorsTest do
     assert %Error{reason: :unprepared} = reason
 
     assert {:error, reason} = Xandra.prepare(conn, "SELECT * FROM unknown", [])
+    assert %Error{reason: :invalid} = reason
+
+    # This statement is invalid as we use a non-primary column in the WHERE clause.
+    statement = "SELECT id FROM errors WHERE reason = ?"
+    assert {:error, reason} = Xandra.prepare_execute(conn, statement, ["invalid"])
     assert %Error{reason: :invalid} = reason
   end
 
