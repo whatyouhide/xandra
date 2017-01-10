@@ -10,15 +10,20 @@ defmodule ErrorsTest do
     assert {:error, reason} = Xandra.execute(conn, "USE unknown", [])
     assert %Error{reason: :invalid} = reason
 
-    {:ok, _void} = Xandra.execute(conn, "CREATE TABLE errors (id int PRIMARY KEY)", [])
+    Xandra.execute!(conn, "CREATE TABLE errors (id int PRIMARY KEY)", [])
     assert {:error, reason} = Xandra.execute(conn, "CREATE TABLE errors (id int PRIMARY KEY)", [])
     assert %Error{reason: :already_exists} = reason
 
-    {:ok, query} = Xandra.prepare(conn, "SELECT * FROM errors", [])
+    query = Xandra.prepare!(conn, "SELECT * FROM errors", [])
     assert {:error, reason} = Xandra.execute(conn, %{query | id: <<>>}, [])
     assert %Error{reason: :unprepared} = reason
 
     assert {:error, reason} = Xandra.prepare(conn, "SELECT * FROM unknown", [])
     assert %Error{reason: :invalid} = reason
+  end
+
+  test "errors are raised from bang! functions", %{conn: conn} do
+    assert_raise Error, fn -> Xandra.prepare!(conn, "", []) end
+    assert_raise Error, fn -> Xandra.execute!(conn, "USE unknown", []) end
   end
 end

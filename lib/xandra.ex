@@ -30,6 +30,13 @@ defmodule Xandra do
     DBConnection.prepare(conn, %Prepared{statement: statement}, opts)
   end
 
+  def prepare!(conn, statement, opts \\ []) do
+    case prepare(conn, statement, opts) do
+      {:ok, result} -> result
+      {:error, exception} -> raise(exception)
+    end
+  end
+
   def execute(conn, statement, params, opts \\ [])
 
   def execute(conn, statement, params, opts) when is_binary(statement) do
@@ -43,8 +50,22 @@ defmodule Xandra do
     end
   end
 
+  def execute!(conn, query, params, opts \\ []) do
+    case execute(conn, query, params, opts) do
+      {:ok, result} -> result
+      {:error, exception} -> raise(exception)
+    end
+  end
+
   def prepare_execute(conn, statement, params, opts \\ []) when is_binary(statement) do
     DBConnection.prepare_execute(conn, %Prepared{statement: statement}, params, opts)
+  end
+
+  def prepare_execute!(conn, statement, params, opts \\ []) do
+    case prepare_execute(conn, statement, params, opts) do
+      {:ok, prepared, result} -> {prepared, result}
+      {:error, exception} -> raise(exception)
+    end
   end
 
   defp put_paging_state(opts) do
