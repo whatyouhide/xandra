@@ -34,11 +34,14 @@ defmodule Xandra.Connection do
       |> Frame.encode()
 
     with :ok <- :gen_tcp.send(socket, payload),
-         {:ok, %Frame{} = frame} = Utils.recv_frame(socket) do
-      {:ok, Protocol.decode_response(frame, prepared), state}
+         {:ok, %Frame{} = frame} = Utils.recv_frame(socket),
+         %Prepared{} = prepared <- Protocol.decode_response(frame, prepared) do
+      {:ok, prepared, state}
     else
       {:error, reason} ->
         {:disconnect, Error.new("prepare", reason), state}
+      %Xandra.Error{} = reason ->
+        {:error, reason, state}
     end
   end
 

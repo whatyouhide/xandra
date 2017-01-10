@@ -17,5 +17,8 @@ defmodule ErrorsTest do
     {:ok, query} = Xandra.prepare(conn, "SELECT * FROM errors", [])
     assert {:error, reason} = Xandra.execute(conn, %{query | id: <<>>}, [])
     assert %Error{reason: :unprepared} = reason
+
+    assert {:error, reason} = Xandra.prepare(conn, "SELECT * FROM unknown", [])
+    assert %Error{reason: :invalid} = reason
   end
 end
