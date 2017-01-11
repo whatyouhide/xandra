@@ -113,6 +113,8 @@ defmodule Xandra do
         else
           raise ArgumentError, "expected an integer as the value of the :port option, got: #{inspect(port)}"
         end
+      {_key, _value} = option ->
+        option
     end)
   end
 end
