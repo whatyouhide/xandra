@@ -4,7 +4,7 @@ defmodule Xandra.Mixfile do
   def project() do
     [app: :xandra,
      version: "0.0.1",
-     elixir: "~> 1.2",
+     elixir: "~> 1.3",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
      deps: deps()]
