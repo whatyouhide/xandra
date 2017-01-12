@@ -44,7 +44,7 @@ defmodule Xandra.Protocol do
     consistency = Keyword.get(opts, :consistency, :one)
     timestamp = Keyword.get(opts, :timestamp)
 
-    flags = set_default_timestamp(0x00, timestamp)
+    flags = set_flag(0x00, _default_timestamp = 0x20, timestamp)
 
     encoded_queries =
       for query <- queries, into: <<length(queries)::16>>, do: encode_query_in_batch(query)
@@ -89,40 +89,22 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp set_query_values(mask, values) do
+  defp set_flag(mask, bit, value) do
+    if value do
+      mask ||| bit
+    else
+      mask
+    end
+  end
+
+  defp set_query_values_flag(mask, values) do
     cond do
-      values == [] ->
+      values == [] or values == %{} ->
         mask
       is_list(values) ->
         mask ||| 0x01
-      map_size(values) == 0 ->
-        mask
       is_map(values) ->
         mask ||| 0x01 ||| 0x40
-    end
-  end
-
-  defp set_metadata_presence(mask, skip_metadata?) do
-    if skip_metadata? do
-      mask ||| 0x02
-    else
-      mask
-    end
-  end
-
-  defp set_paging_state(mask, value) do
-    if value do
-      mask ||| 0x08
-    else
-      mask
-    end
-  end
-
-  defp set_default_timestamp(mask, timestamp) do
-    if timestamp do
-      mask ||| 0x20
-    else
-      mask
     end
   end
 
@@ -132,10 +114,11 @@ defmodule Xandra.Protocol do
     paging_state = Keyword.get(opts, :paging_state)
 
     flags =
-      set_query_values(0x00, values)
-      |> bor(0x04)
-      |> set_metadata_presence(skip_metadata?)
-      |> set_paging_state(paging_state)
+      0x00
+      |> set_query_values_flag(values)
+      |> set_flag(_page_size = 0x04, true)
+      |> set_flag(_metadata_presence = 0x02, skip_metadata?)
+      |> set_flag(_paging_state = 0x08, paging_state)
 
     encoded_values =
       if values == [] or values == %{} do
