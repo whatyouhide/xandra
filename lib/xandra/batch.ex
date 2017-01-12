@@ -1,5 +1,5 @@
 defmodule Xandra.Batch do
-  alias Xandra.{Prepared, Query}
+  alias Xandra.{Prepared, Simple}
 
   @enforce_keys [:type]
   defstruct @enforce_keys ++ [queries: []]
@@ -12,7 +12,7 @@ defmodule Xandra.Batch do
 
   def add(%__MODULE__{} = batch, statement, values)
       when is_binary(statement) and is_list(values) do
-    add_query_or_prepared(batch, %Query{statement: statement}, values)
+    add_query_or_prepared(batch, %Simple{statement: statement}, values)
   end
 
   def add(%__MODULE__{} = batch, %Prepared{} = prepared, values)

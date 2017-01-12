@@ -1,7 +1,7 @@
 defmodule Xandra.Protocol do
   use Bitwise
 
-  alias Xandra.{Batch, Frame, Prepared, Query, Rows, Error, TypeParser}
+  alias Xandra.{Batch, Error, Frame, Prepared, Rows, Simple, TypeParser}
 
   def encode_request(frame, params, options \\ [])
 
@@ -14,7 +14,7 @@ defmodule Xandra.Protocol do
     %{frame | body: encode_string_map(%{"CQL_VERSION" => cql_version})}
   end
 
-  def encode_request(%Frame{kind: :query} = frame, %Query{} = query, options) do
+  def encode_request(%Frame{kind: :query} = frame, %Simple{} = query, options) do
     %{statement: statement, values: values} = query
     body =
       <<byte_size(statement)::32>> <>
@@ -142,7 +142,7 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_query_in_batch(%Query{statement: statement, values: values}) do
+  defp encode_query_in_batch(%Simple{statement: statement, values: values}) do
     kind = <<0>>
     encoded_statement = <<byte_size(statement)::32>> <> statement
     kind <> encoded_statement <> encode_query_values([], values)
@@ -353,7 +353,7 @@ defmodule Xandra.Protocol do
   end
 
   def decode_response(%Frame{kind: :result, body: body}, %kind{} = query)
-      when kind in [Query, Prepared, Batch] do
+      when kind in [Simple, Prepared, Batch] do
     decode_result_response(body, query)
   end
 
@@ -394,7 +394,7 @@ defmodule Xandra.Protocol do
 
   # Since SELECT statements are not allowed in BATCH queries, there's no need to
   # support %Batch{} in this function.
-  defp new_rows(%Query{}),
+  defp new_rows(%Simple{}),
     do: %Rows{}
   defp new_rows(%Prepared{result_columns: result_columns}),
     do: %Rows{columns: result_columns}

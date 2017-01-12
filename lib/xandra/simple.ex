@@ -1,4 +1,4 @@
-defmodule Xandra.Query do
+defmodule Xandra.Simple do
   defstruct [:statement, :values]
 
   defimpl DBConnection.Query do

@@ -1,5 +1,5 @@
 defmodule Xandra do
-  alias __MODULE__.{Batch, Connection, Error, Prepared, Query, Rows}
+  alias __MODULE__.{Batch, Connection, Error, Prepared, Rows, Simple}
 
   @default_options [
     host: "127.0.0.1",
@@ -57,7 +57,7 @@ defmodule Xandra do
 
   def execute(conn, statement, params, options) when is_binary(statement) do
     options = put_paging_state(options)
-    query = %Query{statement: statement}
+    query = %Simple{statement: statement}
     with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, options) do
       {:error, error}
     end
