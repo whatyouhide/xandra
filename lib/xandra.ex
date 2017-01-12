@@ -41,7 +41,11 @@ defmodule Xandra do
   def execute(conn, statement, params, opts \\ [])
 
   def execute(conn, statement, params, opts) when is_binary(statement) do
-    execute(conn, %Query{statement: statement}, params, opts)
+    opts = put_paging_state(opts)
+    query = %Query{statement: statement}
+    with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, opts) do
+      {:error, error}
+    end
   end
 
   def execute(conn, %Prepared{} = prepared, params, opts) do
@@ -53,13 +57,6 @@ defmodule Xandra do
         {:error, error}
       other ->
         other
-    end
-  end
-
-  def execute(conn, %Query{} = query, params, opts) do
-    opts = put_paging_state(opts)
-    with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, opts) do
-      {:error, error}
     end
   end
 
