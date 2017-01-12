@@ -1,5 +1,5 @@
 defmodule Xandra do
-  alias __MODULE__.{Connection, Error, Prepared, Query, Rows}
+  alias __MODULE__.{Batch, Connection, Error, Prepared, Query, Rows}
 
   @default_opts [
     host: "127.0.0.1",
@@ -38,7 +38,22 @@ defmodule Xandra do
     end
   end
 
-  def execute(conn, statement, params, opts \\ [])
+  def execute(conn, query, params_or_opts \\ [])
+
+  def execute(conn, statement, params) when is_binary(statement) do
+    execute(conn, statement, params, _opts = [])
+  end
+
+  def execute(conn, %Prepared{} = prepared, params) do
+    execute(conn, prepared, params, _opts = [])
+  end
+
+  def execute(conn, %Batch{} = batch, opts) when is_list(opts) do
+    with {:ok, %Error{} = error} <- DBConnection.execute(conn, batch, :no_params, opts),
+         do: {:error, error}
+  end
+
+  def execute(conn, query, params, opts)
 
   def execute(conn, statement, params, opts) when is_binary(statement) do
     opts = put_paging_state(opts)
@@ -60,7 +75,14 @@ defmodule Xandra do
     end
   end
 
-  def execute!(conn, query, params, opts \\ []) do
+  def execute!(conn, query, params_or_opts \\ []) do
+    case execute(conn, query, params_or_opts) do
+      {:ok, result} -> result
+      {:error, exception} -> raise(exception)
+    end
+  end
+
+  def execute!(conn, query, params, opts) do
     case execute(conn, query, params, opts) do
       {:ok, result} -> result
       {:error, exception} -> raise(exception)

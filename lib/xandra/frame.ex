@@ -9,6 +9,7 @@ defmodule Xandra.Frame do
     :query => 0x07,
     :prepare => 0x09,
     :execute => 0x0A,
+    :batch => 0x0D,
   }
 
   @response_version 0x83
