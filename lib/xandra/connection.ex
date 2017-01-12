@@ -5,14 +5,14 @@ defmodule Xandra.Connection do
   alias __MODULE__.{Error, Utils}
 
   @default_timeout 5_000
-  @default_socket_opts [packet: :raw, mode: :binary, active: false]
+  @default_socket_options [packet: :raw, mode: :binary, active: false]
 
   defstruct [:socket, :prepared_cache]
 
-  def connect(opts) do
-    host = Keyword.fetch!(opts, :host)
-    port = Keyword.fetch!(opts, :port)
-    prepared_cache = Keyword.fetch!(opts, :prepared_cache)
+  def connect(options) do
+    host = Keyword.fetch!(options, :host)
+    port = Keyword.fetch!(options, :port)
+    prepared_cache = Keyword.fetch!(options, :prepared_cache)
 
     with {:ok, socket} <- connect(host, port),
          {:ok, options} <- Utils.request_options(socket),
@@ -28,8 +28,8 @@ defmodule Xandra.Connection do
     {:ok, state}
   end
 
-  def handle_prepare(%Prepared{} = prepared, opts, %__MODULE__{socket: socket} = state) do
-    force? = Keyword.get(opts, :force, false)
+  def handle_prepare(%Prepared{} = prepared, options, %__MODULE__{socket: socket} = state) do
+    force? = Keyword.get(options, :force, false)
     case prepared_cache_lookup(state, prepared, force?) do
       {:ok, prepared} ->
         {:ok, prepared, state}
@@ -53,7 +53,7 @@ defmodule Xandra.Connection do
     end
   end
 
-  def handle_execute(_query, payload, _opts, %__MODULE__{socket: socket} = state) do
+  def handle_execute(_query, payload, _options, %__MODULE__{socket: socket} = state) do
     with :ok <- :gen_tcp.send(socket, payload),
         {:ok, %Frame{} = frame} <- Utils.recv_frame(socket) do
       {:ok, frame, state}
@@ -63,7 +63,7 @@ defmodule Xandra.Connection do
     end
   end
 
-  def handle_close(query, _opts, state) do
+  def handle_close(query, _options, state) do
     {:ok, query, state}
   end
 
@@ -81,7 +81,7 @@ defmodule Xandra.Connection do
   end
 
   defp connect(host, port) do
-    with {:error, reason} <- :gen_tcp.connect(host, port, @default_socket_opts, @default_timeout),
+    with {:error, reason} <- :gen_tcp.connect(host, port, @default_socket_options, @default_timeout),
          do: {:error, Error.new("TCP connect", reason)}
   end
 end

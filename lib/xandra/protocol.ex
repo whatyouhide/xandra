@@ -3,46 +3,46 @@ defmodule Xandra.Protocol do
 
   alias Xandra.{Batch, Frame, Prepared, Query, Rows, Error, TypeParser}
 
-  def encode_request(frame, params, opts \\ [])
+  def encode_request(frame, params, options \\ [])
 
-  def encode_request(%Frame{kind: :options} = frame, nil, _opts) do
+  def encode_request(%Frame{kind: :options} = frame, nil, _options) do
     %{frame | body: <<>>}
   end
 
-  def encode_request(%Frame{kind: :startup} = frame, params, _opts) when is_map(params) do
+  def encode_request(%Frame{kind: :startup} = frame, params, _options) when is_map(params) do
     %{"CQL_VERSION" => [cql_version | _]} = params
     %{frame | body: encode_string_map(%{"CQL_VERSION" => cql_version})}
   end
 
-  def encode_request(%Frame{kind: :query} = frame, %Query{} = query, opts) do
+  def encode_request(%Frame{kind: :query} = frame, %Query{} = query, options) do
     %{statement: statement, values: values} = query
     body =
       <<byte_size(statement)::32>> <>
       statement <>
-      encode_params([], values, opts, false)
+      encode_params([], values, options, false)
     %{frame | body: body}
   end
 
-  def encode_request(%Frame{kind: :prepare} = frame, %Prepared{} = prepared, _opts) do
+  def encode_request(%Frame{kind: :prepare} = frame, %Prepared{} = prepared, _options) do
     %{statement: statement} = prepared
     body = <<byte_size(statement)::32>> <> statement
     %{frame | body: body}
   end
 
-  def encode_request(%Frame{kind: :execute} = frame, %Prepared{} = prepared, opts) do
+  def encode_request(%Frame{kind: :execute} = frame, %Prepared{} = prepared, options) do
     %{id: id, bound_columns: columns, values: values} = prepared
     body =
       <<byte_size(id)::16>> <>
       id <>
-      encode_params(columns, values, opts, true)
+      encode_params(columns, values, options, true)
     %{frame | body: body}
   end
 
-  def encode_request(%Frame{kind: :batch} = frame, %Batch{} = batch, opts) do
+  def encode_request(%Frame{kind: :batch} = frame, %Batch{} = batch, options) do
     %{queries: queries, type: type} = batch
 
-    consistency = Keyword.get(opts, :consistency, :one)
-    timestamp = Keyword.get(opts, :timestamp)
+    consistency = Keyword.get(options, :consistency, :one)
+    timestamp = Keyword.get(options, :timestamp)
 
     flags = set_flag(0x00, _default_timestamp = 0x20, timestamp)
 
@@ -108,10 +108,10 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_params(columns, values, opts, skip_metadata?) do
-    consistency = Keyword.get(opts, :consistency, :one)
-    page_size = Keyword.get(opts, :page_size, 10_000)
-    paging_state = Keyword.get(opts, :paging_state)
+  defp encode_params(columns, values, options, skip_metadata?) do
+    consistency = Keyword.get(options, :consistency, :one)
+    page_size = Keyword.get(options, :page_size, 10_000)
+    paging_state = Keyword.get(options, :paging_state)
 
     flags =
       0x00

@@ -28,23 +28,23 @@ defmodule Xandra.Batch do
   defimpl DBConnection.Query do
     alias Xandra.{Frame, Protocol}
 
-    def parse(batch, _opts) do
+    def parse(batch, _options) do
       batch
     end
 
-    def encode(batch, _values, opts) do
+    def encode(batch, _values, options) do
       batch = %{batch | queries: Enum.reverse(batch.queries)}
 
       Frame.new(:batch)
-      |> Protocol.encode_request(batch, opts)
+      |> Protocol.encode_request(batch, options)
       |> Frame.encode()
     end
 
-    def decode(batch, %Frame{} = frame, _opts) do
+    def decode(batch, %Frame{} = frame, _options) do
       Protocol.decode_response(frame, batch)
     end
 
-    def describe(batch, _opts) do
+    def describe(batch, _options) do
       batch
     end
   end

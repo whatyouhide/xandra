@@ -1,73 +1,73 @@
 defmodule Xandra do
   alias __MODULE__.{Batch, Connection, Error, Prepared, Query, Rows}
 
-  @default_opts [
+  @default_options [
     host: "127.0.0.1",
     port: 9042,
   ]
 
-  def start_link(opts \\ []) when is_list(opts) do
-    opts =
-      @default_opts
-      |> Keyword.merge(opts)
-      |> validate_opts()
+  def start_link(options \\ []) when is_list(options) do
+    options =
+      @default_options
+      |> Keyword.merge(options)
+      |> validate_options()
       |> Keyword.put(:prepared_cache, Prepared.Cache.new)
-    DBConnection.start_link(Connection, opts)
+    DBConnection.start_link(Connection, options)
   end
 
-  def stream!(conn, query, params, opts \\ [])
+  def stream!(conn, query, params, options \\ [])
 
-  def stream!(conn, statement, params, opts) when is_binary(statement) do
-    with {:ok, query} <- prepare(conn, statement, opts) do
-      stream!(conn, query, params, opts)
+  def stream!(conn, statement, params, options) when is_binary(statement) do
+    with {:ok, query} <- prepare(conn, statement, options) do
+      stream!(conn, query, params, options)
     end
   end
 
-  def stream!(conn, %Prepared{} = query, params, opts) do
-    %Xandra.Stream{conn: conn, query: query, params: params, opts: opts}
+  def stream!(conn, %Prepared{} = query, params, options) do
+    %Xandra.Stream{conn: conn, query: query, params: params, options: options}
   end
 
-  def prepare(conn, statement, opts \\ []) when is_binary(statement) do
-    DBConnection.prepare(conn, %Prepared{statement: statement}, opts)
+  def prepare(conn, statement, options \\ []) when is_binary(statement) do
+    DBConnection.prepare(conn, %Prepared{statement: statement}, options)
   end
 
-  def prepare!(conn, statement, opts \\ []) do
-    case prepare(conn, statement, opts) do
+  def prepare!(conn, statement, options \\ []) do
+    case prepare(conn, statement, options) do
       {:ok, result} -> result
       {:error, exception} -> raise(exception)
     end
   end
 
-  def execute(conn, query, params_or_opts \\ [])
+  def execute(conn, query, params_or_options \\ [])
 
   def execute(conn, statement, params) when is_binary(statement) do
-    execute(conn, statement, params, _opts = [])
+    execute(conn, statement, params, _options = [])
   end
 
   def execute(conn, %Prepared{} = prepared, params) do
-    execute(conn, prepared, params, _opts = [])
+    execute(conn, prepared, params, _options = [])
   end
 
-  def execute(conn, %Batch{} = batch, opts) when is_list(opts) do
-    with {:ok, %Error{} = error} <- DBConnection.execute(conn, batch, :no_params, opts),
+  def execute(conn, %Batch{} = batch, options) when is_list(options) do
+    with {:ok, %Error{} = error} <- DBConnection.execute(conn, batch, :no_params, options),
          do: {:error, error}
   end
 
-  def execute(conn, query, params, opts)
+  def execute(conn, query, params, options)
 
-  def execute(conn, statement, params, opts) when is_binary(statement) do
-    opts = put_paging_state(opts)
+  def execute(conn, statement, params, options) when is_binary(statement) do
+    options = put_paging_state(options)
     query = %Query{statement: statement}
-    with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, opts) do
+    with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, options) do
       {:error, error}
     end
   end
 
-  def execute(conn, %Prepared{} = prepared, params, opts) do
-    opts = put_paging_state(opts)
-    case DBConnection.execute(conn, prepared, params, opts) do
+  def execute(conn, %Prepared{} = prepared, params, options) do
+    options = put_paging_state(options)
+    case DBConnection.execute(conn, prepared, params, options) do
       {:ok, %Error{reason: :unprepared}} ->
-        run_prepare_execute(conn, prepared, params, Keyword.put(opts, :force, true))
+        run_prepare_execute(conn, prepared, params, Keyword.put(options, :force, true))
       {:ok, %Error{} = error} ->
         {:error, error}
       other ->
@@ -75,51 +75,51 @@ defmodule Xandra do
     end
   end
 
-  def execute!(conn, query, params_or_opts \\ []) do
-    case execute(conn, query, params_or_opts) do
+  def execute!(conn, query, params_or_options \\ []) do
+    case execute(conn, query, params_or_options) do
       {:ok, result} -> result
       {:error, exception} -> raise(exception)
     end
   end
 
-  def execute!(conn, query, params, opts) do
-    case execute(conn, query, params, opts) do
+  def execute!(conn, query, params, options) do
+    case execute(conn, query, params, options) do
       {:ok, result} -> result
       {:error, exception} -> raise(exception)
     end
   end
 
-  def prepare_execute(conn, statement, params, opts \\ []) when is_binary(statement) do
+  def prepare_execute(conn, statement, params, options \\ []) when is_binary(statement) do
     prepared = %Prepared{statement: statement}
-    with {:error, %Error{reason: :unprepared}} <- run_prepare_execute(conn, prepared, params, opts) do
-      run_prepare_execute(conn, prepared, params, Keyword.put(opts, :force, true))
+    with {:error, %Error{reason: :unprepared}} <- run_prepare_execute(conn, prepared, params, options) do
+      run_prepare_execute(conn, prepared, params, Keyword.put(options, :force, true))
     end
   end
 
-  defp run_prepare_execute(conn, %Prepared{} = prepared, params, opts) do
-    with {:ok, _prepared, %Error{} = error} <- DBConnection.prepare_execute(conn, prepared, params, opts) do
+  defp run_prepare_execute(conn, %Prepared{} = prepared, params, options) do
+    with {:ok, _prepared, %Error{} = error} <- DBConnection.prepare_execute(conn, prepared, params, options) do
       {:error, error}
     end
   end
 
-  def prepare_execute!(conn, statement, params, opts \\ []) do
-    case prepare_execute(conn, statement, params, opts) do
+  def prepare_execute!(conn, statement, params, options \\ []) do
+    case prepare_execute(conn, statement, params, options) do
       {:ok, prepared, result} -> {prepared, result}
       {:error, exception} -> raise(exception)
     end
   end
 
-  defp put_paging_state(opts) do
-    case Keyword.pop(opts, :cursor) do
-      {%Rows{paging_state: paging_state}, opts} ->
-        Keyword.put(opts, :paging_state, paging_state)
-      {nil, opts} ->
-        opts
+  defp put_paging_state(options) do
+    case Keyword.pop(options, :cursor) do
+      {%Rows{paging_state: paging_state}, options} ->
+        Keyword.put(options, :paging_state, paging_state)
+      {nil, options} ->
+        options
     end
   end
 
-  defp validate_opts(opts) do
-    Enum.map(opts, fn
+  defp validate_options(options) do
+    Enum.map(options, fn
       {:host, host} ->
         if is_binary(host) do
           {:host, String.to_charlist(host)}

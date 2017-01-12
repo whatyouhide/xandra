@@ -4,21 +4,21 @@ defmodule Xandra.Prepared do
   defimpl DBConnection.Query do
     alias Xandra.{Frame, Protocol}
 
-    def parse(prepared, _opts) do
+    def parse(prepared, _options) do
       prepared
     end
 
-    def encode(prepared, values, opts) do
+    def encode(prepared, values, options) do
       Frame.new(:execute)
-      |> Protocol.encode_request(%{prepared | values: values}, opts)
+      |> Protocol.encode_request(%{prepared | values: values}, options)
       |> Frame.encode()
     end
 
-    def decode(prepared, %Frame{} = frame, _opts) do
+    def decode(prepared, %Frame{} = frame, _options) do
       Protocol.decode_response(frame, prepared)
     end
 
-    def describe(prepared, _opts) do
+    def describe(prepared, _options) do
       prepared
     end
   end

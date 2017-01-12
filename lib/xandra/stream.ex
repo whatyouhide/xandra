@@ -1,5 +1,5 @@
 defmodule Xandra.Stream do
-  defstruct [:conn, :query, :params, :opts, state: :new]
+  defstruct [:conn, :query, :params, :options, state: :new]
 
   defimpl Enumerable do
     alias Xandra.{Prepared, Rows}
@@ -25,13 +25,13 @@ defmodule Xandra.Stream do
     end
 
     defp next(stream) do
-      %{conn: conn, query: %Prepared{} = prepared, params: params, opts: opts} = stream
-      case Xandra.execute(conn, prepared, params, opts) |> elem(1) do
+      %{conn: conn, query: %Prepared{} = prepared, params: params, options: options} = stream
+      case Xandra.execute(conn, prepared, params, options) |> elem(1) do
         %Rows{paging_state: nil} = rows ->
           {[rows], %{stream | state: :done}}
         %Rows{paging_state: paging_state} = rows ->
-          opts = Keyword.put(opts, :paging_state, paging_state)
-          {[rows], %{stream | opts: opts}}
+          options = Keyword.put(options, :paging_state, paging_state)
+          {[rows], %{stream | options: options}}
       end
     end
 
