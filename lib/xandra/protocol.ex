@@ -116,7 +116,7 @@ defmodule Xandra.Protocol do
     flags =
       0x00
       |> set_query_values_flag(values)
-      |> bor(0x04)
+      |> set_flag(_page_size = 0x04, true)
       |> set_flag(_metadata_presence = 0x02, skip_metadata?)
       |> set_flag(_paging_state = 0x08, paging_state)
 
