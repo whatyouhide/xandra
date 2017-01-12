@@ -73,4 +73,8 @@ defmodule BatchTest do
     invalid_batch = Batch.add(Batch.new(), "SELECT * FROM users")
     assert {:error, %Error{reason: :invalid}} = Xandra.execute(conn, invalid_batch)
   end
+
+  test "empty batch", %{conn: conn} do
+    assert {:ok, %Void{}} = Xandra.execute(conn, Batch.new())
+  end
 end
