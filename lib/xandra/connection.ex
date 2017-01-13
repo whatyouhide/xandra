@@ -71,12 +71,12 @@ defmodule Xandra.Connection do
     :ok = :gen_tcp.close(socket)
   end
 
-  def prepared_cache_lookup(state, prepared, true) do
+  defp prepared_cache_lookup(state, prepared, true) do
     Prepared.Cache.delete(state.prepared_cache, prepared)
     :error
   end
 
-  def prepared_cache_lookup(state, prepared, false) do
+  defp prepared_cache_lookup(state, prepared, false) do
     Prepared.Cache.lookup(state.prepared_cache, prepared)
   end
 
