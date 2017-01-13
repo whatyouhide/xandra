@@ -4,6 +4,7 @@ defmodule Xandra.Frame do
   @type kind :: :startup | :options | :query | :prepare | :execute | :batch
 
   @type t(kind) :: %__MODULE__{kind: kind}
+  @type t :: t(kind)
 
   @request_version 0x03
 
