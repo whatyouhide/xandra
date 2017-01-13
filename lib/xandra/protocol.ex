@@ -338,7 +338,7 @@ defmodule Xandra.Protocol do
   end
 
   @spec decode_response(Frame.t, nil | Xandra.simple | Prepared.t | Batch.t) ::
-        :ok | map | Error.t | Prepared.t | Void.t | SetKeyspace.t | SchemaChange.t | Rows.t | no_return
+        :ok | map | Xandra.result | Prepared.t | Error.t
   def decode_response(frame, query \\ nil)
 
   def decode_response(%Frame{kind: :error, body: body} , _query) do

@@ -3,10 +3,10 @@ defmodule Xandra.Prepared do
 
   @opaque t :: %__MODULE__{
     statement: String.t,
-    values: Xandra.values,
-    id: binary,
-    bound_columns: list,
-    result_columns: list,
+    values: Xandra.values | nil,
+    id: binary | nil,
+    bound_columns: list | nil,
+    result_columns: list | nil,
   }
 
   defimpl DBConnection.Query do
