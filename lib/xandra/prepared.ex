@@ -2,7 +2,7 @@ defmodule Xandra.Prepared do
   defstruct [:statement, :values, :id, :bound_columns, :result_columns]
 
   @opaque t :: %__MODULE__{
-    statement: String.t,
+    statement: Xandra.statement,
     values: Xandra.values | nil,
     id: binary | nil,
     bound_columns: list | nil,
