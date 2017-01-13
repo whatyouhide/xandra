@@ -25,7 +25,7 @@ defmodule Xandra.Frame do
     0x08 => :result,
   }
 
-  @spec new(kind) :: t(kind)
+  @spec new(kind) :: t(kind) when kind: var
   def new(kind) do
     %__MODULE__{kind: kind}
   end
