@@ -3,7 +3,7 @@ defmodule Xandra.Protocol do
 
   alias Xandra.{Batch, Error, Frame, Prepared, Rows, Simple, TypeParser}
 
-  @spec encode_request(Frame.t, term, Keyword.t) :: Frame.t
+  @spec encode_request(Frame.t(kind), term, Keyword.t) :: Frame.t(kind) when kind: var
   def encode_request(frame, params, options \\ [])
 
   def encode_request(%Frame{kind: :options} = frame, nil, _options) do
@@ -337,8 +337,10 @@ defmodule Xandra.Protocol do
     message
   end
 
-  @spec decode_response(Frame.t, nil | Xandra.simple | Prepared.t | Batch.t) ::
-        :ok | map | Xandra.result | Prepared.t | Error.t
+  @spec decode_response(Frame.t(:error), term) :: Error.t
+  @spec decode_response(Frame.t(:ready), nil) :: :ok
+  @spec decode_response(Frame.t(:supported), nil) :: %{optional(String.t) => [String.t]}
+  @spec decode_response(Frame.t(:result), Xandra.simple | Prepared.t | Batch.t) :: Xandra.result | Prepared.t
   def decode_response(frame, query \\ nil)
 
   def decode_response(%Frame{kind: :error, body: body} , _query) do

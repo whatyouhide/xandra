@@ -3,7 +3,7 @@ defmodule Xandra.Frame do
 
   @type kind :: :startup | :options | :query | :prepare | :execute | :batch
 
-  @type t :: %__MODULE__{}
+  @type t(kind) :: %__MODULE__{kind: kind}
 
   @request_version 0x03
 
@@ -25,7 +25,7 @@ defmodule Xandra.Frame do
     0x08 => :result,
   }
 
-  @spec new(kind) :: t
+  @spec new(kind) :: t(kind)
   def new(kind) do
     %__MODULE__{kind: kind}
   end
@@ -38,7 +38,7 @@ defmodule Xandra.Frame do
     length
   end
 
-  @spec encode(t) :: binary
+  @spec encode(t(kind)) :: binary
   def encode(%__MODULE__{} = frame) do
     %{compression: compression, tracing: tracing?,
       kind: kind, stream_id: stream_id, body: body} = frame
@@ -48,7 +48,7 @@ defmodule Xandra.Frame do
     <<@request_version, flags, stream_id::16, opcode, byte_size(body)::32, body::bytes>>
   end
 
-  @spec decode(binary, binary) :: t
+  @spec decode(binary, binary) :: t(kind)
   def decode(header, body \\ <<>>) when is_binary(body) do
     <<@response_version, _flags, _stream_id::16, opcode, _::32>> = header
     kind = Map.fetch!(@response_opcodes, opcode)
