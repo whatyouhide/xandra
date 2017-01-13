@@ -1,7 +1,7 @@
 defmodule Xandra.TypeParser do
   @moduledoc false
 
-  @type type :: atom | tuple
+  @type type :: atom | {atom, [type]}
 
   @builtin_types [
     :text,
