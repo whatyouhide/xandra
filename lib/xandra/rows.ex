@@ -1,6 +1,8 @@
 defmodule Xandra.Rows do
   defstruct [:content, :columns, :paging_state]
 
+  @opaque t :: %__MODULE__{}
+
   defimpl Enumerable do
     def reduce(%{content: content, columns: columns}, acc, fun) do
       reduce(content, columns, acc, fun)

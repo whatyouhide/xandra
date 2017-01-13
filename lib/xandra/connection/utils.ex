@@ -4,7 +4,7 @@ defmodule Xandra.Connection.Utils do
   alias Xandra.{Connection.Error, Frame, Protocol}
 
   @spec recv_frame(:gen_tcp.socket) ::
-        {:ok, %Xandra.Frame{}} | {:error, :closed | :inet.posix}
+        {:ok, Frame.t} | {:error, :closed | :inet.posix}
   def recv_frame(socket) do
     length = Frame.header_length()
 

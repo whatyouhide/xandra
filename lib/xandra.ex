@@ -1,11 +1,19 @@
 defmodule Xandra do
   alias __MODULE__.{Batch, Connection, Error, Prepared, Rows, Simple, Stream}
 
+  @type statement :: String.t
+  @type simple :: statement
+  @type values :: list | map
+  @type error :: Error.t | Connection.Error.t
+  @type result :: Void.t | Rows.t | SetKeyspace.t | SchemaChange.t
+  @type conn :: DBConnection.conn
+
   @default_options [
     host: "127.0.0.1",
     port: 9042,
   ]
 
+  @spec start_link(Keyword.t) :: GenServer.on_start
   def start_link(options \\ []) when is_list(options) do
     options =
       @default_options
@@ -15,6 +23,7 @@ defmodule Xandra do
     DBConnection.start_link(Connection, options)
   end
 
+  @spec stream!(conn, simple | Prepared.t, values, Keyword.t) :: Enumerable.t
   def stream!(conn, query, params, options \\ [])
 
   def stream!(conn, statement, params, options) when is_binary(statement) do
@@ -25,10 +34,12 @@ defmodule Xandra do
     %Stream{conn: conn, query: prepared, params: params, options: options}
   end
 
+  @spec prepare(conn, statement, Keyword.t) :: {:ok, Prepared.t} | {:error, error}
   def prepare(conn, statement, options \\ []) when is_binary(statement) do
     DBConnection.prepare(conn, %Prepared{statement: statement}, options)
   end
 
+  @spec prepare!(conn, statement, Keyword.t) :: Prepared.t | no_return
   def prepare!(conn, statement, options \\ []) do
     case prepare(conn, statement, options) do
       {:ok, result} -> result
@@ -36,6 +47,8 @@ defmodule Xandra do
     end
   end
 
+  @spec execute(conn, simple | Prepared.t, values) :: {:ok, result} | {:error, error}
+  @spec execute(conn, Batch.t, Keyword.t) :: {:ok, Void.t} | {:error, error}
   def execute(conn, query, params_or_options \\ [])
 
   def execute(conn, statement, params) when is_binary(statement) do
@@ -51,6 +64,7 @@ defmodule Xandra do
          do: {:error, error}
   end
 
+  @spec execute(conn, simple | Prepared.t, values, Keyword.t) :: {:ok, result} | {:error, error}
   def execute(conn, query, params, options)
 
   def execute(conn, statement, params, options) when is_binary(statement) do
@@ -73,6 +87,8 @@ defmodule Xandra do
     end
   end
 
+  @spec execute(conn, simple | Prepared.t, values) :: result | no_return
+  @spec execute(conn, Batch.t, Keyword.t) :: Void.t | no_return
   def execute!(conn, query, params_or_options \\ []) do
     case execute(conn, query, params_or_options) do
       {:ok, result} -> result
@@ -80,6 +96,7 @@ defmodule Xandra do
     end
   end
 
+  @spec execute!(conn, simple | Prepared.t, values, Keyword.t) :: result | no_return
   def execute!(conn, query, params, options) do
     case execute(conn, query, params, options) do
       {:ok, result} -> result
@@ -87,6 +104,7 @@ defmodule Xandra do
     end
   end
 
+  @spec prepare_execute(conn, simple, values, Keyword.t) :: {:ok, Prepared.t, result} | {:error, error}
   def prepare_execute(conn, statement, params, options \\ []) when is_binary(statement) do
     prepared = %Prepared{statement: statement}
     with {:error, %Error{reason: :unprepared}} <- run_prepare_execute(conn, prepared, params, options) do
@@ -100,6 +118,7 @@ defmodule Xandra do
     end
   end
 
+  @spec prepare_execute!(conn, simple, values, Keyword.t) :: {Prepared.t, result} | no_return
   def prepare_execute!(conn, statement, params, options \\ []) do
     case prepare_execute(conn, statement, params, options) do
       {:ok, prepared, result} -> {prepared, result}

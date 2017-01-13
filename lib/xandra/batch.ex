@@ -4,6 +4,13 @@ defmodule Xandra.Batch do
   @enforce_keys [:type]
   defstruct @enforce_keys ++ [queries: []]
 
+  @type type :: :logged | :unlogged | :counter
+
+  @opaque t :: %__MODULE__{
+    type: type,
+    queries: [Xandra.simple | Prepared.t],
+  }
+
   def new(type \\ :logged) when type in [:logged, :unlogged, :counter] do
     %__MODULE__{type: type}
   end

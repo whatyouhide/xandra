@@ -1,6 +1,14 @@
 defmodule Xandra.Prepared do
   defstruct [:statement, :values, :id, :bound_columns, :result_columns]
 
+  @opaque t :: %__MODULE__{
+    statement: String.t,
+    values: Xandra.values,
+    id: binary,
+    bound_columns: list,
+    result_columns: list,
+  }
+
   defimpl DBConnection.Query do
     alias Xandra.{Frame, Protocol}
 
