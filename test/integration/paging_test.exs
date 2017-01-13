@@ -60,5 +60,14 @@ defmodule PagingTest do
     assert Enum.to_list(rows4) == [
       %{"letter" => "Gg"}, %{"letter" => "Hh"}
     ]
+
+    assert %Stream{} = stream = Xandra.stream!(conn, "SELECT letter FROM alphabet", [], [page_size: 2])
+    assert [rows1, rows2] = Enum.take(stream, 2)
+    assert Enum.to_list(rows1) == [
+      %{"letter" => "Aa"}, %{"letter" => "Bb"}
+    ]
+    assert Enum.to_list(rows2) == [
+      %{"letter" => "Cc"}, %{"letter" => "Dd"}
+    ]
   end
 end

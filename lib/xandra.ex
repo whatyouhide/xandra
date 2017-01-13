@@ -1,5 +1,5 @@
 defmodule Xandra do
-  alias __MODULE__.{Batch, Connection, Error, Prepared, Rows, Simple}
+  alias __MODULE__.{Batch, Connection, Error, Prepared, Rows, Simple, Stream}
 
   @default_options [
     host: "127.0.0.1",
@@ -18,13 +18,11 @@ defmodule Xandra do
   def stream!(conn, query, params, options \\ [])
 
   def stream!(conn, statement, params, options) when is_binary(statement) do
-    with {:ok, query} <- prepare(conn, statement, options) do
-      stream!(conn, query, params, options)
-    end
+    %Stream{conn: conn, query: statement, params: params, options: options}
   end
 
-  def stream!(conn, %Prepared{} = query, params, options) do
-    %Xandra.Stream{conn: conn, query: query, params: params, options: options}
+  def stream!(conn, %Prepared{} = prepared, params, options) do
+    %Stream{conn: conn, query: prepared, params: params, options: options}
   end
 
   def prepare(conn, statement, options \\ []) when is_binary(statement) do
