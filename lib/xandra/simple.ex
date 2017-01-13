@@ -1,6 +1,11 @@
 defmodule Xandra.Simple do
   defstruct [:statement, :values]
 
+  @opaque t :: %__MODULE__{
+    statement: Xandra.statement,
+    values: Xandra.values | nil,
+  }
+
   defimpl DBConnection.Query do
     alias Xandra.{Frame, Protocol}
 

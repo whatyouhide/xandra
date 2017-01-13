@@ -1,6 +1,8 @@
 defmodule Xandra.TypeParser do
   @moduledoc false
 
+  @type type :: atom | {atom, [type]}
+
   @builtin_types [
     :text,
     :blob,
@@ -30,6 +32,7 @@ defmodule Xandra.TypeParser do
     :varchar,
   ]
 
+  @spec parse(String.t) :: type | no_return
   def parse(string) when is_binary(string) do
     try do
       string
