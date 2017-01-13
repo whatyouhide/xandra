@@ -40,7 +40,7 @@ defmodule Xandra.Connection do
           |> Frame.encode()
 
         with :ok <- :gen_tcp.send(socket, payload),
-             {:ok, %Frame{} = frame} = Utils.recv_frame(socket),
+             {:ok, %Frame{} = frame} <- Utils.recv_frame(socket),
              %Prepared{} = prepared <- Protocol.decode_response(frame, prepared) do
           Prepared.Cache.insert(state.prepared_cache, prepared)
           {:ok, prepared, state}
