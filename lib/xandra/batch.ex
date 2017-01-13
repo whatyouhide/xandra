@@ -8,7 +8,7 @@ defmodule Xandra.Batch do
 
   @opaque t :: %__MODULE__{
     type: type,
-    queries: [Xandra.simple | Prepared.t],
+    queries: [Xandra.statement | Prepared.t],
   }
 
   def new(type \\ :logged) when type in [:logged, :unlogged, :counter] do

@@ -340,7 +340,7 @@ defmodule Xandra.Protocol do
   @spec decode_response(Frame.t(:error), term) :: Error.t
   @spec decode_response(Frame.t(:ready), nil) :: :ok
   @spec decode_response(Frame.t(:supported), nil) :: %{optional(String.t) => [String.t]}
-  @spec decode_response(Frame.t(:result), Xandra.simple | Prepared.t | Batch.t) :: Xandra.result | Prepared.t
+  @spec decode_response(Frame.t(:result), Xandra.statement | Prepared.t | Batch.t) :: Xandra.result | Prepared.t
   def decode_response(frame, query \\ nil)
 
   def decode_response(%Frame{kind: :error, body: body} , _query) do
