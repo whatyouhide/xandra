@@ -71,6 +71,15 @@ defmodule Xandra.Connection do
     :ok = :gen_tcp.close(socket)
   end
 
+  def ping(%__MODULE__{socket: socket} = state) do
+    case Utils.request_options(socket) do
+      {:ok, _options} ->
+        {:ok, state}
+      {:error, reason} ->
+        {:disconnect, reason, state}
+    end
+  end
+
   defp prepared_cache_lookup(state, prepared, true) do
     Prepared.Cache.delete(state.prepared_cache, prepared)
     :error
