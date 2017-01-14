@@ -16,11 +16,6 @@ defmodule ErrorsTest do
 
     assert {:error, reason} = Xandra.prepare(conn, "SELECT * FROM unknown", [])
     assert %Error{reason: :invalid} = reason
-
-    # This statement is invalid as we use a non-primary column in the WHERE clause.
-    statement = "SELECT id FROM errors WHERE reason = ?"
-    assert {:error, reason} = Xandra.prepare_execute(conn, statement, ["invalid"])
-    assert %Error{reason: :invalid} = reason
   end
 
   test "errors are raised from bang! functions", %{conn: conn} do

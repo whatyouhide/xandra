@@ -103,25 +103,9 @@ defmodule Xandra do
     end
   end
 
-  @spec prepare_execute(conn, statement, values, Keyword.t) :: {:ok, Prepared.t, result} | {:error, error}
-  def prepare_execute(conn, statement, params, options \\ []) when is_binary(statement) do
-    prepared = %Prepared{statement: statement}
-    with {:error, %Error{reason: :unprepared}} <- run_prepare_execute(conn, prepared, params, options) do
-      run_prepare_execute(conn, prepared, params, Keyword.put(options, :force, true))
-    end
-  end
-
   defp run_prepare_execute(conn, %Prepared{} = prepared, params, options) do
     with {:ok, _prepared, %Error{} = error} <- DBConnection.prepare_execute(conn, prepared, params, options) do
       {:error, error}
-    end
-  end
-
-  @spec prepare_execute!(conn, statement, values, Keyword.t) :: {Prepared.t, result} | no_return
-  def prepare_execute!(conn, statement, params, options \\ []) do
-    case prepare_execute(conn, statement, params, options) do
-      {:ok, prepared, result} -> {prepared, result}
-      {:error, exception} -> raise(exception)
     end
   end
 
