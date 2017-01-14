@@ -15,6 +15,6 @@ defmodule Xandra.Mixfile do
   end
 
   defp deps() do
-    [{:db_connection, "~> 1.0-rc.5"}]
+    [{:db_connection, "~> 1.0.0"}]
   end
 end
