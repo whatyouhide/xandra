@@ -4,7 +4,7 @@ defmodule Xandra do
   @type statement :: String.t
   @type values :: list | map
   @type error :: Error.t | Connection.Error.t
-  @type result :: Void.t | Rows.t | SetKeyspace.t | SchemaChange.t
+  @type result :: Xandra.Void.t | Rows.t | Xandra.SetKeyspace.t | Xandra.SchemaChange.t
   @type conn :: DBConnection.conn
 
   @default_options [
@@ -47,7 +47,7 @@ defmodule Xandra do
   end
 
   @spec execute(conn, statement | Prepared.t, values) :: {:ok, result} | {:error, error}
-  @spec execute(conn, Batch.t, Keyword.t) :: {:ok, Void.t} | {:error, error}
+  @spec execute(conn, Batch.t, Keyword.t) :: {:ok, Xandra.Void.t} | {:error, error}
   def execute(conn, query, params_or_options \\ [])
 
   def execute(conn, statement, params) when is_binary(statement) do
@@ -86,8 +86,8 @@ defmodule Xandra do
     end
   end
 
-  @spec execute(conn, statement | Prepared.t, values) :: result | no_return
-  @spec execute(conn, Batch.t, Keyword.t) :: Void.t | no_return
+  @spec execute!(conn, statement | Prepared.t, values) :: result | no_return
+  @spec execute!(conn, Batch.t, Keyword.t) :: Xandra.Void.t | no_return
   def execute!(conn, query, params_or_options \\ []) do
     case execute(conn, query, params_or_options) do
       {:ok, result} -> result
