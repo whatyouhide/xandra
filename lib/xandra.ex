@@ -115,6 +115,10 @@ defmodule Xandra do
         Keyword.put(options, :paging_state, paging_state)
       {nil, options} ->
         options
+      {other, _options} ->
+        raise ArgumentError,
+          "expected a Xandra.Rows struct as the value of the :cursor option, " <>
+          "got: #{inspect(other)}"
     end
   end
 
