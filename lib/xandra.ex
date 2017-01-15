@@ -10,6 +10,7 @@ defmodule Xandra do
   @default_options [
     host: "127.0.0.1",
     port: 9042,
+    idle_timeout: 30_000,
   ]
 
   @spec start_link(Keyword.t) :: GenServer.on_start
