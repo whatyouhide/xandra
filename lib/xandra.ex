@@ -8,7 +8,7 @@ defmodule Xandra do
   @type conn :: DBConnection.conn
 
   @default_options [
-    host: "127.0.0.1",
+    host: '127.0.0.1',
     port: 9042,
     idle_timeout: 30_000,
   ]
@@ -17,8 +17,7 @@ defmodule Xandra do
   def start_link(options \\ []) when is_list(options) do
     options =
       @default_options
-      |> Keyword.merge(options)
-      |> validate_options()
+      |> Keyword.merge(validate_options(options))
       |> Keyword.put(:prepared_cache, Prepared.Cache.new)
     DBConnection.start_link(Connection, options)
   end
