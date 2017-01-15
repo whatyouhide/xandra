@@ -6,15 +6,19 @@ defmodule Xandra.Batch do
 
   @type type :: :logged | :unlogged | :counter
 
-  @opaque t :: %__MODULE__{
+  @opaque t(type) :: %__MODULE__{
     type: type,
     queries: [Simple.t | Prepared.t],
   }
 
+  @type t() :: t(type)
+
+  @spec new(type) :: t
   def new(type \\ :logged) when type in [:logged, :unlogged, :counter] do
     %__MODULE__{type: type}
   end
 
+  @spec add(t, Xandra.statement | Prepared.t, [term]) :: t
   def add(batch, statement, values \\ [])
 
   def add(%__MODULE__{} = batch, statement, values)
