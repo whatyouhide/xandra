@@ -19,15 +19,15 @@ defmodule Xandra.Batch do
 
   def add(%__MODULE__{} = batch, statement, values)
       when is_binary(statement) and is_list(values) do
-    add_query_or_prepared(batch, %Simple{statement: statement}, values)
+    add_query(batch, %Simple{statement: statement}, values)
   end
 
   def add(%__MODULE__{} = batch, %Prepared{} = prepared, values)
       when is_list(values) do
-    add_query_or_prepared(batch, prepared, values)
+    add_query(batch, prepared, values)
   end
 
-  defp add_query_or_prepared(batch, query, values) do
+  defp add_query(batch, query, values) do
     queries = [%{query | values: values} | batch.queries]
     %{batch | queries: queries}
   end
