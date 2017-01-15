@@ -1,4 +1,114 @@
 defmodule Xandra do
+  @moduledoc """
+  This module provides the main API to interface with Cassandra.
+
+  This module handles the connection to Cassandra, queries, connection pooling,
+  connection backoff, logging, and more. Many of these features are provided by
+  the [`DBConnection`](https://hex.pm/packages/db_connection) library, which
+  Xandra is built on top of.
+
+  ## Errors
+
+  Many of the functions in this module (whose names don't end with a `!`)
+  return values in the form `{:ok, result}` or `{:error, error}`. While `result`
+  varies based on the specific function, `error` is always one of the following
+
+    * a `Xandra.Error` struct: such structs represent errors returned by
+      Cassandra. When such an error is returned, it means that communicating
+      with the Cassandra server was successful, but the server returned an
+      error. Examples of these errors are syntax errors in queries, non-existent
+      tables, and so on. See `Xandra.Error` for more information.
+
+    * a `Xandra.Connection.Error` struct: such structs represent errors in the
+      communication with the Cassandra server. For example, if the Cassandra
+      server dies while the connection is waiting for a response from the
+      server, a `Xandra.Connection.Error` error will be returned. See
+      `Xandra.Connection.Error` for more information.
+
+  ## Parameters, encoding, and types
+
+  Xandra supports parametrized queries (queries that specify "parameter" values
+  through `?` or `:named_value`):
+
+      SELECT * FROM users WHERE name = ? AND email = ?
+      SELECT * FROM users WHERE name = :name AND email = :email
+
+  When a query has nameless parameters, parameters can be passed as a list to
+  functions like `execute/4`: in this case, a parameter in a given position in
+  the list will be used as the `?` in the corresponding position in the
+  query. When a query has named parameters, parameters are passed as a map with
+  string keys representing each parameter's name (without the leading `:`) and
+  values representing the corresponding parameter's value.
+
+  ### Types
+
+  Cassandra supports several types of values, and many types have "shades" that
+  are not Elixir types do not have. For example, in Cassandra an integer could
+  be a "bigint" (a 64 bit integer), an "int" (a 32 bit integer), a "smallint" (a
+  16 bit integer), or others; in Elixir, however, integers are just integers
+  (with varying size to be precise), so it is impossible to univocally map
+  Elixir integers to some Cassandra integer type. For this reason, when
+  executing simple parametrized queries (statements) it is necessary to
+  explicitly specify the type of each value.
+
+  To specify the type of a value, that value needs to be provided as a
+  two-element tuple where the first element is the value's type and the second
+  element is the value itself. Types are expressed with the same syntax used in
+  CQL: for example, 16-bit integers are represented as `"smallint"`, while maps
+  of strings to booleans are represented as `"map<text, boolean>"`.
+
+      # Using a list of parameters
+      statement = "INSERT INTO species (name, properties) VALUES (?, ?)"
+      Xandra.execute(conn, statement, [
+        {"text", "human"},
+        {"map<text, boolean>", %{"legs" => true, "arms" => true, "tail" => false}},
+      ])
+
+      # Using a map of parameters
+      statement = "INSERT INTO species (name, properties) VALUES (:name, :props)"
+      Xandra.execute(conn, statement, %{
+        "name" => {"text", "human"},
+        "props" => {"map<text, boolean>", %{"legs" => true, "arms" => true, "tail" => false}},
+      })
+
+  You only need to specify types for simple queries (statements): when using
+  prepared queries, the type information of each parameter of the query is
+  encoded in the prepared query itself.
+
+      # Using a map of parameters
+      prepared = Xandra.prepare!(conn, "INSERT INTO species (name, properties) VALUES (:name, :props)")
+      Xandra.execute(conn, prepared, %{
+        "name" => "human",
+        "props" => %{"legs" => true, "arms" => true, "tail" => false},
+      })
+
+  ## Reconnections
+
+  Thanks to the `DBConnection` library, Xandra is able to handle connection
+  losses and to automatically reconnect to Cassandra. By default, reconnections
+  are retried at exponentially increasing randomized intervals, but backoff can
+  be configured through a subset of the options accepted by
+  `start_link/2`. These options are described in the documentation for
+  `DBConnection.start_link/2`.
+
+  ## Examples
+
+  Here is an example of a possible workflow using Xandra:
+
+      # First, we start a connection:
+      {:ok, conn} = Xandra.start_link(host: "127.0.0.1", port: 9042)
+
+      # We can use that connection to insert some data:
+      Xandra.execute!(conn, "INSERT INTO users (name, age) VALUES ('John', 32)")
+      Xandra.execute!(conn, "INSERT INTO users (name, age) VALUES ('Jane', 59)")
+
+      # And we can fetch data:
+      %Xandra.Rows{} = rows = Xandra.execute!(conn, "SELECT * FROM users")
+      Enum.to_list(rows)
+      #=> [%{"name" => "John", "age" => 32}, %{"name" => "Jane", "age" => 59}]
+
+  """
+
   alias __MODULE__.{Batch, Connection, Error, Prepared, Rows, Simple, Stream}
 
   @type statement :: String.t
@@ -13,6 +123,78 @@ defmodule Xandra do
     idle_timeout: 30_000,
   ]
 
+  @doc """
+  Starts a new connection or pool of connections to Cassandra.
+
+  This function starts a new connection or pool of connections to the provided
+  Cassandra server. `options` is a list of both Xandra-specific options, as well
+  as `DBConnection` options.
+
+  ## Options
+
+  These are the Xandra-specific options supported by this function:
+
+    * `:host` - (binary) the host of the Cassandra server to connect
+      to. Defaults to `"127.0.0.1"`.
+
+    * `:port` - (integer) the port of the Cassandra server to connect
+      to. Defaults to `9042`.
+
+  The rest of the options are forwarded to `DBConnection.start_link/2`. For
+  example, to start a pool of connections to Cassandra, the `:pool` option can
+  be used:
+
+      Xandra.start_link(pool: DBConnection.Poolboy)
+
+  Note that this requires the `poolboy` dependency to be specified in your
+  application. The following options have default values that are different from
+  the default value provided by `DBConnection`:
+
+    * `:idle_timeout` - defaults to `30_000` (30 seconds)
+
+  ## Examples
+
+      # Start a connection
+      {:ok, conn} = Xandra.start_link()
+
+      # Start a connection and register it under a name
+      {:ok, _conn} = Xandra.start_link(name: :xandra)
+
+      # Start a named pool of connections
+      {:ok, _pool} = Xandra.start_link(name: :xandra_pool, pool: DBConnection.Poolboy)
+
+  As the `DBConnection` documentation states, if using a pool it's necessary to
+  pass a `:pool` option with the pool module being used to every call. For
+  example:
+
+      {:ok, _pool} = Xandra.start_link(name: :xandra_pool, pool: DBConnection.Poolboy)
+      Xandra.execute!(:xandra_pool, "SELECT * FROM users", _params = [], pool: DBConnection.Poolboy)
+
+  ### Using a keyspace for new connections
+
+  It is common to start a Xandra connection or pool of connections that will use
+  a single keyspace for their whole life span. Doing something like:
+
+      {:ok, conn} = Xandra.start_link()
+      Xandra.execute!(conn, "USE my_keyspace")
+
+  will work just fine when you only have one connection. If you have a pool of
+  connections (with the `:pool` option), however, the code above won't work:
+  that code would start the pool, and then checkout one connection from the pool
+  to execute the `USE my_keyspace` query. That specific connection will then be
+  using the `my_keyspace` keyspace, but all other connections in the pool will
+  not. Fortunately, `DBConnection` provides an option we can use to solve this
+  problem: `:after_connect`. This option can specify a function that will be run
+  after each single connection to Cassandra. This function will take a
+  connection and can be used to setup that connection; since this function is
+  run for every established connection, it will work well with pools as well.
+
+      {:ok, conn} = Xandra.start_link(after_connect: fn(conn) -> Xandra.execute(conn, "USE my_keyspace") end)
+
+  See the documentation for `DBConnection.start_link/2` for more information
+  about this option.
+
+  """
   @spec start_link(Keyword.t) :: GenServer.on_start
   def start_link(options \\ []) when is_list(options) do
     options =
@@ -22,6 +204,42 @@ defmodule Xandra do
     DBConnection.start_link(Connection, options)
   end
 
+  @doc """
+  Streams the results of a simple query or a prepared query with the given `params`.
+
+  This function can be used to stream the results of `query` so as not to load
+  them entirely in memory. This function doesn't send any query to Cassandra
+  right away: it will only execute queries as necessary when results are
+  requested out of the returned stream.
+
+  The returned value is a stream of `Xandra.Rows` structs, where each of such
+  structs contains as many rows as specified by the `:page_size` option. Every
+  time an element is requested from the stream, `query` will be executed to get
+  that result.
+
+  In order to get each result from Cassandra, `execute!/4` is used: this means
+  that if there is an error (such as a network error) when executing the
+  queries, that error will be raised.
+
+  ### Simple or prepared queries
+
+  Regardless of `query` being a simple query or a prepared query, this function
+  will execute it every time a result is needed from the returned stream. For
+  this reason, it is usually a good idea to use prepared queries when streaming.
+
+  ## Options
+
+  `options` supports all the options supported by `execute/4`, with the same
+  default values.
+
+  ## Examples
+
+      prepared = Xandra.prepare!(conn, "SELECT * FROM users")
+      users_stream = Xandra.stream!(conn, prepared, page_size: 2)
+
+      [%Xandra.Rows{} = _rows1, %Xandra.Rows{} = _rows2] = Enum.take(users_stream, 2)
+
+  """
   @spec stream_pages!(conn, statement | Prepared.t, values, Keyword.t) :: Enumerable.t
   def stream_pages!(conn, query, params, options \\ [])
 
@@ -33,11 +251,48 @@ defmodule Xandra do
     %Stream{conn: conn, query: prepared, params: params, options: options}
   end
 
+  @doc """
+  Prepares the given query.
+
+  This function prepares the given statement on the Cassandra server. If
+  preparation is successful and there are no network errors while talking to the
+  server, `{:ok, prepared}` is returned, otherwise `{:error, error}` is
+  returned.
+
+  The returned prepared query can be run through `execute/4`, or used inside a
+  batch (see `Xandra.Batch`).
+
+  Errors returned by this function can be either `Xandra.Error` or
+  `Xandra.Connection.Error` structs. See the module documentation for more
+  information about errors.
+
+  Supports the same options as `DBConnection.prepare/3`.
+
+  ## Examples
+
+      {:ok, prepared} = Xandra.prepare(conn, "SELECT * FROM users WHERE id = ?")
+      {:ok, _rows} = Xandra.execute(conn, prepared, [_id = 1])
+
+      {:error, %Xandra.Error{reason: :invalid_syntax}} = Xandra.prepare(conn, "bad syntax")
+
+  """
   @spec prepare(conn, statement, Keyword.t) :: {:ok, Prepared.t} | {:error, error}
   def prepare(conn, statement, options \\ []) when is_binary(statement) do
     DBConnection.prepare(conn, %Prepared{statement: statement}, options)
   end
 
+  @doc """
+  Prepares the given query, raising if there's an error.
+
+  This function works exactly like `prepare/3`, except it returns the prepared
+  query directly if preparation succeeds, otherwise raises the returned error.
+
+  ## Examples
+
+      prepared = Xandra.prepare!(conn, "SELECT * FROM users WHERE id = ?")
+      {:ok, _rows} = Xandra.execute(conn, prepared, [_id = 1])
+
+  """
   @spec prepare!(conn, statement, Keyword.t) :: Prepared.t | no_return
   def prepare!(conn, statement, options \\ []) do
     case prepare(conn, statement, options) do
@@ -46,6 +301,71 @@ defmodule Xandra do
     end
   end
 
+  @doc """
+  Executes the given simple query, prepared query, or batch query.
+
+  Returns `{:ok, result}` if executing the query was successful, or `{:error,
+  error}` otherwise. The meaning of the `params_or_options` argument depends on
+  what `query` is:
+
+    * if `query` is a batch query, than `params_or_options` has to be a list of
+      options that will be used to run the batch query (since batch queries
+      don't use parameters as parameters are attached to each query in the
+      batch).
+
+    * if `query` is a simple query (a string) or a prepared query, then
+      `params_or_opts` is a list or map of parameters, and this function is
+      exactly the same as calling `execute(conn, query, params_or_options, [])`.
+
+  When `query` is a batch query, successful results will always be `Xandra.Void`
+  structs.
+
+  When `{:error, error}` is returned, `error` can be either a `Xandra.Error` or
+  a `Xandra.Connection.Error` struct. See the module documentation for more
+  informatio on errors.
+
+  ## Options for batch queries
+
+  When `query` is a batch query, `params_or_options` is a list of options. All
+  options supported by `DBConnection.execute/4` are supported, and the following
+  additional batch-specific options:
+
+    * `:consistency` - same as the `:consistency` option described in the
+      documentation for `execute/4`.
+
+    * `:timestamp` - (integer) using this option means that the provided
+      timestamp will apply to all the statements in the batch that do not
+      explicitly specify a timestamp.
+
+  ## Examples
+
+  For example on executing simple queries or prepared queries, see the
+  documentation for `execute/4`. Examples above specifically refer to batch
+  queries. See the documentation for `Xandra.Batch` for more information about
+  batch queries and how to construct them.
+
+      prepared_insert = Xandra.prepare!(conn, "INSERT (email, name) INTO users VALUES (?, ?)")
+
+      batch =
+        Xandra.Batch.new()
+        |> Xandra.Batch.add(prepared_insert, ["abed@community.com", "Abed Nadir"])
+        |> Xandra.Batch.add(prepared_insert, ["troy@community.com", "Troy Barnes"])
+        |> Xandra.Batch.add(prepared_insert, ["britta@community.com", "Britta Perry"])
+
+      # Execute the batch
+      Xandra.execute(conn, batch)
+      #=> {:ok, %Xandra.Void{}}
+
+      # Execute the batch with a default timestamp for all statements
+      Xandra.execute(conn, batch, timestamp: System.system_time(:millisecond - 1_000))
+      #=> {:ok, %Xandra.Void{}}
+
+  All `DBConnection.execute/4` options are supported here as well:
+
+      Xandra.execute(conn, batch, pool: DBConnection.Poolboy)
+      #=> {:ok, %Xandra.Void{}}
+
+  """
   @spec execute(conn, statement | Prepared.t, values) :: {:ok, result} | {:error, error}
   @spec execute(conn, Batch.t, Keyword.t) :: {:ok, Xandra.Void.t} | {:error, error}
   def execute(conn, query, params_or_options \\ [])
@@ -63,6 +383,138 @@ defmodule Xandra do
          do: {:error, error}
   end
 
+  @doc """
+  Executes the given simple query or prepared query with the given parameters.
+
+  Returns `{:ok, result}` where `result` is the result of executing `query` if
+  the execution is successful (there are no network errors or semantic errors
+  with the query), or `{:error, error}` otherwise.
+
+  `result` can be one of the following:
+
+    * a `Xandra.Void` struct - returned for queries such as `INSERT`, `UPDATE`,
+      or `DELETE`.
+
+    * a `Xandra.SchemaChange` struct - returned for queries that perform changes
+      on the schema (such as creating tables).
+
+    * a `Xandra.SetKeyspace` struct - returned for `USE` queries.
+
+    * a `Xandra.Rows` struct - returned for queries that return rows (such as
+      `SELECT` queries).
+
+  The properties of each of the results listed above are described in each
+  result's module.
+
+  ## Options
+
+  This function accepts all options accepted by `DBConnection.execute/4`, plus
+  the following ones:
+
+    * `:consistency` - (atom) specifies the consistency level for the given
+      query. See the Cassandra documentation for more information on consistency
+      levels. The value of this option can be one of:
+      * `:any`
+      * `:one`
+      * `:two`
+      * `:three`
+      * `:quorum`
+      * `:all`
+      * `:local_quorum`
+      * `:each_quorum`
+      * `:serial`
+      * `:local_serial`
+      * `:local_one`
+
+      Defaults to `:one`.
+
+    * `:page_size` - (integer) The size of a page of results. If `query` returns
+      `Xandra.Rows` struct, that struct will contain at most `:page_size` rows
+      in it. Defaults to `10_000`.
+
+    * `:cursor` - (`Xandra.Rows` struct) the offset where rows should be
+      returned from. By default this option is not present and paging starts
+      from the beginning. See the "Paging" section below for more information on
+      how to page queries.
+
+  ## Parameters
+
+  The `params` argument specifies parameters to use when executing the query; it
+  can be either a list of positional parameters (specified via `?` in the query)
+  or a map of named parameters (specified as `:named_parameter` in the
+  query). When `query` is a simple query, the value of each parameter must be a
+  two-element tuple specifying the type used to encode the value and the value
+  itself; when `query` is a prepared query, this is not necessary (and values
+  can just be values) as the type information is encoded in the prepared
+  query. See the module documenatation for more information about query
+  parameters, types, and encoding values.
+
+  ## Examples
+
+  Executing a simple query (which is just a string):
+
+      statement = "INSERT INTO users (first_name, last_name) VALUES (:first_name, :last_name)"
+      {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, %{
+        "first_name" => "Chandler",
+        "last_name" => "Bing",
+      })
+
+  Executing a prepared query:
+
+      prepared = Xandra.prepare!(conn, "INSERT INTO users (first_name, last_name) VALUES (?, ?)")
+      {:ok, %Xandra.Void{}} = Xandra.execute(conn, prepared, ["Monica", "Geller"])
+
+  Performing a `SELECT` query and using `Enum.to_list/1` to convert the
+  `Xandra.Rows` result to a list of rows:
+
+      {:ok, %Xandra.Rows{} = rows} = Xandra.execute(conn, "SELECT * FROM users", _params = [])
+      Enum.to_list(rows)
+      #=> [%{"first_name" => "Chandler", "last_name" => "Bing"},
+      #=>  %{"first_name" => "Monica", "last_name" => "Geller"}]
+
+  Ensuring the write is writte to the commit log and memtable of at least three replica nodes:
+
+      statement = "INSERT INTO users (first_name, last_name) VALUES ('Chandler', 'Bing')"
+      {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], consistency: :three)
+
+  This function supports all options supported by `DBConnection.execute/4`; for
+  example, if the `conn` connection was started with `pool:
+  DBConnection.Poolboy`, then the `:pool` option would have to be passed here as
+  well:
+
+      statement = "DELETE FROM users WHERE first_name = 'Chandler'"
+      {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], pool: DBConnection.Poolboy)
+
+  ## Paging
+
+  Since `execute/4` supports the `:cursor` option, it is possible to manually
+  implement paging. For example, given the following prepared query:
+
+      prepared = Xandra.prepare!(conn, "SELECT first_name FROM users")
+
+  We can now execute such query with a specific page size using the `:page_size`
+  option:
+
+      {:ok, %Xandra.Rows{} = rows} = Xandra.execute(conn, prepared, [], page_size: 2)
+
+  Since `:page_size` is `2`, `rows` will contain at most `2` rows:
+
+      Enum.to_list(rows)
+      #=> [%{"first_name" => "Ross"}, %{"first_name" => "Rachel"}]
+
+  Now, we can pass `rows` as the value of the `:cursor` option to let the paging
+  start from where we left off:
+
+      {:ok, %Xandra.Rows{} = new_rows} = Xandra.execute(conn, prepared, [], page_size: 2, cursor: rows)
+      Enum.to_list(rows)
+      #=> [%{"first_name" => "Joey"}, %{"first_name" => "Phoebe"}]
+
+  However, using `:cursor` and `:page_size` directly with `execute/4` is not
+  recommended when the intent is to "stream" a query. For that, it's recommended
+  to use `stream_pages!/4`. Also note that if the `Xandra.Rows` struct provided
+  as `:cursor` shows there are no more pages to fetch, an `ArgumentError`
+  exception will be raised.
+  """
   @spec execute(conn, statement | Prepared.t, values, Keyword.t) :: {:ok, result} | {:error, error}
   def execute(conn, query, params, options)
 
@@ -86,6 +538,19 @@ defmodule Xandra do
     end
   end
 
+  @doc """
+  Executes the given simple query, prepared query, or batch query, raising if
+  there's an error.
+
+  This function behaves exactly like `execute/3`, except that it returns
+  successful results directly and raises on errors.
+
+  ## Examples
+
+      Xandra.execute(conn, "INSERT INTO users (name, age) VALUES ('Jane', 29)")
+      #=> %Xandra.Void{}
+
+  """
   @spec execute!(conn, statement | Prepared.t, values) :: result | no_return
   @spec execute!(conn, Batch.t, Keyword.t) :: Xandra.Void.t | no_return
   def execute!(conn, query, params_or_options \\ []) do
@@ -95,6 +560,13 @@ defmodule Xandra do
     end
   end
 
+  @doc """
+  Executes the given simple query, prepared query, or batch query, raising if
+  there's an error.
+
+  This function behaves exactly like `execute/4`, except that it returns
+  successful results directly and raises on errors.
+  """
   @spec execute!(conn, statement | Prepared.t, values, Keyword.t) :: result | no_return
   def execute!(conn, query, params, options) do
     case execute(conn, query, params, options) do

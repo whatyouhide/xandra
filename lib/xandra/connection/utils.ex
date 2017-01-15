@@ -1,5 +1,5 @@
 defmodule Xandra.Connection.Utils do
-  @doc false
+  @moduledoc false
 
   alias Xandra.{Connection.Error, Frame, Protocol}
 

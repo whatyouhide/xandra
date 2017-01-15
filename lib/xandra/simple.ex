@@ -1,4 +1,6 @@
 defmodule Xandra.Simple do
+  @moduledoc false
+
   defstruct [:statement, :values]
 
   @opaque t :: %__MODULE__{

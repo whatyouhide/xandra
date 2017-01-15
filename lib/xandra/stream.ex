@@ -1,4 +1,11 @@
 defmodule Xandra.Stream do
+  @moduledoc """
+  A data structure representing a stream of `Xandra.Rows` structs.
+
+  This data structure is returned by `Xandra.stream!/4`; see its documentation
+  for more information.
+  """
+
   defstruct [:conn, :query, :params, :options, state: :new]
 
   defimpl Enumerable do

@@ -1,4 +1,6 @@
 defmodule Xandra.Frame do
+  @moduledoc false
+
   defstruct [:kind, :compression, :body, stream_id: 0, tracing: false]
 
   @type kind :: :startup | :options | :query | :prepare | :execute | :batch

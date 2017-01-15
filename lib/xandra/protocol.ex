@@ -1,4 +1,6 @@
 defmodule Xandra.Protocol do
+  @moduledoc false
+
   use Bitwise
 
   alias Xandra.{Batch, Error, Frame, Prepared, Rows, Simple, TypeParser}

@@ -1,4 +1,8 @@
 defmodule Xandra.Prepared do
+  @moduledoc """
+  A data structure used to internally represent prepared queries.
+  """
+
   defstruct [:statement, :values, :id, :bound_columns, :result_columns]
 
   @opaque t :: %__MODULE__{
