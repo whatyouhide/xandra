@@ -22,14 +22,14 @@ defmodule Xandra do
     DBConnection.start_link(Connection, options)
   end
 
-  @spec stream!(conn, statement | Prepared.t, values, Keyword.t) :: Enumerable.t
-  def stream!(conn, query, params, options \\ [])
+  @spec stream_pages!(conn, statement | Prepared.t, values, Keyword.t) :: Enumerable.t
+  def stream_pages!(conn, query, params, options \\ [])
 
-  def stream!(conn, statement, params, options) when is_binary(statement) do
+  def stream_pages!(conn, statement, params, options) when is_binary(statement) do
     %Stream{conn: conn, query: statement, params: params, options: options}
   end
 
-  def stream!(conn, %Prepared{} = prepared, params, options) do
+  def stream_pages!(conn, %Prepared{} = prepared, params, options) do
     %Stream{conn: conn, query: prepared, params: params, options: options}
   end
 
