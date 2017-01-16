@@ -58,8 +58,8 @@ Preparing and executing a query:
 
 ```elixir
 with {:ok, prepared} <- Xandra.prepare(conn, "SELECT * FROM users WHERE name = ?"),
-     {:ok, %Xandra.Rows{}} <- Xandra.execute(conn, prepared, [_name = "Jeff"]),
-     do: Enum.to_list(rows)
+     {:ok, %Xandra.Page{}} <- Xandra.execute(conn, prepared, [_name = "Jeff"]),
+     do: Enum.to_list(page)
 ```
 
 Xandra supports streaming pages:
@@ -71,7 +71,7 @@ pages_stream = Xandra.stream_pages!(conn, prepared, _params = [], page_size: 1_0
 # This is going to execute the prepared query every time a new page is needed
 pages_stream
 |> Enum.take(10)
-|> Enum.each(fn(page) -> IO.puts "Got a bunch of rows: #{inspect(Enum.to_list(rows))}" end)
+|> Enum.each(fn(page) -> IO.puts "Got a bunch of rows: #{inspect(Enum.to_list(page))}" end)
 ```
 
 ## Contributing
