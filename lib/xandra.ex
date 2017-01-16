@@ -594,6 +594,8 @@ defmodule Xandra do
 
   defp put_paging_state(options) do
     case Keyword.pop(options, :cursor) do
+      {%Page{paging_state: nil}, _options} ->
+        raise ArgumentError, "no more pages are available"
       {%Page{paging_state: paging_state}, options} ->
         Keyword.put(options, :paging_state, paging_state)
       {nil, options} ->
