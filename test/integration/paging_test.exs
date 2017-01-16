@@ -46,7 +46,7 @@ defmodule PagingTest do
   test "streaming", %{conn: conn} do
     query = Xandra.prepare!(conn, "SELECT letter FROM alphabet", [])
 
-    assert %Stream{} = stream = Xandra.stream!(conn, query, [], [page_size: 2])
+    assert %Stream{} = stream = Xandra.stream_pages!(conn, query, [], [page_size: 2])
     assert [rows1, rows2, rows3, rows4] = Enum.take(stream, 4)
     assert Enum.to_list(rows1) == [
       %{"letter" => "Aa"}, %{"letter" => "Bb"}
@@ -61,7 +61,7 @@ defmodule PagingTest do
       %{"letter" => "Gg"}, %{"letter" => "Hh"}
     ]
 
-    assert %Stream{} = stream = Xandra.stream!(conn, "SELECT letter FROM alphabet", [], [page_size: 2])
+    assert %Stream{} = stream = Xandra.stream_pages!(conn, "SELECT letter FROM alphabet", [], [page_size: 2])
     assert [rows1, rows2] = Enum.take(stream, 2)
     assert Enum.to_list(rows1) == [
       %{"letter" => "Aa"}, %{"letter" => "Bb"}
