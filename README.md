@@ -2,6 +2,8 @@
 
 > Fast, simple, and robust Cassandra driver for Elixir.
 
+![](http://i.imgur.com/LPtkNpI.jpg)
+
 Xandra is a [Cassandra][cassandra] driver built natively in Elixir focused on speed, simplicity, and robustness.
 
 ## Features
