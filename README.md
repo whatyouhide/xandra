@@ -2,7 +2,7 @@
 
 > Fast, simple, and robust Cassandra driver for Elixir.
 
-![](http://i.imgur.com/LPtkNpI.jpg)
+![](http://i.imgur.com/qtbgj00.jpg)
 
 Xandra is a [Cassandra][cassandra] driver built natively in Elixir focused on speed, simplicity, and robustness.
 
@@ -54,7 +54,7 @@ This connection can be used to perform all operations against the Cassandra serv
 Executing simple queries looks like this:
 
 ```elixir
-statement = "INSERT INTO users (name, email) VALUES ('Jeff', 'jeff@community.com')"
+statement = "INSERT INTO users (name, zipcode) VALUES ('Jeff', 67100)"
 {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [])
 ```
 
