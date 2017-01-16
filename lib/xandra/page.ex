@@ -27,6 +27,11 @@ defmodule Xandra.Page do
 
   @opaque t :: %__MODULE__{}
 
+  @spec more_pages_available?(t) :: boolean
+  def more_pages_available?(%__MODULE__{paging_state: paging_state}) do
+    paging_state != nil
+  end
+
   defimpl Enumerable do
     def reduce(%{content: content, columns: columns}, acc, fun) do
       reduce(content, columns, acc, fun)

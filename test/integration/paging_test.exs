@@ -36,11 +36,17 @@ defmodule PagingTest do
     assert Enum.to_list(page) == [
       %{"letter" => "Aa"}, %{"letter" => "Bb"}, %{"letter" => "Cc"}
     ]
+    assert Page.more_pages_available?(page) == true
 
     assert {:ok, %Page{} = page} = Xandra.execute(conn, query, [], [page_size: 2, cursor: page])
     assert Enum.to_list(page) == [
       %{"letter" => "Dd"}, %{"letter" => "Ee"}
     ]
+    assert Page.more_pages_available?(page) == true
+
+    assert {:ok, %Page{} = page} = Xandra.execute(conn, query, [], [page_size: 6, cursor: page])
+    assert Enum.count(page) == 5
+    refute Page.more_pages_available?(page) == false
   end
 
   test "streaming", %{conn: conn} do
