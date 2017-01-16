@@ -30,17 +30,17 @@ defmodule PreparedTest do
     # Successive call to prepare uses cache.
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement)
 
-    assert {:ok, rows} = Xandra.execute(conn, prepared, [1])
-    assert Enum.to_list(rows) == [
+    assert {:ok, page} = Xandra.execute(conn, prepared, [1])
+    assert Enum.to_list(page) == [
       %{"name" => "Homer"}, %{"name" => "Lisa"}, %{"name" => "Marge"}
     ]
 
-    assert {:ok, rows} = Xandra.execute(conn, prepared, %{"code" => 2})
-    assert Enum.to_list(rows) == [
+    assert {:ok, page} = Xandra.execute(conn, prepared, %{"code" => 2})
+    assert Enum.to_list(page) == [
       %{"name" => "Moe"}
     ]
 
-    assert {:ok, rows} = Xandra.execute(conn, prepared, %{"code" => 5})
-    assert Enum.to_list(rows) == []
+    assert {:ok, page} = Xandra.execute(conn, prepared, %{"code" => 5})
+    assert Enum.to_list(page) == []
   end
 end
