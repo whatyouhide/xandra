@@ -1,4 +1,4 @@
-defmodule Xandra.Rows do
+defmodule Xandra.Page do
   @moduledoc ~S"""
   A struct that represents a page of rows.
 
@@ -7,17 +7,17 @@ defmodule Xandra.Rows do
   been parsed into Elixir values.
 
   This struct implements the `Enumerable` protocol and is therefore a stream. It
-  is through this protocol that a `Xandra.Rows` struct can be parsed into Elixir
+  is through this protocol that a `Xandra.Page` struct can be parsed into Elixir
   values. The simplest way of getting a list of single rows out of a
-  `Xandra.Rows` struct is to use something like `Enum.to_list/1`. Each element
-  emitted when streaming out of a `Xandra.Rows` struct is a map of string column
+  `Xandra.Page` struct is to use something like `Enum.to_list/1`. Each element
+  emitted when streaming out of a `Xandra.Page` struct is a map of string column
   names to their corresponding value.
 
   ## Examples
 
       statement = "SELECT name, age FROM users"
-      %Xandra.Rows{} = rows = Xandra.execute!(conn, statement, _params = [])
-      Enum.each(rows, fn %{"name" => name, "age" => age} ->
+      %Xandra.Page{} = page = Xandra.execute!(conn, statement, _params = [])
+      Enum.each(page, fn %{"name" => name, "age" => age} ->
         IO.puts "Read user with name #{name} (age #{age}) out of the database"
       end)
 
@@ -55,11 +55,11 @@ defmodule Xandra.Rows do
       zip(values, columns, [{name, value} | acc])
     end
 
-    def member?(_rows, _term) do
+    def member?(_page, _term) do
       {:error, __MODULE__}
     end
 
-    def count(_rows) do
+    def count(_page) do
       {:error, __MODULE__}
     end
   end

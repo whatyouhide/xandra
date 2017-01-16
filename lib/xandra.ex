@@ -92,12 +92,12 @@ defmodule Xandra do
   `DBConnection.start_link/2`.
   """
 
-  alias __MODULE__.{Batch, Connection, Error, Prepared, Rows, Simple, Stream}
+  alias __MODULE__.{Batch, Connection, Error, Prepared, Page, Simple, Stream}
 
   @type statement :: String.t
   @type values :: list | map
   @type error :: Error.t | Connection.Error.t
-  @type result :: Xandra.Void.t | Rows.t | Xandra.SetKeyspace.t | Xandra.SchemaChange.t
+  @type result :: Xandra.Void.t | Page.t | Xandra.SetKeyspace.t | Xandra.SchemaChange.t
   @type conn :: DBConnection.conn
 
   @default_options [
@@ -194,7 +194,7 @@ defmodule Xandra do
   right away: it will only execute queries as necessary when results are
   requested out of the returned stream.
 
-  The returned value is a stream of `Xandra.Rows` structs, where each of such
+  The returned value is a stream of `Xandra.Page` structs, where each of such
   structs contains at most as many rows as specified by the `:page_size`
   option. Every time an element is requested from the stream, `query` will be
   executed with `params` to get that result.
@@ -219,7 +219,7 @@ defmodule Xandra do
       prepared = Xandra.prepare!(conn, "SELECT * FROM users")
       users_stream = Xandra.stream_pages!(conn, prepared, _params = [], page_size: 2)
 
-      [%Xandra.Rows{} = _rows1, %Xandra.Rows{} = _rows2] = Enum.take(users_stream, 2)
+      [%Xandra.Page{} = _page1, %Xandra.Page{} = _page2] = Enum.take(users_stream, 2)
 
   """
   @spec stream_pages!(conn, statement | Prepared.t, values, Keyword.t) :: Enumerable.t
@@ -275,7 +275,7 @@ defmodule Xandra do
   ## Examples
 
       {:ok, prepared} = Xandra.prepare(conn, "SELECT * FROM users WHERE id = ?")
-      {:ok, _rows} = Xandra.execute(conn, prepared, [_id = 1])
+      {:ok, _page} = Xandra.execute(conn, prepared, [_id = 1])
 
       {:error, %Xandra.Error{reason: :invalid_syntax}} = Xandra.prepare(conn, "bad syntax")
 
@@ -297,7 +297,7 @@ defmodule Xandra do
   ## Examples
 
       prepared = Xandra.prepare!(conn, "SELECT * FROM users WHERE id = ?")
-      {:ok, _rows} = Xandra.execute(conn, prepared, [_id = 1])
+      {:ok, _page} = Xandra.execute(conn, prepared, [_id = 1])
 
   """
   @spec prepare!(conn, statement, Keyword.t) :: Prepared.t | no_return
@@ -407,7 +407,7 @@ defmodule Xandra do
 
     * a `Xandra.SetKeyspace` struct - returned for `USE` queries.
 
-    * a `Xandra.Rows` struct - returned for queries that return rows (such as
+    * a `Xandra.Page` struct - returned for queries that return rows (such as
       `SELECT` queries).
 
   The properties of each of the results listed above are described in each
@@ -434,10 +434,10 @@ defmodule Xandra do
       * `:local_one`
 
     * `:page_size` - (integer) The size of a page of results. If `query` returns
-      `Xandra.Rows` struct, that struct will contain at most `:page_size` rows
+      `Xandra.Page` struct, that struct will contain at most `:page_size` rows
       in it. Defaults to `10_000`.
 
-    * `:cursor` - (`Xandra.Rows` struct) the offset where rows should be
+    * `:cursor` - (`Xandra.Page` struct) the offset where rows should be
       returned from. By default this option is not present and paging starts
       from the beginning. See the "Paging" section below for more information on
       how to page queries.
@@ -470,10 +470,10 @@ defmodule Xandra do
       {:ok, %Xandra.Void{}} = Xandra.execute(conn, prepared, ["Monica", "Geller"])
 
   Performing a `SELECT` query and using `Enum.to_list/1` to convert the
-  `Xandra.Rows` result to a list of rows:
+  `Xandra.Page` result to a list of rows:
 
-      {:ok, %Xandra.Rows{} = rows} = Xandra.execute(conn, "SELECT * FROM users", _params = [])
-      Enum.to_list(rows)
+      {:ok, %Xandra.Page{} = page} = Xandra.execute(conn, "SELECT * FROM users", _params = [])
+      Enum.to_list(page)
       #=> [%{"first_name" => "Chandler", "last_name" => "Bing"},
       #=>  %{"first_name" => "Monica", "last_name" => "Geller"}]
 
@@ -499,23 +499,23 @@ defmodule Xandra do
   We can now execute such query with a specific page size using the `:page_size`
   option:
 
-      {:ok, %Xandra.Rows{} = rows} = Xandra.execute(conn, prepared, [], page_size: 2)
+      {:ok, %Xandra.Page{} = page} = Xandra.execute(conn, prepared, [], page_size: 2)
 
-  Since `:page_size` is `2`, `rows` will contain at most `2` rows:
+  Since `:page_size` is `2`, `page` will contain at most `2` rows:
 
-      Enum.to_list(rows)
+      Enum.to_list(page)
       #=> [%{"first_name" => "Ross"}, %{"first_name" => "Rachel"}]
 
-  Now, we can pass `rows` as the value of the `:cursor` option to let the paging
+  Now, we can pass `page` as the value of the `:cursor` option to let the paging
   start from where we left off:
 
-      {:ok, %Xandra.Rows{} = new_rows} = Xandra.execute(conn, prepared, [], page_size: 2, cursor: rows)
-      Enum.to_list(rows)
+      {:ok, %Xandra.Page{} = new_page} = Xandra.execute(conn, prepared, [], page_size: 2, cursor: page)
+      Enum.to_list(page)
       #=> [%{"first_name" => "Joey"}, %{"first_name" => "Phoebe"}]
 
   However, using `:cursor` and `:page_size` directly with `execute/4` is not
   recommended when the intent is to "stream" a query. For that, it's recommended
-  to use `stream_pages!/4`. Also note that if the `Xandra.Rows` struct provided
+  to use `stream_pages!/4`. Also note that if the `Xandra.Page` struct provided
   as `:cursor` shows there are no more pages to fetch, an `ArgumentError`
   exception will be raised.
   """
@@ -594,13 +594,13 @@ defmodule Xandra do
 
   defp put_paging_state(options) do
     case Keyword.pop(options, :cursor) do
-      {%Rows{paging_state: paging_state}, options} ->
+      {%Page{paging_state: paging_state}, options} ->
         Keyword.put(options, :paging_state, paging_state)
       {nil, options} ->
         options
       {other, _options} ->
         raise ArgumentError,
-          "expected a Xandra.Rows struct as the value of the :cursor option, " <>
+          "expected a Xandra.Page struct as the value of the :cursor option, " <>
           "got: #{inspect(other)}"
     end
   end

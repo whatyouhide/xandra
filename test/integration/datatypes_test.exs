@@ -24,8 +24,8 @@ defmodule DataTypesTest do
     Xandra.execute!(conn, statement, [])
 
     Xandra.execute!(conn, "INSERT INTO primitives (id) VALUES (1)", [])
-    rows = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 1", [])
-    assert [row] = Enum.to_list(rows)
+    page = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 1", [])
+    assert [row] = Enum.to_list(page)
     assert row["id"] == 1
     assert row["ascii"] == nil
     assert row["bigint"] == nil
@@ -82,8 +82,8 @@ defmodule DataTypesTest do
       {"varint", 6789065678192312391879827349},
     ]
     Xandra.execute!(conn, statement, values)
-    rows = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 2", [])
-    assert [row] = Enum.to_list(rows)
+    page = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 2", [])
+    assert [row] = Enum.to_list(page)
     assert row["ascii"] == "ascii"
     assert row["bigint"] == 1000000000
     assert row["blob"] == <<0, 0xFF>>
@@ -113,8 +113,8 @@ defmodule DataTypesTest do
     Xandra.execute!(conn, statement, [])
 
     Xandra.execute!(conn, "INSERT INTO collections (id) VALUES (1)", [])
-    rows = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
-    assert [row] = Enum.to_list(rows)
+    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
+    assert [row] = Enum.to_list(page)
     assert row["id"] == 1
     assert row["list_of_int"] == nil
     assert row["map_of_int_to_text"] == nil
@@ -138,8 +138,8 @@ defmodule DataTypesTest do
       {"set<int>", MapSet.new([])},
     ]
     Xandra.execute!(conn, statement, values)
-    rows = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
-    assert [row] = Enum.to_list(rows)
+    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
+    assert [row] = Enum.to_list(page)
     assert row["id"] == 1
     assert row["list_of_int"] == nil
     assert row["map_of_int_to_text"] == nil
@@ -163,8 +163,8 @@ defmodule DataTypesTest do
       {"tuple<int, text>", {24, "42"}},
     ]
     Xandra.execute!(conn, statement, values)
-    rows = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
-    assert [row] = Enum.to_list(rows)
+    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
+    assert [row] = Enum.to_list(page)
     assert row["id"] == 1
     assert row["list_of_int"] == [24, 42]
     assert row["map_of_int_to_text"] == %{24 => "24", 42 => "42"}

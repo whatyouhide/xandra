@@ -3,7 +3,7 @@ defmodule Xandra.Protocol do
 
   use Bitwise
 
-  alias Xandra.{Batch, Error, Frame, Prepared, Rows, Simple, TypeParser}
+  alias Xandra.{Batch, Error, Frame, Prepared, Page, Simple, TypeParser}
 
   @spec encode_request(Frame.t(kind), term, Keyword.t) :: Frame.t(kind) when kind: var
   def encode_request(frame, params, options \\ [])
@@ -369,12 +369,12 @@ defmodule Xandra.Protocol do
     %Xandra.Void{}
   end
 
-  # Rows
+  # Page
   defp decode_result_response(<<0x0002::32-signed>> <> buffer, query) do
-    rows = new_rows(query)
-    {rows, buffer} = decode_metadata(rows, buffer)
-    content = decode_rows_content(buffer, rows.columns)
-    %{rows | content: content}
+    page = new_page(query)
+    {page, buffer} = decode_metadata(page, buffer)
+    content = decode_page_content(buffer, page.columns)
+    %{page | content: content}
   end
 
   # SetKeyspace
@@ -386,8 +386,8 @@ defmodule Xandra.Protocol do
   # Prepared
   defp decode_result_response(<<0x0004::32-signed>> <> buffer, %Prepared{} = prepared) do
     {id, buffer} = decode_string(buffer)
-    {%{columns: bound_columns}, buffer} = decode_metadata(%Rows{}, buffer)
-    {%{columns: result_columns}, <<>>} = decode_metadata(%Rows{}, buffer)
+    {%{columns: bound_columns}, buffer} = decode_metadata(%Page{}, buffer)
+    {%{columns: result_columns}, <<>>} = decode_metadata(%Page{}, buffer)
     %{prepared | id: id, bound_columns: bound_columns, result_columns: result_columns}
   end
 
@@ -401,10 +401,10 @@ defmodule Xandra.Protocol do
 
   # Since SELECT statements are not allowed in BATCH queries, there's no need to
   # support %Batch{} in this function.
-  defp new_rows(%Simple{}),
-    do: %Rows{}
-  defp new_rows(%Prepared{result_columns: result_columns}),
-    do: %Rows{columns: result_columns}
+  defp new_page(%Simple{}),
+    do: %Page{}
+  defp new_page(%Prepared{result_columns: result_columns}),
+    do: %Page{columns: result_columns}
 
   defp decode_change_options(buffer, "KEYSPACE") do
     {keyspace, <<>>} = decode_string(buffer)
@@ -417,50 +417,50 @@ defmodule Xandra.Protocol do
     %{keyspace: keyspace, subject: subject}
   end
 
-  defp decode_metadata(rows, <<flags::4-bytes, column_count::32-signed>> <> buffer) do
+  defp decode_metadata(page, <<flags::4-bytes, column_count::32-signed>> <> buffer) do
     <<_::29, no_metadata::1, has_more_pages::1, global_table_spec::1>> = flags
-    {rows, buffer} = decode_paging_state(rows, has_more_pages, buffer)
+    {page, buffer} = decode_paging_state(page, has_more_pages, buffer)
 
     cond do
       no_metadata == 1 ->
-        {rows, buffer}
+        {page, buffer}
       global_table_spec == 1 ->
         {keyspace, buffer} = decode_string(buffer)
         {table, buffer} = decode_string(buffer)
         {columns, buffer} = decode_columns(buffer, column_count, {keyspace, table}, [])
-        {%{rows | columns: columns}, buffer}
+        {%{page | columns: columns}, buffer}
       true ->
         {columns, buffer} = decode_columns(buffer, column_count, nil, [])
-        {%{rows | columns: columns}, buffer}
+        {%{page | columns: columns}, buffer}
     end
   end
 
-  defp decode_paging_state(rows, 0, buffer) do
-    {rows, buffer}
+  defp decode_paging_state(page, 0, buffer) do
+    {page, buffer}
   end
 
-  defp decode_paging_state(rows, 1, buffer) do
+  defp decode_paging_state(page, 1, buffer) do
     <<byte_count::32, paging_state::bytes-size(byte_count)>> <> buffer = buffer
-    {%{rows | paging_state: paging_state}, buffer}
+    {%{page | paging_state: paging_state}, buffer}
   end
 
-  defp decode_rows_content(<<row_count::32-signed>> <> buffer, columns) do
-    {content, <<>>} = decode_rows_content(row_count, buffer, columns, columns, [[]])
+  defp decode_page_content(<<row_count::32-signed>> <> buffer, columns) do
+    {content, <<>>} = decode_page_content(row_count, buffer, columns, columns, [[]])
     content
   end
 
-  def decode_rows_content(0, buffer, columns, columns, [_ | acc]) do
+  def decode_page_content(0, buffer, columns, columns, [_ | acc]) do
     {Enum.reverse(acc), buffer}
   end
 
-  def decode_rows_content(row_count, buffer, columns, [], [values | acc]) do
-    decode_rows_content(row_count - 1, buffer, columns, columns, [[], Enum.reverse(values) | acc])
+  def decode_page_content(row_count, buffer, columns, [], [values | acc]) do
+    decode_page_content(row_count - 1, buffer, columns, columns, [[], Enum.reverse(values) | acc])
   end
 
-  def decode_rows_content(row_count, <<size::32-signed>> <> buffer, columns, [{_, _, _, type} | rest], [values | acc]) do
+  def decode_page_content(row_count, <<size::32-signed>> <> buffer, columns, [{_, _, _, type} | rest], [values | acc]) do
     {value, buffer} = decode_value(size, buffer, type)
     values = [value | values]
-    decode_rows_content(row_count, buffer, columns, rest, [values | acc])
+    decode_page_content(row_count, buffer, columns, rest, [values | acc])
   end
 
   defp decode_value(<<size::32-signed>> <> buffer, type) do
