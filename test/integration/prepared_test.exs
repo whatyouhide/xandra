@@ -43,4 +43,9 @@ defmodule PreparedTest do
     assert {:ok, page} = Xandra.execute(conn, prepared, %{"code" => 5})
     assert Enum.to_list(page) == []
   end
+
+  test "inspecting prepared queries", %{conn: conn} do
+    prepared = Xandra.prepare!(conn, "SELECT * FROM users")
+    assert inspect(prepared) == ~s(#Xandra.Prepared<"SELECT * FROM users">)
+  end
 end

@@ -34,4 +34,12 @@ defmodule Xandra.Prepared do
       prepared
     end
   end
+
+  defimpl Inspect do
+    import Inspect.Algebra
+
+    def inspect(prepared, options) do
+      concat(["#Xandra.Prepared<", to_doc(prepared.statement, options), ">"])
+    end
+  end
 end

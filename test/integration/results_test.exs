@@ -33,4 +33,12 @@ defmodule ResultsTest do
     assert {:ok, result} = Xandra.execute(conn, statement, %{"figure" => {"int", 123}})
     assert Enum.to_list(result) == [%{"figure" => 123}]
   end
+
+  test "inspecting Xandra.Page results", %{conn: conn, keyspace: keyspace} do
+    Xandra.execute!(conn, "USE #{keyspace}")
+    Xandra.execute!(conn, "CREATE TABLE users (name text PRIMARY KEY)")
+    Xandra.execute!(conn, "INSERT INTO users (name) VALUES ('Jeff')")
+    %Xandra.Page{} = page = Xandra.execute!(conn, "SELECT * FROM users")
+    assert inspect(page) == ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}]]>)
+  end
 end

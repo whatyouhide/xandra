@@ -77,4 +77,18 @@ defmodule BatchTest do
   test "empty batch", %{conn: conn} do
     assert {:ok, %Void{}} = Xandra.execute(conn, Batch.new())
   end
+
+  test "inspecting batch queries", %{conn: conn} do
+    prepared = Xandra.prepare!(conn, "DELETE FROM users WHERE id = 1")
+
+    batch =
+      Batch.new(:logged)
+      |> Batch.add("INSERT INTO users (id, name) VALUES (1, 'Marge')")
+      |> Batch.add(prepared, [2, "Homer"])
+
+    inspected = inspect(batch)
+    assert inspected =~ ~s/#Xandra.Batch<[type: :logged, queries:/
+    assert inspected =~ ~s/{"INSERT INTO users (id, name) VALUES (1, 'Marge')", []}/
+    assert inspected =~ ~s/{#Xandra.Prepared<"DELETE FROM users/
+  end
 end
