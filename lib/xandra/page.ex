@@ -82,7 +82,7 @@ defmodule Xandra.Page do
     def inspect(page, options) do
       concat([
         "#Xandra.Page<",
-        to_doc([rows: Enum.to_list(page)], options),
+        to_doc([rows: Enum.to_list(page), more_pages_available?: @for.more_pages_available?(page)], options),
         ">",
       ])
     end
