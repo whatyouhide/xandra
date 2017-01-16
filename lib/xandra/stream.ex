@@ -1,4 +1,6 @@
 defmodule Xandra.Stream do
+  @moduledoc false
+
   defstruct [:conn, :query, :params, :options, state: :new]
 
   defimpl Enumerable do

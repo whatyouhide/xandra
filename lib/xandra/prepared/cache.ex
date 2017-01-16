@@ -1,4 +1,6 @@
 defmodule Xandra.Prepared.Cache do
+  @moduledoc false
+
   alias Xandra.Prepared
 
   @type t :: :ets.tid

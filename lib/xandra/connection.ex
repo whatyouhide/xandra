@@ -1,4 +1,6 @@
 defmodule Xandra.Connection do
+  @moduledoc false
+
   use DBConnection
 
   alias Xandra.{Prepared, Frame, Protocol}

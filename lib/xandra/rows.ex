@@ -1,4 +1,28 @@
 defmodule Xandra.Rows do
+  @moduledoc ~S"""
+  A struct that represents a page of rows.
+
+  This struct represents a page of rows that have been returned by the
+  Cassandra server in response to a query such as `SELECT`, but have not yet
+  been parsed into Elixir values.
+
+  This struct implements the `Enumerable` protocol and is therefore a stream. It
+  is through this protocol that a `Xandra.Rows` struct can be parsed into Elixir
+  values. The simplest way of getting a list of single rows out of a
+  `Xandra.Rows` struct is to use something like `Enum.to_list/1`. Each element
+  emitted when streaming out of a `Xandra.Rows` struct is a map of string column
+  names to their corresponding value.
+
+  ## Examples
+
+      statement = "SELECT name, age FROM users"
+      %Xandra.Rows{} = rows = Xandra.execute!(conn, statement, _params = [])
+      Enum.each(rows, fn %{"name" => name, "age" => age} ->
+        IO.puts "Read user with name #{name} (age #{age}) out of the database"
+      end)
+
+  """
+
   defstruct [:content, :columns, :paging_state]
 
   @opaque t :: %__MODULE__{}
