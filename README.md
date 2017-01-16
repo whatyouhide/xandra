@@ -15,7 +15,7 @@ This library is in its early stages when it comes to features, but we're already
   * batch queries
   * page streaming
 
-In the future, we plan to add several more features, like clustering support or query retrying strategies.
+In the future, we plan to add several more features, like clustering support or query retrying strategies. See [the documentation][documentation] for detailed explanation of how these features work.
 
 ## Installation
 
@@ -37,7 +37,9 @@ end
 
 Then, run `mix deps.get` in your shell to fetch the new dependency.
 
-## Usage
+## Overview
+
+The documentation is available [on HexDocs][documentation].
 
 Connections or pool of connections can be started with `Xandra.start_link/1`:
 
@@ -82,5 +84,6 @@ Clone the repository and run `$ mix test` to make sure your setup is correct; yo
 
 ISC &copy; 2017 Aleksei Magusev and Andrea Leopardi, see the [license file](LICENSE).
 
+[documentation]: https://hexdocs.pm/xandra
 [cassandra]: http://cassandra.apache.org
 [football-addicts]: https://www.footballaddicts.com
