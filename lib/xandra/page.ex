@@ -27,6 +27,13 @@ defmodule Xandra.Page do
 
   @opaque t :: %__MODULE__{}
 
+  @doc """
+  Tells whether more pages are available to fetch after the given one.
+
+  This function can be used to check whether more pages are available to fetch
+  after the given page. This is useful when implementing manual paging. See also
+  the documentation for `Xandra.execute/4`.
+  """
   @spec more_pages_available?(t) :: boolean
   def more_pages_available?(%__MODULE__{paging_state: paging_state}) do
     paging_state != nil

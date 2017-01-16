@@ -517,7 +517,8 @@ defmodule Xandra do
   recommended when the intent is to "stream" a query. For that, it's recommended
   to use `stream_pages!/4`. Also note that if the `Xandra.Page` struct provided
   as `:cursor` shows there are no more pages to fetch, an `ArgumentError`
-  exception will be raised.
+  exception will be raised; be sure to check for this with
+  `Xandra.Page.more_pages_available?/1`.
   """
   @spec execute(conn, statement | Prepared.t, values, Keyword.t) :: {:ok, result} | {:error, error}
   def execute(conn, query, params, options)
