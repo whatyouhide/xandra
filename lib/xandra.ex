@@ -248,7 +248,29 @@ defmodule Xandra do
   `Xandra.Connection.Error` structs. See the module documentation for more
   information about errors.
 
-  Supports the same options as `DBConnection.prepare/3`.
+  Supports all the options supported by `DBConnection.prepare/3`, and the
+  following additional options:
+
+    * `:force` - (boolean) when `true`, forces the preparation of the query on
+      the server instead of trying to read the prepared query from cache. See
+      the "Prepared queries cache" section below. Defaults to `false`.
+
+  ## Prepared queries cache
+
+  Since Cassandra prepares queries on a per-node basis (and not on a
+  per-connection basis), Xandra internally caches prepared queries for each
+  connection or pool of connections. This means that if you prepare a query that
+  was already prepared, no action will be executed on the Cassandra server and
+  the prepared query will be returned from the cache.
+
+  If the Cassandra node goes down, however, the prepared query will be
+  invalidated and trying to use the one from cache will result in a
+  `Xandra.Error`. However, this is automatically handled by Xandra: when such an
+  error is returned, Xandra will first retry to prepare the query and only
+  return an error if the preparation fails.
+
+  If you want to ensure a query is prepared on the server, you can set the
+  `:force` option to `true`.
 
   ## Examples
 
@@ -256,6 +278,9 @@ defmodule Xandra do
       {:ok, _rows} = Xandra.execute(conn, prepared, [_id = 1])
 
       {:error, %Xandra.Error{reason: :invalid_syntax}} = Xandra.prepare(conn, "bad syntax")
+
+      # Force a query to be prepared on the server and not be read from cache:
+      Xandra.prepare!(conn, "SELECT * FROM users WHERE ID = ?", force: true)
 
   """
   @spec prepare(conn, statement, Keyword.t) :: {:ok, Prepared.t} | {:error, error}
