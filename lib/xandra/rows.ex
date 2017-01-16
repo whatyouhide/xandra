@@ -1,8 +1,8 @@
 defmodule Xandra.Rows do
   @moduledoc ~S"""
-  A struct that represents a series of rows.
+  A struct that represents a page of rows.
 
-  This struct represents a series of rows that have been returned by the
+  This struct represents a page of rows that have been returned by the
   Cassandra server in response to a query such as `SELECT`, but have not yet
   been parsed into Elixir values.
 

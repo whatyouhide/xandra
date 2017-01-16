@@ -1,11 +1,11 @@
 defmodule Xandra.Batch do
   @moduledoc """
-  Represents a batch of simple or prepared queries.
+  Represents a batch of simple and/or prepared queries.
 
   This module provides a data structure that can be used to group queries and
   execute them as a Cassandra `BATCH` query. Batch queries can be executed
   through `Xandra.execute/3` and `Xandra.execute!/3`; see their respective
-  documentation for more information on executing batch queries.
+  documentation for more information.
   """
   alias Xandra.{Prepared, Simple}
 
@@ -38,13 +38,13 @@ defmodule Xandra.Batch do
   end
 
   @doc """
-  Adds a query to the given batch.
+  Adds a query to the given `batch`.
 
   `query` has to be either a simple query (statement) or a prepared query. Note
   that parameters have to be added alongside their corresponding query when
-  adding a query to a batch. Opposite to functions like `Xandra.execute/4`,
-  queries in batch queries only support parameters as lists and **do not**
-  support parameters as maps.
+  adding a query to a batch. In contrast with functions like `Xandra.execute/4`,
+  queries in batch queries only support positional paramters and **do not**
+  support named parameters; this is a current Cassandra limitation.
 
   ## Examples
 

@@ -8,7 +8,7 @@ defmodule Xandra.Connection.Error do
 
   The `:action` field represents the action that was being performed when the
   connection error occurred. The `:reason` field represents the reason of the
-  connection error: for network error, this is usually a POSIX reason (like
+  connection error: for network errors, this is usually a POSIX reason (like
   `:econnrefused`).
 
   Since this struct is an exception, it is possible to raise it with

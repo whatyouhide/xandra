@@ -11,7 +11,7 @@ defmodule Xandra do
 
   Many of the functions in this module (whose names don't end with a `!`)
   return values in the form `{:ok, result}` or `{:error, error}`. While `result`
-  varies based on the specific function, `error` is always one of the following
+  varies based on the specific function, `error` is always one of the following:
 
     * a `Xandra.Error` struct: such structs represent errors returned by
       Cassandra. When such an error is returned, it means that communicating
@@ -27,29 +27,29 @@ defmodule Xandra do
 
   ## Parameters, encoding, and types
 
-  Xandra supports parametrized queries (queries that specify "parameter" values
+  Xandra supports parameterized queries (queries that specify "parameter" values
   through `?` or `:named_value`):
 
       SELECT * FROM users WHERE name = ? AND email = ?
       SELECT * FROM users WHERE name = :name AND email = :email
 
-  When a query has nameless parameters, parameters can be passed as a list to
+  When a query has positional parameters, parameters can be passed as a list to
   functions like `execute/4`: in this case, a parameter in a given position in
   the list will be used as the `?` in the corresponding position in the
   query. When a query has named parameters, parameters are passed as a map with
-  string keys representing each parameter's name (without the leading `:`) and
-  values representing the corresponding parameter's value.
+  string keys representing each parameter's name and values representing the
+  corresponding parameter's value.
 
   ### Types
 
-  Cassandra supports several types of values, and many types have "shades" that
-  are not Elixir types do not have. For example, in Cassandra an integer could
-  be a "bigint" (a 64 bit integer), an "int" (a 32 bit integer), a "smallint" (a
-  16 bit integer), or others; in Elixir, however, integers are just integers
-  (with varying size to be precise), so it is impossible to univocally map
-  Elixir integers to some Cassandra integer type. For this reason, when
-  executing simple parametrized queries (statements) it is necessary to
-  explicitly specify the type of each value.
+  Cassandra supports many types of values, and some types have "shades" that
+  cannot be represented by Elixir types. For example, in Cassandra an integer
+  could be a "bigint" (a 64 bit integer), an "int" (a 32 bit integer), a
+  "smallint" (a 16 bit integer), or others; in Elixir, however, integers are
+  just integers (with varying size to be precise), so it is impossible to
+  univocally map Elixir integers to a specific Cassandra integer type. For this
+  reason, when executing simple parameterized queries (statements) it is
+  necessary to explicitly specify the type of each value.
 
   To specify the type of a value, that value needs to be provided as a
   two-element tuple where the first element is the value's type and the second
@@ -57,29 +57,29 @@ defmodule Xandra do
   CQL: for example, 16-bit integers are represented as `"smallint"`, while maps
   of strings to booleans are represented as `"map<text, boolean>"`.
 
-      # Using a list of parameters
+      # Using a list of parameters:
       statement = "INSERT INTO species (name, properties) VALUES (?, ?)"
       Xandra.execute(conn, statement, [
         {"text", "human"},
         {"map<text, boolean>", %{"legs" => true, "arms" => true, "tail" => false}},
       ])
 
-      # Using a map of parameters
-      statement = "INSERT INTO species (name, properties) VALUES (:name, :props)"
+      # Using a map of parameters:
+      statement = "INSERT INTO species (name, properties) VALUES (:name, :properties)"
       Xandra.execute(conn, statement, %{
         "name" => {"text", "human"},
-        "props" => {"map<text, boolean>", %{"legs" => true, "arms" => true, "tail" => false}},
+        "properties" => {"map<text, boolean>", %{"legs" => true, "arms" => true, "tail" => false}},
       })
 
   You only need to specify types for simple queries (statements): when using
   prepared queries, the type information of each parameter of the query is
   encoded in the prepared query itself.
 
-      # Using a map of parameters
-      prepared = Xandra.prepare!(conn, "INSERT INTO species (name, properties) VALUES (:name, :props)")
+      # Using a map of parameters:
+      prepared = Xandra.prepare!(conn, "INSERT INTO species (name, properties) VALUES (:name, :properties)")
       Xandra.execute(conn, prepared, %{
         "name" => "human",
-        "props" => %{"legs" => true, "arms" => true, "tail" => false},
+        "properties" => %{"legs" => true, "arms" => true, "tail" => false},
       })
 
   ## Reconnections
@@ -90,23 +90,6 @@ defmodule Xandra do
   be configured through a subset of the options accepted by
   `start_link/2`. These options are described in the documentation for
   `DBConnection.start_link/2`.
-
-  ## Examples
-
-  Here is an example of a possible workflow using Xandra:
-
-      # First, we start a connection:
-      {:ok, conn} = Xandra.start_link(host: "127.0.0.1", port: 9042)
-
-      # We can use that connection to insert some data:
-      Xandra.execute!(conn, "INSERT INTO users (name, age) VALUES ('John', 32)")
-      Xandra.execute!(conn, "INSERT INTO users (name, age) VALUES ('Jane', 59)")
-
-      # And we can fetch data:
-      %Xandra.Rows{} = rows = Xandra.execute!(conn, "SELECT * FROM users")
-      Enum.to_list(rows)
-      #=> [%{"name" => "John", "age" => 32}, %{"name" => "Jane", "age" => 59}]
-
   """
 
   alias __MODULE__.{Batch, Connection, Error, Prepared, Rows, Simple, Stream}
@@ -148,19 +131,19 @@ defmodule Xandra do
 
   Note that this requires the `poolboy` dependency to be specified in your
   application. The following options have default values that are different from
-  the default value provided by `DBConnection`:
+  the default values provided by `DBConnection`:
 
     * `:idle_timeout` - defaults to `30_000` (30 seconds)
 
   ## Examples
 
-      # Start a connection
+      # Start a connection:
       {:ok, conn} = Xandra.start_link()
 
-      # Start a connection and register it under a name
+      # Start a connection and register it under a name:
       {:ok, _conn} = Xandra.start_link(name: :xandra)
 
-      # Start a named pool of connections
+      # Start a named pool of connections:
       {:ok, _pool} = Xandra.start_link(name: :xandra_pool, pool: DBConnection.Poolboy)
 
   As the `DBConnection` documentation states, if using a pool it's necessary to
@@ -193,7 +176,6 @@ defmodule Xandra do
 
   See the documentation for `DBConnection.start_link/2` for more information
   about this option.
-
   """
   @spec start_link(Keyword.t) :: GenServer.on_start
   def start_link(options \\ []) when is_list(options) do
@@ -213,9 +195,9 @@ defmodule Xandra do
   requested out of the returned stream.
 
   The returned value is a stream of `Xandra.Rows` structs, where each of such
-  structs contains as many rows as specified by the `:page_size` option. Every
-  time an element is requested from the stream, `query` will be executed to get
-  that result.
+  structs contains at most as many rows as specified by the `:page_size`
+  option. Every time an element is requested from the stream, `query` will be
+  executed with `params` to get that result.
 
   In order to get each result from Cassandra, `execute!/4` is used: this means
   that if there is an error (such as a network error) when executing the
@@ -235,7 +217,7 @@ defmodule Xandra do
   ## Examples
 
       prepared = Xandra.prepare!(conn, "SELECT * FROM users")
-      users_stream = Xandra.stream!(conn, prepared, page_size: 2)
+      users_stream = Xandra.stream_pages!(conn, prepared, _params = [], page_size: 2)
 
       [%Xandra.Rows{} = _rows1, %Xandra.Rows{} = _rows2] = Enum.take(users_stream, 2)
 
@@ -322,7 +304,7 @@ defmodule Xandra do
 
   When `{:error, error}` is returned, `error` can be either a `Xandra.Error` or
   a `Xandra.Connection.Error` struct. See the module documentation for more
-  informatio on errors.
+  information on errors.
 
   ## Options for batch queries
 
@@ -339,8 +321,8 @@ defmodule Xandra do
 
   ## Examples
 
-  For example on executing simple queries or prepared queries, see the
-  documentation for `execute/4`. Examples above specifically refer to batch
+  For examples on executing simple queries or prepared queries, see the
+  documentation for `execute/4`. Examples below specifically refer to batch
   queries. See the documentation for `Xandra.Batch` for more information about
   batch queries and how to construct them.
 
@@ -352,12 +334,12 @@ defmodule Xandra do
         |> Xandra.Batch.add(prepared_insert, ["troy@community.com", "Troy Barnes"])
         |> Xandra.Batch.add(prepared_insert, ["britta@community.com", "Britta Perry"])
 
-      # Execute the batch
+      # Execute the batch:
       Xandra.execute(conn, batch)
       #=> {:ok, %Xandra.Void{}}
 
-      # Execute the batch with a default timestamp for all statements
-      Xandra.execute(conn, batch, timestamp: System.system_time(:millisecond - 1_000))
+      # Execute the batch with a default timestamp for all statements:
+      Xandra.execute(conn, batch, timestamp: System.system_time(:millisecond) - 1_000)
       #=> {:ok, %Xandra.Void{}}
 
   All `DBConnection.execute/4` options are supported here as well:
@@ -414,10 +396,10 @@ defmodule Xandra do
     * `:consistency` - (atom) specifies the consistency level for the given
       query. See the Cassandra documentation for more information on consistency
       levels. The value of this option can be one of:
-      * `:any`
-      * `:one`
+      * `:one` (default)
       * `:two`
       * `:three`
+      * `:any`
       * `:quorum`
       * `:all`
       * `:local_quorum`
@@ -425,8 +407,6 @@ defmodule Xandra do
       * `:serial`
       * `:local_serial`
       * `:local_one`
-
-      Defaults to `:one`.
 
     * `:page_size` - (integer) The size of a page of results. If `query` returns
       `Xandra.Rows` struct, that struct will contain at most `:page_size` rows
@@ -455,8 +435,8 @@ defmodule Xandra do
 
       statement = "INSERT INTO users (first_name, last_name) VALUES (:first_name, :last_name)"
       {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, %{
-        "first_name" => "Chandler",
-        "last_name" => "Bing",
+        "first_name" => {"text", "Chandler"},
+        "last_name" => {"text", "Bing"},
       })
 
   Executing a prepared query:
@@ -472,15 +452,14 @@ defmodule Xandra do
       #=> [%{"first_name" => "Chandler", "last_name" => "Bing"},
       #=>  %{"first_name" => "Monica", "last_name" => "Geller"}]
 
-  Ensuring the write is writte to the commit log and memtable of at least three replica nodes:
+  Ensuring the write is written to the commit log and memtable of at least three replica nodes:
 
       statement = "INSERT INTO users (first_name, last_name) VALUES ('Chandler', 'Bing')"
       {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], consistency: :three)
 
   This function supports all options supported by `DBConnection.execute/4`; for
-  example, if the `conn` connection was started with `pool:
-  DBConnection.Poolboy`, then the `:pool` option would have to be passed here as
-  well:
+  example, if the `conn` connection was started with `pool: DBConnection.Poolboy`,
+  then the `:pool` option would have to be passed here as well:
 
       statement = "DELETE FROM users WHERE first_name = 'Chandler'"
       {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], pool: DBConnection.Poolboy)
@@ -547,7 +526,7 @@ defmodule Xandra do
 
   ## Examples
 
-      Xandra.execute(conn, "INSERT INTO users (name, age) VALUES ('Jane', 29)")
+      Xandra.execute!(conn, "INSERT INTO users (name, age) VALUES ('Jane', 29)")
       #=> %Xandra.Void{}
 
   """
@@ -566,6 +545,13 @@ defmodule Xandra do
 
   This function behaves exactly like `execute/4`, except that it returns
   successful results directly and raises on errors.
+
+  ## Examples
+
+      statement = "INSERT INTO users (name, age) VALUES ('John', 43)"
+      Xandra.execute!(conn, statement, _params = [], consistency: :quorum)
+      #=> %Xandra.Void{}
+
   """
   @spec execute!(conn, statement | Prepared.t, values, Keyword.t) :: result | no_return
   def execute!(conn, query, params, options) do
