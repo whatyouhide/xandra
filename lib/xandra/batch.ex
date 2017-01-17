@@ -106,28 +106,20 @@ defmodule Xandra.Batch do
     import Inspect.Algebra
 
     def inspect(batch, options) do
-      query_formatter = fn
-        %Simple{statement: statement, values: values}, options ->
-          concat(["<", to_doc(statement, options), ", ", to_doc(values, options), ">"])
-        %Prepared{values: values} = prepared, options ->
-          concat(["<", to_doc(prepared, options), ", ", to_doc(values, options), ">"])
-      end
+      properties = [
+        type: batch.type,
+        queries: format_queries(Enum.reverse(batch.queries)),
+      ]
+      concat(["#Xandra.Batch<", to_doc(properties, options), ">"])
+    end
 
-      queries = surround_many("[", Enum.reverse(batch.queries), "]", options, query_formatter, ",")
-
-      concat([
-        "#Xandra.Batch<",
-        surround(
-          "[",
-          concat([
-            "type: ", to_doc(batch.type, options),
-            ", ",
-            "queries: ", queries
-          ]),
-          "]"
-        ),
-        ">",
-      ])
+    defp format_queries(queries) do
+      Enum.map(queries, fn
+        %Simple{statement: statement, values: values} ->
+          {statement, values}
+        %Prepared{values: values} = prepared ->
+          {prepared, values}
+      end)
     end
   end
 end

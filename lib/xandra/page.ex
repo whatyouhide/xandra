@@ -80,11 +80,11 @@ defmodule Xandra.Page do
     import Inspect.Algebra
 
     def inspect(page, options) do
-      concat([
-        "#Xandra.Page<",
-        to_doc([rows: Enum.to_list(page), more_pages_available: @for.more_pages_available?(page)], options),
-        ">",
-      ])
+      properties = [
+        rows: Enum.to_list(page),
+        more_pages_available: @for.more_pages_available?(page),
+      ]
+      concat(["#Xandra.Page<", to_doc(properties, options), ">"])
     end
   end
 end

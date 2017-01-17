@@ -76,4 +76,9 @@ defmodule PagingTest do
       %{"letter" => "Cc"}, %{"letter" => "Dd"}
     ]
   end
+
+  test "inspecting Xandra.Stream structs", %{conn: conn} do
+    stream = Xandra.stream_pages!(conn, "SELECT * FROM alphabet", _params = [])
+    assert inspect(stream) == ~s(#Xandra.Stream<[query: "SELECT * FROM alphabet", params: [], options: []]>)
+  end
 end
