@@ -49,7 +49,7 @@ defmodule PagingTest do
     assert Page.more_pages_available?(page) == false
   end
 
-  test "streamingpages", %{conn: conn} do
+  test "streaming pages", %{conn: conn} do
     query = Xandra.prepare!(conn, "SELECT letter FROM alphabet", [])
 
     assert %PagesStream{} = stream = Xandra.stream_pages!(conn, query, [], [page_size: 2])
