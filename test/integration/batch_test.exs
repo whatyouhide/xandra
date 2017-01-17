@@ -90,7 +90,6 @@ defmodule BatchTest do
       ~s/#Xandra.Batch<[type: :logged, / <>
       ~s/queries: [{"INSERT INTO users (id, name) VALUES (1, 'Marge')", []}, / <>
       ~s/{#Xandra.Prepared<"DELETE FROM users WHERE id = ?">, [2]}]]>/
-
     assert inspect(batch) == expected
   end
 end
