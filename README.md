@@ -54,7 +54,7 @@ This connection can be used to perform all operations against the Cassandra serv
 Executing simple queries looks like this:
 
 ```elixir
-statement = "INSERT INTO users (name, zipcode) VALUES ('Jeff', 67100)"
+statement = "INSERT INTO users (name, postcode) VALUES ('Priam', 67100)"
 {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [])
 ```
 
@@ -62,7 +62,7 @@ Preparing and executing a query:
 
 ```elixir
 with {:ok, prepared} <- Xandra.prepare(conn, "SELECT * FROM users WHERE name = ?"),
-     {:ok, %Xandra.Page{}} <- Xandra.execute(conn, prepared, [_name = "Jeff"]),
+     {:ok, %Xandra.Page{}} <- Xandra.execute(conn, prepared, [_name = "Priam"]),
      do: Enum.to_list(page)
 ```
 
