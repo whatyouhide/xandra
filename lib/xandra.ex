@@ -92,7 +92,7 @@ defmodule Xandra do
   `DBConnection.start_link/2`.
   """
 
-  alias __MODULE__.{Batch, Connection, Error, Prepared, Page, Simple, Stream}
+  alias __MODULE__.{Batch, Connection, Error, Prepared, Page, PageStream, Simple}
 
   @type statement :: String.t
   @type values :: list | map
@@ -226,11 +226,11 @@ defmodule Xandra do
   def stream_pages!(conn, query, params, options \\ [])
 
   def stream_pages!(conn, statement, params, options) when is_binary(statement) do
-    %Stream{conn: conn, query: statement, params: params, options: options}
+    %PageStream{conn: conn, query: statement, params: params, options: options}
   end
 
   def stream_pages!(conn, %Prepared{} = prepared, params, options) do
-    %Stream{conn: conn, query: prepared, params: params, options: options}
+    %PageStream{conn: conn, query: prepared, params: params, options: options}
   end
 
   @doc """

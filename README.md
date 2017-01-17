@@ -70,10 +70,10 @@ Xandra supports streaming pages:
 
 ```elixir
 prepared = Xandra.prepare!(conn, "SELECT * FROM subscriptions WHERE topic = :topic")
-pages_stream = Xandra.stream_pages!(conn, prepared, _params = [], page_size: 1_000)
+page_stream = Xandra.stream_pages!(conn, prepared, _params = [], page_size: 1_000)
 
 # This is going to execute the prepared query every time a new page is needed:
-pages_stream
+page_stream
 |> Enum.take(10)
 |> Enum.each(fn(page) -> IO.puts "Got a bunch of rows: #{inspect(Enum.to_list(page))}" end)
 ```
