@@ -7,7 +7,7 @@ defmodule Xandra.Mixfile do
 
   @repo_url "https://github.com/lexhide/xandra"
 
-  @version "0.0.1"
+  @version "0.1.0"
 
   def project() do
     [app: :xandra,
