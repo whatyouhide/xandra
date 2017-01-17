@@ -1,7 +1,7 @@
 defmodule PagingTest do
   use XandraTest.IntegrationCase, async: true
 
-  alias Xandra.{Page, Stream}
+  alias Xandra.{Page, PagesStream}
 
   setup_all %{keyspace: keyspace} do
     {:ok, conn} = Xandra.start_link()
@@ -49,10 +49,10 @@ defmodule PagingTest do
     assert Page.more_pages_available?(page) == false
   end
 
-  test "streaming", %{conn: conn} do
+  test "streamingpages", %{conn: conn} do
     query = Xandra.prepare!(conn, "SELECT letter FROM alphabet", [])
 
-    assert %Stream{} = stream = Xandra.stream_pages!(conn, query, [], [page_size: 2])
+    assert %PagesStream{} = stream = Xandra.stream_pages!(conn, query, [], [page_size: 2])
     assert [page1, page2, page3, page4] = Enum.take(stream, 4)
     assert Enum.to_list(page1) == [
       %{"letter" => "Aa"}, %{"letter" => "Bb"}
@@ -67,7 +67,7 @@ defmodule PagingTest do
       %{"letter" => "Gg"}, %{"letter" => "Hh"}
     ]
 
-    assert %Stream{} = stream = Xandra.stream_pages!(conn, "SELECT letter FROM alphabet", [], [page_size: 2])
+    assert %PagesStream{} = stream = Xandra.stream_pages!(conn, "SELECT letter FROM alphabet", [], [page_size: 2])
     assert [page1, page2] = Enum.take(stream, 2)
     assert Enum.to_list(page1) == [
       %{"letter" => "Aa"}, %{"letter" => "Bb"}
@@ -77,8 +77,8 @@ defmodule PagingTest do
     ]
   end
 
-  test "inspecting Xandra.Stream structs", %{conn: conn} do
-    stream = Xandra.stream_pages!(conn, "SELECT * FROM alphabet", _params = [])
-    assert inspect(stream) == ~s(#Xandra.Stream<[query: "SELECT * FROM alphabet", params: [], options: []]>)
+  test "inspecting Xandra.PagesStream structs", %{conn: conn} do
+    pages_stream = Xandra.stream_pages!(conn, "SELECT * FROM alphabet", _params = [])
+    assert inspect(pages_stream) == ~s(#Xandra.PagesStream<[query: "SELECT * FROM alphabet", params: [], options: []]>)
   end
 end
