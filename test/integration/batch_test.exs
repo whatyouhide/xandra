@@ -88,7 +88,7 @@ defmodule BatchTest do
 
     inspected = inspect(batch)
     assert inspected =~ ~s/#Xandra.Batch<[type: :logged, queries:/
-    assert inspected =~ ~s/{"INSERT INTO users (id, name) VALUES (1, 'Marge')", []}/
-    assert inspected =~ ~s/{#Xandra.Prepared<"DELETE FROM users/
+    assert inspected =~ ~s/<"INSERT INTO users (id, name) VALUES (1, 'Marge')", []>/
+    assert inspected =~ ~s/<#Xandra.Prepared<"DELETE FROM users/
   end
 end
