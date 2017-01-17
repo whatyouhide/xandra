@@ -2,9 +2,9 @@
 
 > Fast, simple, and robust Cassandra driver for Elixir.
 
-![](http://i.imgur.com/qtbgj00.jpg)
+![Cover image](http://i.imgur.com/qtbgj00.jpg)
 
-Xandra is a [Cassandra][cassandra] driver built natively in Elixir focused on speed, simplicity, and robustness.
+Xandra is a [Cassandra][cassandra] driver built natively in Elixir and focused on speed, simplicity, and robustness.
 
 ## Features
 
@@ -72,7 +72,7 @@ Xandra supports streaming pages:
 prepared = Xandra.prepare!(conn, "SELECT * FROM subscriptions WHERE topic = :topic")
 pages_stream = Xandra.stream_pages!(conn, prepared, _params = [], page_size: 1_000)
 
-# This is going to execute the prepared query every time a new page is needed
+# This is going to execute the prepared query every time a new page is needed:
 pages_stream
 |> Enum.take(10)
 |> Enum.each(fn(page) -> IO.puts "Got a bunch of rows: #{inspect(Enum.to_list(page))}" end)
@@ -84,7 +84,7 @@ Clone the repository and run `$ mix test` to make sure your setup is correct; yo
 
 ## License
 
-ISC &copy; 2017 Aleksei Magusev and Andrea Leopardi, see the [license file](LICENSE).
+Xandra is released under the ISC license, see the [LICENSE](LICENSE) file.
 
 [documentation]: https://hexdocs.pm/xandra
 [cassandra]: http://cassandra.apache.org
