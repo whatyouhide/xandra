@@ -42,4 +42,17 @@ defmodule Xandra.Stream do
       stream
     end
   end
+
+  defimpl Inspect do
+    import Inspect.Algebra
+
+    def inspect(stream, options) do
+      properties = [
+        query: stream.query,
+        params: stream.params,
+        options: stream.options,
+      ]
+      concat(["#Xandra.Stream<", to_doc(properties, options), ">"])
+    end
+  end
 end

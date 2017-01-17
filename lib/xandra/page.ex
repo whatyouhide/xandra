@@ -75,4 +75,16 @@ defmodule Xandra.Page do
       {:error, __MODULE__}
     end
   end
+
+  defimpl Inspect do
+    import Inspect.Algebra
+
+    def inspect(page, options) do
+      properties = [
+        rows: Enum.to_list(page),
+        more_pages_available: @for.more_pages_available?(page),
+      ]
+      concat(["#Xandra.Page<", to_doc(properties, options), ">"])
+    end
+  end
 end
