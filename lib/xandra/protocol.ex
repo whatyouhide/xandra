@@ -12,9 +12,9 @@ defmodule Xandra.Protocol do
     %{frame | body: <<>>}
   end
 
-  def encode_request(%Frame{kind: :startup} = frame, startup_options, _options)
-      when is_map(startup_options) do
-    %{frame | body: encode_string_map(startup_options)}
+  def encode_request(%Frame{kind: :startup} = frame, requested_options, _options)
+      when is_map(requested_options) do
+    %{frame | body: encode_string_map(requested_options)}
   end
 
   def encode_request(%Frame{kind: :query} = frame, %Simple{} = query, options) do
