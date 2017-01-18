@@ -17,8 +17,8 @@ defmodule Xandra.Connection do
     prepared_cache = Keyword.fetch!(options, :prepared_cache)
 
     with {:ok, socket} <- connect(host, port),
-         {:ok, requested_options} <- Utils.request_options(socket),
-         :ok <- startup_connection(socket, requested_options),
+         {:ok, supported_options} <- Utils.request_options(socket),
+         :ok <- startup_connection(socket, supported_options),
          do: {:ok, %__MODULE__{socket: socket, prepared_cache: prepared_cache}}
   end
 
@@ -96,8 +96,8 @@ defmodule Xandra.Connection do
          do: {:error, Error.new("TCP connect", reason)}
   end
 
-  defp startup_connection(socket, requested_options) do
-    %{"CQL_VERSION" => [cql_version | _]} = requested_options
+  defp startup_connection(socket, supported_options) do
+    %{"CQL_VERSION" => [cql_version | _]} = supported_options
     Utils.startup_connection(socket, %{"CQL_VERSION" => cql_version})
   end
 end
