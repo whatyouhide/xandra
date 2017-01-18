@@ -36,10 +36,10 @@ defmodule Xandra.Connection.Utils do
   end
 
   @spec startup_connection(:gen_tcp.socket, map) :: :ok | {:error, Error.t}
-  def startup_connection(socket, options) do
+  def startup_connection(socket, startup_options) when is_map(startup_options) do
     payload =
       Frame.new(:startup)
-      |> Protocol.encode_request(options)
+      |> Protocol.encode_request(startup_options)
       |> Frame.encode()
 
     with :ok <- :gen_tcp.send(socket, payload),
