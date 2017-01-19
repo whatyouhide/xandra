@@ -22,6 +22,7 @@ defmodule Xandra.Prepared do
 
     def encode(prepared, values, options) do
       Frame.new(:execute)
+      |> Frame.put_compression(options[:compressor])
       |> Protocol.encode_request(%{prepared | values: values}, options)
       |> Frame.encode()
     end

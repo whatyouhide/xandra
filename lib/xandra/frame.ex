@@ -3,6 +3,8 @@ defmodule Xandra.Frame do
 
   defstruct [:kind, :compression, :body, stream_id: 0, tracing: false]
 
+  use Bitwise
+
   @type kind :: :startup | :options | :query | :prepare | :execute | :batch
 
   @type t(kind) :: %__MODULE__{kind: kind}
@@ -33,6 +35,11 @@ defmodule Xandra.Frame do
     %__MODULE__{kind: kind}
   end
 
+  @spec put_compression(t(kind), module) :: t(kind) when kind: var
+  def put_compression(%__MODULE__{} = frame, compression_mod) when is_atom(compression_mod) do
+    %{frame | compression: compression_mod}
+  end
+
   @spec header_length() :: 9
   def header_length(), do: 9
 
@@ -51,10 +58,12 @@ defmodule Xandra.Frame do
     <<@request_version, flags, stream_id::16, opcode, byte_size(body)::32, body::bytes>>
   end
 
-  @spec decode(binary, binary) :: t(kind)
-  def decode(header, body \\ <<>>) when is_binary(body) do
-    <<@response_version, _flags, _stream_id::16, opcode, _::32>> = header
+  @spec decode(binary, binary, nil | module) :: t(kind)
+  def decode(header, body \\ <<>>, compression_mod \\ nil)
+      when is_binary(body) and (is_nil(compression_mod) or is_atom(compression_mod)) do
+    <<@response_version, flags, _stream_id::16, opcode, _::32>> = header
     kind = Map.fetch!(@response_opcodes, opcode)
+    body = maybe_uncompress_body(flag_set?(flags, _compression = 0x01), compression_mod, body)
     %__MODULE__{kind: kind, body: body}
   end
 
@@ -63,5 +72,19 @@ defmodule Xandra.Frame do
   defp encode_flags(_, false), do: 0x01
   defp encode_flags(_, true), do: 0x03
 
-  defp maybe_compress_body(nil, body), do: body
+  defp flag_set?(flags, flag) do
+    (flags &&& flag) > 0
+  end
+
+  defp maybe_compress_body(_compression_mod = nil, body),
+    do: body
+  defp maybe_compress_body(compression_mod, body),
+    do: compression_mod.compress(body)
+
+  defp maybe_uncompress_body(_compression_flag = true, _compression_mod = nil, _body),
+    do: raise("received frame was flagged as compressed, but there's no module to uncompress")
+  defp maybe_uncompress_body(_compression_flag = true, compression_mod, body),
+    do: compression_mod.uncompress(body)
+  defp maybe_uncompress_body(_compression_flag = false, _compression_mod, body),
+    do: body
 end
