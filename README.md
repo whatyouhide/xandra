@@ -1,5 +1,7 @@
 # Xandra
 
+[![Hex.pm](https://img.shields.io/hexpm/v/xandra.svg)](https://hex.pm/packages/xandra)
+
 > Fast, simple, and robust Cassandra driver for Elixir.
 
 ![Cover image](http://i.imgur.com/qtbgj00.jpg)
