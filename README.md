@@ -16,6 +16,7 @@ This library is in its early stages when it comes to features, but we're already
   * prepared queries (including a local cache of prepared queries on a per-connection basis)
   * batch queries
   * page streaming
+  * compression
 
 In the future, we plan to add several more features, like clustering support or query retrying strategies. See [the documentation][documentation] for detailed explanation of how these features work.
 

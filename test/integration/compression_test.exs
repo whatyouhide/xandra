@@ -17,11 +17,14 @@ defmodule CompressionTest do
     end
   end
 
-  test "compression with the snappy algorithm", %{conn: conn, keyspace: keyspace} do
-    assert {:ok, compressed_conn} = Xandra.start_link(compressor: Snappy)
-
+  setup %{conn: conn} do
     Xandra.execute!(conn, "CREATE TABLE users (code int, name text, PRIMARY KEY (code, name))")
     Xandra.execute!(conn, "INSERT INTO users (code, name) VALUES (1, 'Homer')")
+    :ok
+  end
+
+  test "compression with the snappy algorithm", %{keyspace: keyspace} do
+    assert {:ok, compressed_conn} = Xandra.start_link(compressor: Snappy)
 
     statement = "SELECT * FROM #{keyspace}.users WHERE code = ?"
     options = [compressor: Snappy]
