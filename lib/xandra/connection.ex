@@ -127,35 +127,35 @@ defmodule Xandra.Connection do
 
   # If the user doesn't provide a compression module, it's fine because we don't
   # compress the outgoing frame (but we decompress the incoming frame).
-  defp assert_valid_compressor(_connection_mod, nil) do
+  defp assert_valid_compressor(_initial, _provided = nil) do
     nil
   end
 
   # If this connection wasn't started with compression set up but the user
   # provides a compressor module, we blow up because it is a semantic error.
-  defp assert_valid_compressor(nil, provided_mod) do
+  defp assert_valid_compressor(_initial = nil, provided) do
     raise ArgumentError,
-      "a query was compressed with the #{inspect(provided_mod)} compressor module " <>
+      "a query was compressed with the #{inspect(provided)} compressor module " <>
       "but the connection was started without specifying any compression"
   end
 
   # If the user provided a compressor module both for this prepare/execute as
   # well as when starting the connection, then we check that the compression
   # algorithm of both is the same (potentially, they can use different
-  # compressor modules provided they use the same algorithm), and this is a
-  # semantic error so we blow up.
-  defp assert_valid_compressor(connection_mod, provided_mod) do
-    connection_algorithm = connection_mod.algorithm()
-    provided_algorithm = provided_mod.algorithm()
+  # compressor modules provided they use the same algorithm), and if not then
+  # this is a semantic error so we blow up.
+  defp assert_valid_compressor(initial, provided) do
+    initial_algorithm = initial.algorithm()
+    provided_algorithm = provided.algorithm()
 
-    if connection_algorithm == provided_algorithm do
-      provided_mod
+    if initial_algorithm == provided_algorithm do
+      provided
     else
         raise ArgumentError,
-          "a query was compressed with the #{inspect(provided_mod)} compressor module " <>
+          "a query was compressed with the #{inspect(provided)} compressor module " <>
           "(which uses the #{inspect(provided_algorithm)} algorithm) but the " <>
-          "connection was initialized with the #{inspect(connection_mod)} compressor " <>
-          "module (which uses the #{inspect(connection_algorithm)}"
+          "connection was initialized with the #{inspect(initial)} compressor " <>
+          "module (which uses the #{inspect(initial_algorithm)}"
     end
   end
 end
