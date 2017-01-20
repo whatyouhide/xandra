@@ -151,11 +151,11 @@ defmodule Xandra.Connection do
     if initial_algorithm == provided_algorithm do
       provided
     else
-        raise ArgumentError,
-          "a query was compressed with the #{inspect(provided)} compressor module " <>
-          "(which uses the #{inspect(provided_algorithm)} algorithm) but the " <>
-          "connection was initialized with the #{inspect(initial)} compressor " <>
-          "module (which uses the #{inspect(initial_algorithm)}"
+      raise ArgumentError,
+        "a query was compressed with the #{inspect(provided)} compressor module " <>
+        "(which uses the #{inspect(provided_algorithm)} algorithm) but the " <>
+        "connection was initialized with the #{inspect(initial)} compressor " <>
+        "module (which uses the #{inspect(initial_algorithm)}"
     end
   end
 end
