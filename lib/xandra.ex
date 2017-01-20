@@ -90,6 +90,20 @@ defmodule Xandra do
   be configured through a subset of the options accepted by
   `start_link/2`. These options are described in the documentation for
   `DBConnection.start_link/2`.
+
+  ## Compression
+
+  Xandra supports compression. To inform the Cassandra server that the
+  connections you start should use compression for data transmitted to and from
+  the server, you can pass the `:compressor` option to `start_link/1`; this
+  option should be a module that implements the `Xandra.Compressor`
+  behaviour. After this, all compressed data that Cassandra sends to the
+  connection will be decompressed using this behaviour module.
+
+  To compress outgoing data (such as when issuing or preparing queries), the
+  `:compressor` option should be specified explicitly. When it's specified, the
+  given module will be used to compress data. If no `:compressor` option is
+  passed, the outgoing data will not be compressed.
   """
 
   alias __MODULE__.{Batch, Connection, Error, Prepared, Page, PageStream, Simple}
@@ -122,6 +136,10 @@ defmodule Xandra do
 
     * `:port` - (integer) the port of the Cassandra server to connect
       to. Defaults to `9042`.
+
+    * `:compressor` - (module) the compressor module to use for compressing and
+      decompressing data. See the "Compression" section in the module
+      documentation. By default this option is not present.
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of connections to Cassandra, the `:pool` option can
@@ -254,6 +272,10 @@ defmodule Xandra do
     * `:force` - (boolean) when `true`, forces the preparation of the query on
       the server instead of trying to read the prepared query from cache. See
       the "Prepared queries cache" section below. Defaults to `false`.
+
+    * `:compressor` - (module) the compressor module used to compress and
+      decompress data. See the "Compression" section in the module
+      documentation. By default, this option is not present.
 
   ## Prepared queries cache
 
@@ -441,6 +463,10 @@ defmodule Xandra do
       returned from. By default this option is not present and paging starts
       from the beginning. See the "Paging" section below for more information on
       how to page queries.
+
+    * `:compressor` - (module) the compressor module used to compress and
+      decompress data. See the "Compression" section in the module
+      documentation. By default, this option is not present.
 
   ## Parameters
 

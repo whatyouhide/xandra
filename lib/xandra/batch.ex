@@ -90,7 +90,7 @@ defmodule Xandra.Batch do
 
       Frame.new(:batch)
       |> Protocol.encode_request(batch, options)
-      |> Frame.encode()
+      |> Frame.encode(options[:compressor])
     end
 
     def decode(batch, %Frame{} = frame, _options) do

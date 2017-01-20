@@ -18,7 +18,7 @@ defmodule Xandra.Simple do
     def encode(query, values, options) do
       Frame.new(:query)
       |> Protocol.encode_request(%{query | values: values}, options)
-      |> Frame.encode()
+      |> Frame.encode(options[:compressor])
     end
 
     def decode(query, %Frame{} = frame, _options) do

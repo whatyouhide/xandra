@@ -1,7 +1,9 @@
 defmodule Xandra.Frame do
   @moduledoc false
 
-  defstruct [:kind, :compression, :body, stream_id: 0, tracing: false]
+  defstruct [:kind, :body, stream_id: 0, tracing: false]
+
+  use Bitwise
 
   @type kind :: :startup | :options | :query | :prepare | :execute | :batch
 
@@ -41,20 +43,21 @@ defmodule Xandra.Frame do
     length
   end
 
-  @spec encode(t(kind)) :: binary
-  def encode(%__MODULE__{} = frame) do
-    %{compression: compression, tracing: tracing?,
-      kind: kind, stream_id: stream_id, body: body} = frame
+  @spec encode(t(kind), nil | module) :: binary
+  def encode(%__MODULE__{} = frame, compressor \\ nil) when is_atom(compressor) do
+    %{tracing: tracing?, kind: kind, stream_id: stream_id, body: body} = frame
     opcode = Map.fetch!(@request_opcodes, kind)
-    flags = encode_flags(compression, tracing?)
-    body = maybe_compress_body(compression, body)
+    flags = encode_flags(compressor, tracing?)
+    body = maybe_compress_body(compressor, body)
     <<@request_version, flags, stream_id::16, opcode, byte_size(body)::32, body::bytes>>
   end
 
-  @spec decode(binary, binary) :: t(kind)
-  def decode(header, body \\ <<>>) when is_binary(body) do
-    <<@response_version, _flags, _stream_id::16, opcode, _::32>> = header
+  @spec decode(binary, binary, nil | module) :: t(kind)
+  def decode(header, body \\ <<>>, compressor \\ nil)
+      when is_binary(body) and is_atom(compressor) do
+    <<@response_version, flags, _stream_id::16, opcode, _::32>> = header
     kind = Map.fetch!(@response_opcodes, opcode)
+    body = maybe_decompress_body(flag_set?(flags, _compression = 0x01), compressor, body)
     %__MODULE__{kind: kind, body: body}
   end
 
@@ -63,5 +66,24 @@ defmodule Xandra.Frame do
   defp encode_flags(_, false), do: 0x01
   defp encode_flags(_, true), do: 0x03
 
-  defp maybe_compress_body(nil, body), do: body
+  defp flag_set?(flags, flag) do
+    (flags &&& flag) == flag
+  end
+
+  defp maybe_compress_body(_compressor = nil, body),
+    do: body
+  defp maybe_compress_body(compressor, body),
+    do: compressor.compress(body)
+
+  defp maybe_decompress_body(_compression? = true, _compressor = nil, _body) do
+    raise("received frame was flagged as compressed, but there's no module to decompress")
+  end
+
+  defp maybe_decompress_body(_compression? = true, compressor, body) do
+    compressor.decompress(body)
+  end
+
+  defp maybe_decompress_body(_compression? = false, _compressor, body) do
+    body
+  end
 end

@@ -9,7 +9,12 @@ defmodule Xandra.Connection.Error do
   The `:action` field represents the action that was being performed when the
   connection error occurred. The `:reason` field represents the reason of the
   connection error: for network errors, this is usually a POSIX reason (like
-  `:econnrefused`).
+  `:econnrefused`). The following Xandra-specific reasons are supported:
+
+    * `{:unsupported_compression, algorithm}` - this happens when a
+      `:compressor` module has been specified in `Xandra.start_link/1`, but
+      negotiating the connection algorithm fails because such compressor module
+      uses an algorithm that the Cassandra server does not support.
 
   Since this struct is an exception, it is possible to raise it with
   `Kernel.raise/1`. If the intent is to format connection errors as strings (for
@@ -20,11 +25,11 @@ defmodule Xandra.Connection.Error do
 
   @type t :: %__MODULE__{
     action: String.t,
-    reason: atom,
+    reason: term,
   }
 
-  @spec new(String.t, atom) :: t
-  def new(action, reason) when is_binary(action) and is_atom(reason) do
+  @spec new(String.t, term) :: t
+  def new(action, reason) when is_binary(action) do
     %__MODULE__{action: action, reason: reason}
   end
 
