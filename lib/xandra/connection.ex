@@ -45,8 +45,7 @@ defmodule Xandra.Connection do
         {:ok, prepared, state}
       :error ->
         payload =
-          Frame.new(:prepare)
-          |> Frame.put_compression(compressor)
+          Frame.new(:prepare, compressor: compressor)
           |> Protocol.encode_request(prepared)
           |> Frame.encode()
 
@@ -113,36 +112,34 @@ defmodule Xandra.Connection do
 
     requested_options = %{"CQL_VERSION" => cql_version}
 
-    requested_options =
-      if compressor do
-        compression_algorithm = Atom.to_string(compressor.algorithm())
-
-        unless compression_algorithm in supported_compression_algorithms do
-          raise "unsupported compression algorithm: #{inspect(compression_algorithm)}"
-        end
-
-        Map.put(requested_options, "COMPRESSION", compression_algorithm)
+    if compressor do
+      compression_algorithm = Atom.to_string(compressor.algorithm())
+      if compression_algorithm in supported_compression_algorithms do
+        requested_options = Map.put(requested_options, "COMPRESSION", compression_algorithm)
+        Utils.startup_connection(socket, requested_options, compressor)
       else
-        requested_options
+        {:error, Error.new("startup connection", {:unsupported_compression, compressor.algorithm()})}
       end
-
-    Utils.startup_connection(socket, requested_options, compressor)
+    else
+      Utils.startup_connection(socket, requested_options, compressor)
+    end
   end
 
   # If the user doesn't provide a compression module, it's fine because we don't
-  # compress the outgoing frame (but we uncompress the incoming frame).
+  # compress the outgoing frame (but we decompress the incoming frame).
   defp assert_valid_compressor(_connection_mod, nil) do
     nil
   end
 
   # If this connection wasn't started with compression set up but the user
-  # provides a compression module, we blow up because it is a semantic error.
+  # provides a compressor module, we blow up because it is a semantic error.
   defp assert_valid_compressor(nil, provided_mod) do
-    raise "a query was compressed with the #{inspect(provided_mod)} compressor module " <>
-          "but the connection was started without specifying any compression"
+    raise ArgumentError,
+      "a query was compressed with the #{inspect(provided_mod)} compressor module " <>
+      "but the connection was started without specifying any compression"
   end
 
-  # If the user provided a compression module both for this prepare/execute as
+  # If the user provided a compressor module both for this prepare/execute as
   # well as when starting the connection, then we check that the compression
   # algorithm of both is the same (potentially, they can use different
   # compressor modules provided they use the same algorithm), and this is a
@@ -154,10 +151,11 @@ defmodule Xandra.Connection do
     if connection_algorithm == provided_algorithm do
       provided_mod
     else
-      raise "a query was compressed with the #{inspect(provided_mod)} compressor module " <>
-            "(which uses the #{inspect(provided_algorithm)} algorithm) but the " <>
-            "connection was initialized with the #{inspect(connection_mod)} compressor " <>
-            "module (which uses the #{inspect(connection_algorithm)}"
+        raise ArgumentError,
+          "a query was compressed with the #{inspect(provided_mod)} compressor module " <>
+          "(which uses the #{inspect(provided_algorithm)} algorithm) but the " <>
+          "connection was initialized with the #{inspect(connection_mod)} compressor " <>
+          "module (which uses the #{inspect(connection_algorithm)}"
     end
   end
 end

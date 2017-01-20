@@ -11,6 +11,8 @@ defmodule Xandra.Connection.Error do
   connection error: for network errors, this is usually a POSIX reason (like
   `:econnrefused`).
 
+  TODO: document :unsupported_compression
+
   Since this struct is an exception, it is possible to raise it with
   `Kernel.raise/1`. If the intent is to format connection errors as strings (for
   example, for logging purposes), it is possible to use `Exception.message/1` to
@@ -20,11 +22,11 @@ defmodule Xandra.Connection.Error do
 
   @type t :: %__MODULE__{
     action: String.t,
-    reason: atom,
+    reason: term,
   }
 
-  @spec new(String.t, atom) :: t
-  def new(action, reason) when is_binary(action) and is_atom(reason) do
+  @spec new(String.t, term) :: t
+  def new(action, reason) when is_binary(action) do
     %__MODULE__{action: action, reason: reason}
   end
 

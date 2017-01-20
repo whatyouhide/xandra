@@ -1,7 +1,7 @@
 defmodule Xandra.Frame do
   @moduledoc false
 
-  defstruct [:kind, :compression, :body, stream_id: 0, tracing: false]
+  defstruct [:kind, :compressor, :body, stream_id: 0, tracing: false]
 
   use Bitwise
 
@@ -30,14 +30,9 @@ defmodule Xandra.Frame do
     0x08 => :result,
   }
 
-  @spec new(kind) :: t(kind) when kind: var
-  def new(kind) do
-    %__MODULE__{kind: kind}
-  end
-
-  @spec put_compression(t(kind), module) :: t(kind) when kind: var
-  def put_compression(%__MODULE__{} = frame, compression_mod) when is_atom(compression_mod) do
-    %{frame | compression: compression_mod}
+  @spec new(kind, Keyword.t) :: t(kind) when kind: var
+  def new(kind, options \\ []) do
+    struct!(%__MODULE__{kind: kind}, options)
   end
 
   @spec header_length() :: 9
@@ -50,20 +45,20 @@ defmodule Xandra.Frame do
 
   @spec encode(t(kind)) :: binary
   def encode(%__MODULE__{} = frame) do
-    %{compression: compression, tracing: tracing?,
+    %{compressor: compressor, tracing: tracing?,
       kind: kind, stream_id: stream_id, body: body} = frame
     opcode = Map.fetch!(@request_opcodes, kind)
-    flags = encode_flags(compression, tracing?)
-    body = maybe_compress_body(compression, body)
+    flags = encode_flags(compressor, tracing?)
+    body = maybe_compress_body(compressor, body)
     <<@request_version, flags, stream_id::16, opcode, byte_size(body)::32, body::bytes>>
   end
 
   @spec decode(binary, binary, nil | module) :: t(kind)
-  def decode(header, body \\ <<>>, compression_mod \\ nil)
-      when is_binary(body) and (is_nil(compression_mod) or is_atom(compression_mod)) do
+  def decode(header, body \\ <<>>, compressor \\ nil)
+      when is_binary(body) and (is_nil(compressor) or is_atom(compressor)) do
     <<@response_version, flags, _stream_id::16, opcode, _::32>> = header
     kind = Map.fetch!(@response_opcodes, opcode)
-    body = maybe_uncompress_body(flag_set?(flags, _compression = 0x01), compression_mod, body)
+    body = maybe_decompress_body(flag_set?(flags, _compression = 0x01), compressor, body)
     %__MODULE__{kind: kind, body: body}
   end
 
@@ -76,15 +71,20 @@ defmodule Xandra.Frame do
     (flags &&& flag) > 0
   end
 
-  defp maybe_compress_body(_compression_mod = nil, body),
+  defp maybe_compress_body(_compressor = nil, body),
     do: body
-  defp maybe_compress_body(compression_mod, body),
-    do: compression_mod.compress(body)
+  defp maybe_compress_body(compressor, body),
+    do: compressor.compress(body)
 
-  defp maybe_uncompress_body(_compression_flag = true, _compression_mod = nil, _body),
-    do: raise("received frame was flagged as compressed, but there's no module to uncompress")
-  defp maybe_uncompress_body(_compression_flag = true, compression_mod, body),
-    do: compression_mod.uncompress(body)
-  defp maybe_uncompress_body(_compression_flag = false, _compression_mod, body),
-    do: body
+  defp maybe_decompress_body(_compression_flag = true, _compressor = nil, _body) do
+    raise("received frame was flagged as compressed, but there's no module to decompress")
+  end
+
+  defp maybe_decompress_body(_compression_flag = true, compressor, body) do
+    compressor.decompress(body)
+  end
+
+  defp maybe_decompress_body(_compression_flag = false, _compressor, body) do
+    body
+  end
 end

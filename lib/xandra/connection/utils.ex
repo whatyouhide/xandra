@@ -5,9 +5,9 @@ defmodule Xandra.Connection.Utils do
 
   @spec recv_frame(:gen_tcp.socket, nil | module) ::
         {:ok, Frame.t} | {:error, :closed | :inet.posix}
-  def recv_frame(socket, compressor_mod \\ nil)
-      when is_nil(compressor_mod)
-      when is_atom(compressor_mod) do
+  def recv_frame(socket, compressor \\ nil)
+      when is_nil(compressor)
+      when is_atom(compressor) do
     length = Frame.header_length()
 
     with {:ok, header} <- :gen_tcp.recv(socket, length) do
@@ -16,7 +16,7 @@ defmodule Xandra.Connection.Utils do
           {:ok, Frame.decode(header)}
         body_length ->
           with {:ok, body} <- :gen_tcp.recv(socket, body_length),
-               do: {:ok, Frame.decode(header, body, compressor_mod)}
+               do: {:ok, Frame.decode(header, body, compressor)}
       end
     end
   end
@@ -38,9 +38,9 @@ defmodule Xandra.Connection.Utils do
   end
 
   @spec startup_connection(:gen_tcp.socket, map, nil | module) :: :ok | {:error, Error.t}
-  def startup_connection(socket, requested_options, compressor_mod)
+  def startup_connection(socket, requested_options, compressor)
       when is_map(requested_options) and
-           (is_nil(compressor_mod) or is_atom(compressor_mod)) do
+           (is_nil(compressor) or is_atom(compressor)) do
     # We have to encode the STARTUP frame without compression as in this frame
     # we tell the server which compression algorithm we want to use.
     payload =
@@ -48,11 +48,11 @@ defmodule Xandra.Connection.Utils do
       |> Protocol.encode_request(requested_options)
       |> Frame.encode()
 
-    # However, we need to pass the compressor_mod module around when we
+    # However, we need to pass the compressor module around when we
     # receive the response to this frame because if we said we want to use
     # compression, this response is already compressed.
     with :ok <- :gen_tcp.send(socket, payload),
-         {:ok, %Frame{body: <<>>}} <- recv_frame(socket, compressor_mod) do
+         {:ok, %Frame{body: <<>>}} <- recv_frame(socket, compressor) do
        :ok
     else
       {:error, reason} ->

@@ -1,4 +1,4 @@
-defmodule Xandra.FrameCompression do
+defmodule Xandra.Compressor do
   @moduledoc """
   TODOTODO
   """
@@ -16,5 +16,5 @@ defmodule Xandra.FrameCompression do
   @doc """
   TODO
   """
-  @callback uncompress(binary) :: binary
+  @callback decompress(binary) :: binary
 end

@@ -2,7 +2,7 @@ defmodule CompressionTest do
   use XandraTest.IntegrationCase, async: true
 
   defmodule Snappy do
-    @behaviour Xandra.FrameCompression
+    @behaviour Xandra.Compressor
     def algorithm(), do: :snappy
 
     def compress(binary) do
@@ -10,13 +10,13 @@ defmodule CompressionTest do
       compressed
     end
 
-    def uncompress(compressed) do
+    def decompress(compressed) do
       {:ok, binary} = :snappy.decompress(compressed)
       binary
     end
   end
 
-  test "compression with the lz4 algorithm", %{conn: conn, keyspace: keyspace} do
+  test "compression with the snappy algorithm", %{conn: conn, keyspace: keyspace} do
     assert {:ok, compressed_conn} = Xandra.start_link(compressor: Snappy)
 
     statement = "CREATE TABLE users (code int, name text, PRIMARY KEY (code, name))"
@@ -25,7 +25,7 @@ defmodule CompressionTest do
 
     statement = "SELECT * FROM #{keyspace}.users WHERE code = ?"
 
-    # We check that sending an uncompressed request which will receive a
+    # We check that sending an decompressed request which will receive a
     # compressed response works.
     assert {:ok, %Xandra.Page{} = page} = Xandra.execute(compressed_conn, statement, [{"int", 1}])
     assert Enum.to_list(page) == [%{"code" => 1, "name" => "Homer"}]
