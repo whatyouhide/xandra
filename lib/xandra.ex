@@ -138,7 +138,7 @@ defmodule Xandra do
       to. Defaults to `9042`.
 
     * `:compressor` - (module) the compressor module to use for compressing and
-      uncompressing data. See the "Compression" section in the module
+      decompressing data. See the "Compression" section in the module
       documentation. By default this option is not present.
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
@@ -274,7 +274,7 @@ defmodule Xandra do
       the "Prepared queries cache" section below. Defaults to `false`.
 
     * `:compressor` - (module) the compressor module used to compress and
-      uncompress data. See the "Compression" section in the module
+      decompress data. See the "Compression" section in the module
       documentation. By default, this option is not present.
 
   ## Prepared queries cache
@@ -465,7 +465,7 @@ defmodule Xandra do
       how to page queries.
 
     * `:compressor` - (module) the compressor module used to compress and
-      uncompress data. See the "Compression" section in the module
+      decompress data. See the "Compression" section in the module
       documentation. By default, this option is not present.
 
   ## Parameters

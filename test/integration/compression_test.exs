@@ -3,6 +3,7 @@ defmodule CompressionTest do
 
   defmodule Snappy do
     @behaviour Xandra.Compressor
+
     def algorithm(), do: :snappy
 
     def compress(binary) do

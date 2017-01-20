@@ -5,9 +5,7 @@ defmodule Xandra.Connection.Utils do
 
   @spec recv_frame(:gen_tcp.socket, nil | module) ::
         {:ok, Frame.t} | {:error, :closed | :inet.posix}
-  def recv_frame(socket, compressor \\ nil)
-      when is_nil(compressor)
-      when is_atom(compressor) do
+  def recv_frame(socket, compressor \\ nil) when is_atom(compressor) do
     length = Frame.header_length()
 
     with {:ok, header} <- :gen_tcp.recv(socket, length) do
@@ -39,8 +37,7 @@ defmodule Xandra.Connection.Utils do
 
   @spec startup_connection(:gen_tcp.socket, map, nil | module) :: :ok | {:error, Error.t}
   def startup_connection(socket, requested_options, compressor)
-      when is_map(requested_options) and
-           (is_nil(compressor) or is_atom(compressor)) do
+      when is_map(requested_options) and is_atom(compressor) do
     # We have to encode the STARTUP frame without compression as in this frame
     # we tell the server which compression algorithm we want to use.
     payload =

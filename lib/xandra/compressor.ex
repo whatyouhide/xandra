@@ -2,7 +2,7 @@ defmodule Xandra.Compressor do
   @moduledoc """
   A behaviour to compress and decompress binary data.
 
-  Modules implementing this behaviour can be used to compress and uncompress
+  Modules implementing this behaviour can be used to compress and decompress
   data using one of the compression algorithms supported by Cassandra (as of
   now, lz4 and snappy).
 
@@ -13,11 +13,11 @@ defmodule Xandra.Compressor do
 
       defmodule Snappy do
         def compress(binary), do: # ...
-        def uncompress(binary), do: # ...
+        def decompress(binary), do: # ...
       end
 
   You can then implement a module that implements the `Xandra.Compressor`
-  behaviour and can be used to compress and uncompress data flowing through the
+  behaviour and can be used to compress and decompress data flowing through the
   connection to Cassandra:
 
       defmodule SnappyXandraCompressor do
@@ -25,7 +25,7 @@ defmodule Xandra.Compressor do
 
         def algorithm(), do: :snappy
         defdelegate compress(binary), to: Snappy
-        defdelegate uncompress(binary), to: Snappy
+        defdelegate decompress(binary), to: Snappy
       end
 
   Now, this module can be passed as the value of the `:compressor` option to
@@ -38,7 +38,7 @@ defmodule Xandra.Compressor do
   """
 
   @doc """
-  Specifies which algorithm this module will use to compress and uncompress
+  Specifies which algorithm this module will use to compress and decompress
   data.
   """
   @callback algorithm() :: :lz4 | :snappy
