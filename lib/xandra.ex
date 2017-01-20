@@ -94,11 +94,11 @@ defmodule Xandra do
   ## Compression
 
   Xandra supports compression. To inform the Cassandra server that the
-  connections you start should use compression in the protocol, you can pass the
-  `:compressor` option to `start_link/1`; this option should be a module that
-  implements the `Xandra.Compressor` behaviour. After this, all compressed data
-  that Cassandra sends to the connection will be decompressed using this
-  behaviour module.
+  connections you start should use compression for data transmitted to and from
+  the server, you can pass the `:compressor` option to `start_link/1`; this
+  option should be a module that implements the `Xandra.Compressor`
+  behaviour. After this, all compressed data that Cassandra sends to the
+  connection will be decompressed using this behaviour module.
 
   To compress outgoing data (such as when issuing or preparing queries), the
   `:compressor` option should be specified explicitly. When it's specified, the

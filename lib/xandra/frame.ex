@@ -68,7 +68,7 @@ defmodule Xandra.Frame do
   defp encode_flags(_, true), do: 0x03
 
   defp flag_set?(flags, flag) do
-    (flags &&& flag) > 0
+    (flags &&& flag) == flag
   end
 
   defp maybe_compress_body(_compressor = nil, body),
