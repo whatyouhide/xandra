@@ -45,9 +45,9 @@ defmodule Xandra.Connection do
         {:ok, prepared, state}
       :error ->
         payload =
-          Frame.new(:prepare, compressor: compressor)
+          Frame.new(:prepare)
           |> Protocol.encode_request(prepared)
-          |> Frame.encode()
+          |> Frame.encode(compressor)
 
         with :ok <- :gen_tcp.send(socket, payload),
              {:ok, %Frame{} = frame} <- Utils.recv_frame(socket, state.compressor),

@@ -1,7 +1,7 @@
 defmodule Xandra.Frame do
   @moduledoc false
 
-  defstruct [:kind, :compressor, :body, stream_id: 0, tracing: false]
+  defstruct [:kind, :body, stream_id: 0, tracing: false]
 
   use Bitwise
 
@@ -30,9 +30,9 @@ defmodule Xandra.Frame do
     0x08 => :result,
   }
 
-  @spec new(kind, Keyword.t) :: t(kind) when kind: var
-  def new(kind, options \\ []) do
-    struct!(%__MODULE__{kind: kind}, options)
+  @spec new(kind) :: t(kind) when kind: var
+  def new(kind) do
+    %__MODULE__{kind: kind}
   end
 
   @spec header_length() :: 9
@@ -43,10 +43,9 @@ defmodule Xandra.Frame do
     length
   end
 
-  @spec encode(t(kind)) :: binary
-  def encode(%__MODULE__{} = frame) do
-    %{compressor: compressor, tracing: tracing?,
-      kind: kind, stream_id: stream_id, body: body} = frame
+  @spec encode(t(kind), nil | module) :: binary
+  def encode(%__MODULE__{} = frame, compressor \\ nil) when is_atom(compressor) do
+    %{tracing: tracing?, kind: kind, stream_id: stream_id, body: body} = frame
     opcode = Map.fetch!(@request_opcodes, kind)
     flags = encode_flags(compressor, tracing?)
     body = maybe_compress_body(compressor, body)
