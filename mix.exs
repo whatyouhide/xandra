@@ -1,9 +1,7 @@
 defmodule Xandra.Mixfile do
   use Mix.Project
 
-  @description """
-  Fast, simple, and robust Cassandra driver for Elixir.
-  """
+  @description "Fast, simple, and robust Cassandra driver for Elixir."
 
   @repo_url "https://github.com/lexhide/xandra"
 
