@@ -114,7 +114,7 @@ defmodule Xandra do
   @type result :: Xandra.Void.t | Page.t | Xandra.SetKeyspace.t | Xandra.SchemaChange.t
   @type conn :: DBConnection.conn
 
-  @default_options [
+  @default_start_options [
     host: '127.0.0.1',
     port: 9042,
     idle_timeout: 30_000,
@@ -198,8 +198,8 @@ defmodule Xandra do
   @spec start_link(Keyword.t) :: GenServer.on_start
   def start_link(options \\ []) when is_list(options) do
     options =
-      @default_options
-      |> Keyword.merge(validate_options(options))
+      @default_start_options
+      |> Keyword.merge(validate_start_options(options))
       |> Keyword.put(:prepared_cache, Prepared.Cache.new)
     DBConnection.start_link(Connection, options)
   end
@@ -634,7 +634,7 @@ defmodule Xandra do
     end
   end
 
-  defp validate_options(options) do
+  defp validate_start_options(options) do
     Enum.map(options, fn
       {:host, host} ->
         if is_binary(host) do
