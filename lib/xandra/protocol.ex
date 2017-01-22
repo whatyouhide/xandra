@@ -121,6 +121,7 @@ defmodule Xandra.Protocol do
     page_size = Keyword.get(options, :page_size, 10_000)
     paging_state = Keyword.get(options, :paging_state)
     serial_consistency = Keyword.get(options, :serial_consistency)
+    timestamp = Keyword.get(options, :timestamp)
 
     flags =
       0x00
@@ -129,6 +130,7 @@ defmodule Xandra.Protocol do
       |> set_flag(_metadata_presence = 0x02, skip_metadata?)
       |> set_flag(_paging_state = 0x08, paging_state)
       |> set_flag(_serial_consistency = 0x10, serial_consistency)
+      |> set_flag(_default_timestamp = 0x20, timestamp)
 
     encoded_values =
       if values == [] or values == %{} do
@@ -142,7 +144,8 @@ defmodule Xandra.Protocol do
       encoded_values <>
       <<page_size::32>> <>
       encode_paging_state(paging_state) <>
-      encode_serial_consistency(serial_consistency)
+      encode_serial_consistency(serial_consistency) <>
+      if(timestamp, do: <<timestamp::64>>, else: <<>>)
   end
 
   defp encode_paging_state(value) do
