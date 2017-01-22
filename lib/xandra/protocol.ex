@@ -45,9 +45,13 @@ defmodule Xandra.Protocol do
     %{queries: queries, type: type} = batch
 
     consistency = Keyword.get(options, :consistency, :one)
+    serial_consistency = Keyword.get(options, :serial_consistency)
     timestamp = Keyword.get(options, :timestamp)
 
-    flags = set_flag(0x00, _default_timestamp = 0x20, timestamp)
+    flags =
+      0x00
+      |> set_flag(_serial_consistency = 0x10, serial_consistency)
+      |> set_flag(_default_timestamp = 0x20, timestamp)
 
     encoded_queries =
       for query <- queries, into: <<length(queries)::16>>, do: encode_query_in_batch(query)
@@ -57,6 +61,7 @@ defmodule Xandra.Protocol do
       encoded_queries <>
       encode_consistency_level(consistency) <>
       <<flags>> <>
+      encode_serial_consistency(serial_consistency) <>
       if(timestamp, do: <<timestamp::64>>, else: <<>>)
 
     %{frame | body: body}
@@ -115,6 +120,7 @@ defmodule Xandra.Protocol do
     consistency = Keyword.get(options, :consistency, :one)
     page_size = Keyword.get(options, :page_size, 10_000)
     paging_state = Keyword.get(options, :paging_state)
+    serial_consistency = Keyword.get(options, :serial_consistency)
 
     flags =
       0x00
@@ -122,6 +128,7 @@ defmodule Xandra.Protocol do
       |> set_flag(_page_size = 0x04, true)
       |> set_flag(_metadata_presence = 0x02, skip_metadata?)
       |> set_flag(_paging_state = 0x08, paging_state)
+      |> set_flag(_serial_consistency = 0x10, serial_consistency)
 
     encoded_values =
       if values == [] or values == %{} do
@@ -134,7 +141,8 @@ defmodule Xandra.Protocol do
       <<flags>> <>
       encoded_values <>
       <<page_size::32>> <>
-      encode_paging_state(paging_state)
+      encode_paging_state(paging_state) <>
+      encode_serial_consistency(serial_consistency)
   end
 
   defp encode_paging_state(value) do
@@ -143,6 +151,20 @@ defmodule Xandra.Protocol do
     else
       <<>>
     end
+  end
+
+  defp encode_serial_consistency(nil) do
+    <<>>
+  end
+
+  defp encode_serial_consistency(consistency) when consistency in [:serial, :local_serial] do
+    encode_consistency_level(consistency)
+  end
+
+  defp encode_serial_consistency(other) do
+    raise ArgumentError,
+      "the :serial_consistency option must be either :serial or :local_serial, " <>
+      "got: #{inspect(other)}"
   end
 
   defp encode_query_in_batch(%Simple{statement: statement, values: values}) do
