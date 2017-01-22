@@ -333,7 +333,6 @@ defmodule Xandra.Protocol do
     Base.decode16!(value, case: :mixed)
   end
 
-
   error_codes = %{
     0x0000 => :server_failure,
     0x000A => :protocol_violation,
