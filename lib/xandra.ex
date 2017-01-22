@@ -467,6 +467,11 @@ defmodule Xandra do
       from the beginning. See the "Paging" section below for more information on
       how to page queries.
 
+    * `:timestamp` - (integer) the default timestamp for the query (in
+      microseconds). If provided, overrides the server-side assigned timestamp;
+      however, a timestamp in the query itself will still override this
+      timestamp.
+
     * `:serial_consistency` - (atom) specifies the serial consistency to use for
       executing the given query. Can be of `:serial` and `:local_serial`.
 
