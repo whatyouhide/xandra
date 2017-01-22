@@ -362,6 +362,9 @@ defmodule Xandra do
     * `:consistency` - same as the `:consistency` option described in the
       documentation for `execute/4`.
 
+    * `:serial_consistency` - same as the `:serial_consistency` option described
+      in the documentation for `execute/4`.
+
     * `:timestamp` - (integer) using this option means that the provided
       timestamp will apply to all the statements in the batch that do not
       explicitly specify a timestamp.
@@ -463,6 +466,9 @@ defmodule Xandra do
       returned from. By default this option is not present and paging starts
       from the beginning. See the "Paging" section below for more information on
       how to page queries.
+
+    * `:serial_consistency` - (atom) specifies the serial consistency to use for
+      executing the given query. Can be of `:serial` and `:local_serial`.
 
     * `:compressor` - (module) the compressor module used to compress and
       decompress data. See the "Compression" section in the module
