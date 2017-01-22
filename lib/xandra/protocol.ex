@@ -56,20 +56,12 @@ defmodule Xandra.Protocol do
     encoded_queries =
       for query <- queries, into: <<length(queries)::16>>, do: encode_query_in_batch(query)
 
-    encoded_serial_consistency =
-      if serial_consistency do
-        assert_valid_serial_consistency(serial_consistency)
-        encode_consistency_level(serial_consistency)
-      else
-        <<>>
-      end
-
     body =
       encode_batch_type(type) <>
       encoded_queries <>
       encode_consistency_level(consistency) <>
       <<flags>> <>
-      encoded_serial_consistency <>
+      encode_serial_consistency(serial_consistency) <>
       if(timestamp, do: <<timestamp::64>>, else: <<>>)
 
     %{frame | body: body}
@@ -145,20 +137,12 @@ defmodule Xandra.Protocol do
         encode_query_values(columns, values)
       end
 
-    encoded_serial_consistency =
-      if serial_consistency do
-        assert_valid_serial_consistency(serial_consistency)
-        encode_consistency_level(serial_consistency)
-      else
-        <<>>
-      end
-
     encode_consistency_level(consistency) <>
       <<flags>> <>
       encoded_values <>
       <<page_size::32>> <>
       encode_paging_state(paging_state) <>
-      encoded_serial_consistency
+      encode_serial_consistency(serial_consistency)
   end
 
   defp encode_paging_state(value) do
@@ -167,6 +151,20 @@ defmodule Xandra.Protocol do
     else
       <<>>
     end
+  end
+
+  defp encode_serial_consistency(nil) do
+    <<>>
+  end
+
+  defp encode_serial_consistency(consistency) when consistency in [:serial, :local_serial] do
+    encode_consistency_level(consistency)
+  end
+
+  defp encode_serial_consistency(other) do
+    raise ArgumentError,
+      "the :serial_consistency option must be either :serial or :local_serial, " <>
+      "got: #{inspect(other)}"
   end
 
   defp encode_query_in_batch(%Simple{statement: statement, values: values}) do
@@ -335,16 +333,6 @@ defmodule Xandra.Protocol do
     Base.decode16!(value, case: :mixed)
   end
 
-  defp assert_valid_serial_consistency(serial_consistency)
-       when serial_consistency in [:serial, :local_serial] do
-    :ok
-  end
-
-  defp assert_valid_serial_consistency(other) do
-    raise ArgumentError,
-      ":serial_consistency must be either :serial or :local_serial, " <>
-      "got: #{inspect(other)}"
-  end
 
   error_codes = %{
     0x0000 => :server_failure,
