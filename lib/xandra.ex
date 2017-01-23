@@ -542,7 +542,7 @@ defmodule Xandra do
             {:error, error}
           {:ok, _prepared, result} ->
             {:ok, result}
-          {:error, _error} = error ->
+          {:error, _reason} = error ->
             error
         end
       {:ok, %Error{} = error} ->
