@@ -535,7 +535,16 @@ defmodule Xandra do
     options = put_paging_state(options)
     case DBConnection.execute(conn, prepared, params, options) do
       {:ok, %Error{reason: :unprepared}} ->
-        run_prepare_execute(conn, prepared, params, Keyword.put(options, :force, true))
+        # We can ignore the newly returned prepared query since it will have the
+        # same id of the query we are repreparing.
+        case DBConnection.prepare_execute(conn, prepared, params, Keyword.put(options, :force, true)) do
+          {:ok, _prepared, %Error{} = error} ->
+            {:error, error}
+          {:ok, _prepared, result} ->
+            {:ok, result}
+          {:error, _error} = error ->
+            error
+        end
       {:ok, %Error{} = error} ->
         {:error, error}
       other ->
@@ -584,12 +593,6 @@ defmodule Xandra do
     case execute(conn, query, params, options) do
       {:ok, result} -> result
       {:error, exception} -> raise(exception)
-    end
-  end
-
-  defp run_prepare_execute(conn, %Prepared{} = prepared, params, options) do
-    with {:ok, _prepared, %Error{} = error} <- DBConnection.prepare_execute(conn, prepared, params, options) do
-      {:error, error}
     end
   end
 
