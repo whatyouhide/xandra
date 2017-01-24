@@ -1,0 +1,28 @@
+language: elixir
+
+dist: trusty
+sudo: required
+
+otp_release: 19.2
+elixir:
+  - 1.3.4
+  - 1.4.0
+
+env:
+  matrix:
+    - CASSANDRA_VERSION="2.2.8"
+    - CASSANDRA_VERSION="3.9"
+
+matrix:
+  include:
+    otp_release: 18.3
+    elixir: 1.4.0
+    env: CASSANDRA_VERSION="3.9"
+
+# These steps are taken from: http://cassandra.apache.org/doc/latest/getting_started/installing.html#installation-from-binary-tarball-files.
+before_install:
+  - java -version
+  - wget https://archive.apache.org/dist/cassandra/$CASSANDRA_VERSION/apache-cassandra-$CASSANDRA_VERSION-bin.tar.gz
+  - tar -xzf apache-cassandra-$CASSANDRA_VERSION-bin.tar.gz
+  - sh apache-cassandra-$CASSANDRA_VERSION/bin/cassandra
+  - for try in {1..12}; do (nodetool version > /dev/null 2>&1 && break) || sleep 5; done
