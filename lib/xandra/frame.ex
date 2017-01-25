@@ -61,10 +61,10 @@ defmodule Xandra.Frame do
     %__MODULE__{kind: kind, body: body}
   end
 
-  defp encode_flags(nil, false), do: 0x00
-  defp encode_flags(nil, true), do: 0x02
-  defp encode_flags(_, false), do: 0x01
-  defp encode_flags(_, true), do: 0x03
+  defp encode_flags(_compressor = nil, _tracing? = false), do: 0x00
+  defp encode_flags(_compressor = nil, _tracing? = true), do: 0x02
+  defp encode_flags(_compressor = _, _tracing? = false), do: 0x01
+  defp encode_flags(_compressor = _, _tracing? = true), do: 0x03
 
   defp flag_set?(flags, flag) do
     (flags &&& flag) == flag
