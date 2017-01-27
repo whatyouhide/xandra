@@ -87,8 +87,8 @@ defmodule Xandra.Connection do
     case Utils.request_options(socket) do
       {:ok, _options} ->
         {:ok, state}
-      {:error, reason} ->
-        {:disconnect, reason, state}
+      {:error, %Error{reason: reason}} ->
+        {:disconnect, Error.new("ping", reason), state}
     end
   end
 
