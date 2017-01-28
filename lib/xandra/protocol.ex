@@ -4,6 +4,7 @@ defmodule Xandra.Protocol do
   use Bitwise
 
   alias Xandra.{Batch, Error, Frame, Prepared, Page, Simple, TypeParser}
+  alias Xandra.Cluster.StatusChange
 
   @spec encode_request(Frame.t(kind), term, Keyword.t) :: Frame.t(kind) when kind: var
   def encode_request(frame, params, options \\ [])
@@ -15,6 +16,10 @@ defmodule Xandra.Protocol do
   def encode_request(%Frame{kind: :startup} = frame, requested_options, _options)
       when is_map(requested_options) do
     %{frame | body: encode_string_map(requested_options)}
+  end
+
+  def encode_request(%Frame{kind: :register} = frame, events, _options) when is_list(events) do
+    %{frame | body: encode_string_list(events)}
   end
 
   def encode_request(%Frame{kind: :query} = frame, %Simple{} = query, options) do
@@ -70,6 +75,12 @@ defmodule Xandra.Protocol do
   defp encode_batch_type(:logged), do: <<0>>
   defp encode_batch_type(:unlogged), do: <<1>>
   defp encode_batch_type(:counter), do: <<2>>
+
+  defp encode_string_list(list) do
+    for string <- list, into: <<length(list)::16>> do
+      <<byte_size(string)::16, string::binary>>
+    end
+  end
 
   defp encode_string_map(map) do
     for {key, value} <- map, into: <<map_size(map)::16>> do
@@ -384,9 +395,22 @@ defmodule Xandra.Protocol do
     content
   end
 
+  def decode_response(%Frame{kind: :event, body: body}, nil) do
+    {"STATUS_CHANGE", rest} = decode_string(body)
+    {effect, rest} = decode_string(rest)
+    {address, port, <<>>} = decode_inet(rest)
+    %StatusChange{effect: effect, address: address, port: port}
+  end
+
   def decode_response(%Frame{kind: :result, body: body}, %kind{} = query)
       when kind in [Simple, Prepared, Batch] do
     decode_result_response(body, query)
+  end
+
+  defp decode_inet(<<size, buffer::binary>>) do
+    {address, rest} = decode_value(buffer, size, :inet)
+    <<port::32, rest::binary>> = rest
+    {address, port, rest}
   end
 
   # Void
