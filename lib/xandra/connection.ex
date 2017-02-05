@@ -9,11 +9,7 @@ defmodule Xandra.Connection do
   @default_timeout 5_000
   @default_socket_options [packet: :raw, mode: :binary, active: false]
 
-  defstruct [
-    :socket,
-    :prepared_cache,
-    :compressor,
-  ]
+  defstruct [:socket, :prepared_cache, :compressor]
 
   def connect(options) do
     host = Keyword.fetch!(options, :host)
@@ -21,10 +17,19 @@ defmodule Xandra.Connection do
     prepared_cache = Keyword.fetch!(options, :prepared_cache)
     compressor = Keyword.get(options, :compressor)
 
-    with {:ok, socket} <- connect(host, port),
-         {:ok, supported_options} <- Utils.request_options(socket),
-         :ok <- startup_connection(socket, supported_options, compressor) do
-      {:ok, %__MODULE__{socket: socket, prepared_cache: prepared_cache, compressor: compressor}}
+    case :gen_tcp.connect(host, port, @default_socket_options, @default_timeout) do
+      {:ok, socket} ->
+        state = %__MODULE__{socket: socket, prepared_cache: prepared_cache, compressor: compressor}
+        with {:ok, supported_options} <- Utils.request_options(socket),
+             :ok <- startup_connection(socket, supported_options, compressor) do
+          {:ok, state}
+        else
+          {:error, reason} = error ->
+            disconnect(reason, state)
+            error
+        end
+      {:error, reason} ->
+        {:error, Error.new("TCP connect", reason)}
     end
   end
 
@@ -99,11 +104,6 @@ defmodule Xandra.Connection do
 
   defp prepared_cache_lookup(state, prepared, false) do
     Prepared.Cache.lookup(state.prepared_cache, prepared)
-  end
-
-  defp connect(host, port) do
-    with {:error, reason} <- :gen_tcp.connect(host, port, @default_socket_options, @default_timeout),
-         do: {:error, Error.new("TCP connect", reason)}
   end
 
   defp startup_connection(socket, supported_options, compressor) do
