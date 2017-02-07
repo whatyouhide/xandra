@@ -171,4 +171,36 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "set_of_int") == MapSet.new([42, 24])
     assert Map.fetch!(row, "tuple_of_int_and_text") == {24, "42"}
   end
+
+  test "user defined types", %{conn: conn} do
+    # User defined types
+    statement = """
+    CREATE TYPE IF NOT EXISTS address (
+      number int,
+      street text,
+      city text,
+    )
+    """
+    Xandra.execute!(conn, statement)
+    statement = """
+    CREATE TABLE users (
+      id int PRIMARY KEY,
+      address frozen<address>,
+    );
+    """
+    Xandra.execute!(conn, statement)
+    statement = """
+    INSERT INTO users (id, address) VALUES (
+      1, { number: 101, street: 'street', city: 'city' }
+    )
+    """
+    Xandra.execute!(conn, statement)
+    statement = """
+    SELECT id, address FROM users
+    """
+    page = Xandra.execute!(conn, statement)
+    assert [row] = Enum.to_list(page)
+    assert row["id"] == 1
+    assert row["address"] == %{"number" => 101, "street" => "street", "city" => "city"}
+  end
 end

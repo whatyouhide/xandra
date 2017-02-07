@@ -600,6 +600,13 @@ defmodule Xandra.Protocol do
     {int, buffer}
   end
 
+  defp decode_value(buffer, _size, {:udt, type_maps}) do
+    Enum.reduce(type_maps, {%{}, buffer}, fn({field, type}, {result, buffer}) ->
+      {value, buffer} = decode_value(buffer, type)
+      {Map.put(result, field, value), buffer}
+    end)
+  end
+
   defp decode_value(<<value::64-signed>> <> buffer, 8, :timestamp) do
     {value, buffer}
   end
@@ -738,7 +745,12 @@ defmodule Xandra.Protocol do
     {{:set, [type]}, buffer}
   end
 
-  # TODO: UDT
+  defp decode_type(<<0x0030::16>> <> buffer) do
+    {_keyspace, buffer} = decode_string(buffer)
+    {_name, buffer} = decode_string(buffer)
+    <<count::16>> <> buffer = buffer
+    decode_type_udt(buffer, count, [])
+  end
 
   defp decode_type(<<0x0031::16, count::16>> <> buffer) do
     decode_type_tuple(buffer, count, [])
@@ -782,5 +794,16 @@ defmodule Xandra.Protocol do
   defp decode_string_list(buffer, size, acc) do
     {elem, buffer} = decode_string(buffer)
     decode_string_list(buffer, size - 1, [elem | acc])
+  end
+
+  defp decode_type_udt(buffer, 0, acc) do
+    {{:udt, Enum.reverse(acc)}, buffer}
+  end
+
+  defp decode_type_udt(buffer, count, acc) do
+    {name, buffer} = decode_string(buffer)
+    {type, buffer} = decode_type(buffer)
+
+    decode_type_udt(buffer, count - 1, [{name, type} | acc])
   end
 end
