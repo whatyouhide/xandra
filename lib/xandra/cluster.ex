@@ -11,8 +11,9 @@ defmodule Xandra.Cluster do
 
   defstruct [:options, :pool_supervisor, :pool_module, pools: %{}]
 
-  def ensure_all_started(_options, _type) do
-    {:ok, []}
+  def ensure_all_started(options, type) do
+    {pool_module, options} = Keyword.pop(options, :underlying_pool, @default_pool_module)
+    pool_module.ensure_all_started(options, type)
   end
 
   def child_spec(module, options, child_options) do
