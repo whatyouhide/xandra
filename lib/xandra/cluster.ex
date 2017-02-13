@@ -98,18 +98,19 @@ defmodule Xandra.Cluster do
       {:ok, pool} ->
         %{state | pools: Map.put(pools, address, pool)}
       {:error, {:already_started, _pool}} ->
-        proccess =
-          case Process.info(self(), :registered_name) |> elem(1) do
-            [] -> self()
-            name -> name
-          end
-        message = [
-          "Xandra cluster #{inspect(proccess)} ",
-          "received request to start another connection pool ",
-          "to the same address: ", inspect(address)
-        ]
-        Logger.warn(message)
+        Logger.warn(fn ->
+          "Xandra cluster #{inspect(name())} " <>
+            "received request to start another connection pool " <>
+            "to the same address: #{inspect(address)}"
+        end)
         state
+    end
+  end
+
+  defp name() do
+    case Process.info(self(), :registered_name) |> elem(1) do
+      [] -> self()
+      name -> name
     end
   end
 

@@ -641,8 +641,8 @@ defmodule Xandra do
         options
       {other, _options} ->
         raise ArgumentError,
-          "expected a Xandra.Page struct as the value of the :cursor option, " <>
-          "got: #{inspect(other)}"
+          "expected a Xandra.Page struct as the value of the :cursor option," <>
+          " got: #{inspect(other)}"
     end
   end
 
@@ -655,25 +655,23 @@ defmodule Xandra do
         {address, port} = parse_node(string)
         [address: address, port: port]
       {:nodes, _nodes} ->
-        raise ArgumentError, "multi-node usage requires the :pool option set to Xandra.Cluster"
+        raise ArgumentError, "multi-node use requires the :pool option to be set to Xandra.Cluster"
       {_key, _value} = option ->
         [option]
     end)
   end
 
-  defp parse_node(string) when is_binary(string) do
-    [address | rest] = String.split(string, ":", parts: 2)
-    address = String.to_charlist(address)
-    case rest do
-      [port] ->
+  defp parse_node(string) do
+    case String.split(string, ":", parts: 2) do
+      [address, port] ->
         case Integer.parse(port) do
           {port, ""} ->
-            {address, port}
+            {String.to_charlist(address), port}
           _ ->
             raise ArgumentError, "invalid item #{inspect(string)} in the :nodes option"
         end
-      [] ->
-        {address, @default_port}
+      [address] ->
+        {String.to_charlist(address), @default_port}
     end
   end
 end

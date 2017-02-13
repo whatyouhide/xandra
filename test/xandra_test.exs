@@ -7,7 +7,7 @@ defmodule XandraTest do
       Xandra.start_link(nodes: ["foo:bar"])
     end
 
-    message = "multi-node usage requires the :pool option set to Xandra.Cluster"
+    message = "multi-node use requires the :pool option to be set to Xandra.Cluster"
     assert_raise ArgumentError, message, fn ->
       Xandra.start_link(nodes: ["foo", "bar"])
     end
