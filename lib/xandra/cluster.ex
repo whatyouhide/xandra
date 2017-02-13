@@ -9,7 +9,7 @@ defmodule Xandra.Cluster do
 
   require Logger
 
-  defstruct [:options, :supervisor, :pool_module, pools: %{}]
+  defstruct [:options, :pool_supervisor, :pool_module, pools: %{}]
 
   def ensure_all_started(_options, _type) do
     {:ok, []}
@@ -29,9 +29,9 @@ defmodule Xandra.Cluster do
   end
 
   def init({%__MODULE__{} = state, nodes}) do
-    {:ok, supervisor} = Supervisor.start_link([], strategy: :one_for_one, max_restarts: 0)
+    {:ok, pool_supervisor} = Supervisor.start_link([], strategy: :one_for_one, max_restarts: 0)
     start_control_connections(nodes)
-    {:ok, %{state | supervisor: supervisor}}
+    {:ok, %{state | pool_supervisor: pool_supervisor}}
   end
 
   def checkout(cluster, options) do
@@ -90,11 +90,11 @@ defmodule Xandra.Cluster do
   end
 
   defp start_pool(state, address, port) do
-    %{pool_module: pool_module, pools: pools,
-      options: options, supervisor: supervisor} = state
+    %{options: options, pool_module: pool_module,
+      pools: pools, pool_supervisor: pool_supervisor} = state
     options = [address: address, port: port] ++ options
     child_spec = pool_module.child_spec(Xandra.Connection, options, id: address)
-    case Supervisor.start_child(supervisor, child_spec) do
+    case Supervisor.start_child(pool_supervisor, child_spec) do
       {:ok, pool} ->
         %{state | pools: Map.put(pools, address, pool)}
       {:error, {:already_started, _pool}} ->
@@ -115,8 +115,8 @@ defmodule Xandra.Cluster do
   end
 
   defp toggle_pool(state, %{effect: "UP", address: address}) do
-    %{pools: pools, supervisor: supervisor} = state
-    case Supervisor.restart_child(supervisor, address) do
+    %{pools: pools, pool_supervisor: pool_supervisor} = state
+    case Supervisor.restart_child(pool_supervisor, address) do
       {:error, reason} when reason in [:not_found, :running, :restarting] ->
         state
       {:ok, pool} ->
@@ -125,8 +125,8 @@ defmodule Xandra.Cluster do
   end
 
   defp toggle_pool(state, %{effect: "DOWN", address: address}) do
-    %{pools: pools, supervisor: supervisor} = state
-    Supervisor.terminate_child(supervisor, address)
+    %{pools: pools, pool_supervisor: pool_supervisor} = state
+    Supervisor.terminate_child(pool_supervisor, address)
     %{state | pools: Map.delete(pools, address)}
   end
 end

@@ -641,8 +641,8 @@ defmodule Xandra do
         options
       {other, _options} ->
         raise ArgumentError,
-          "expected a Xandra.Page struct as the value of the :cursor option," <>
-          " got: #{inspect(other)}"
+          "expected a Xandra.Page struct as the value of the :cursor option, " <>
+          "got: #{inspect(other)}"
     end
   end
 

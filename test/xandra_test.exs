@@ -11,5 +11,10 @@ defmodule XandraTest do
     assert_raise ArgumentError, message, fn ->
       Xandra.start_link(nodes: ["foo", "bar"])
     end
+
+    message = "invalid item \"bar:baz\" in the :nodes option"
+    assert_raise ArgumentError, message, fn ->
+      Xandra.start_link(nodes: ["foo", "bar:baz"], pool: Xandra.Cluster)
+    end
   end
 end
