@@ -18,6 +18,7 @@ defmodule Xandra.Frame do
     :query => 0x07,
     :prepare => 0x09,
     :execute => 0x0A,
+    :register => 0x0B,
     :batch => 0x0D,
   }
 
@@ -28,6 +29,7 @@ defmodule Xandra.Frame do
     0x02 => :ready,
     0x06 => :supported,
     0x08 => :result,
+    0x0C => :event,
   }
 
   @spec new(kind) :: t(kind) when kind: var

@@ -12,12 +12,12 @@ defmodule Xandra.Connection do
   defstruct [:socket, :prepared_cache, :compressor]
 
   def connect(options) do
-    host = Keyword.fetch!(options, :host)
+    address = Keyword.fetch!(options, :address)
     port = Keyword.fetch!(options, :port)
     prepared_cache = Keyword.fetch!(options, :prepared_cache)
     compressor = Keyword.get(options, :compressor)
 
-    case :gen_tcp.connect(host, port, @default_socket_options, @default_timeout) do
+    case :gen_tcp.connect(address, port, @default_socket_options, @default_timeout) do
       {:ok, socket} ->
         state = %__MODULE__{socket: socket, prepared_cache: prepared_cache, compressor: compressor}
         with {:ok, supported_options} <- Utils.request_options(socket),

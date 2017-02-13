@@ -114,9 +114,9 @@ defmodule Xandra do
   @type result :: Xandra.Void.t | Page.t | Xandra.SetKeyspace.t | Xandra.SchemaChange.t
   @type conn :: DBConnection.conn
 
+  @default_port 9042
   @default_start_options [
-    host: '127.0.0.1',
-    port: 9042,
+    nodes: ["127.0.0.1"],
     idle_timeout: 30_000,
   ]
 
@@ -131,11 +131,8 @@ defmodule Xandra do
 
   These are the Xandra-specific options supported by this function:
 
-    * `:host` - (binary) the host of the Cassandra server to connect
-      to. Defaults to `"127.0.0.1"`.
-
-    * `:port` - (integer) the port of the Cassandra server to connect
-      to. Defaults to `9042`.
+    * `:nodes` - (list of strings) the Cassandra nodes to connect
+      to. Defaults to `["127.0.0.1:9042"]`.
 
     * `:compressor` - (module) the compressor module to use for compressing and
       decompressing data. See the "Compression" section in the module
@@ -199,7 +196,8 @@ defmodule Xandra do
   def start_link(options \\ []) when is_list(options) do
     options =
       @default_start_options
-      |> Keyword.merge(validate_start_options(options))
+      |> Keyword.merge(options)
+      |> parse_start_options()
       |> Keyword.put(:prepared_cache, Prepared.Cache.new)
     DBConnection.start_link(Connection, options)
   end
@@ -648,22 +646,32 @@ defmodule Xandra do
     end
   end
 
-  defp validate_start_options(options) do
-    Enum.map(options, fn
-      {:host, host} ->
-        if is_binary(host) do
-          {:host, String.to_charlist(host)}
-        else
-          raise ArgumentError, "expected a string as the value of the :host option, got: #{inspect(host)}"
-        end
-      {:port, port} ->
-        if is_integer(port) do
-          {:port, port}
-        else
-          raise ArgumentError, "expected an integer as the value of the :port option, got: #{inspect(port)}"
-        end
+  defp parse_start_options(options) do
+    cluster? = options[:pool] == Xandra.Cluster
+    Enum.flat_map(options, fn
+      {:nodes, nodes} when cluster? ->
+        [nodes: Enum.map(nodes, &parse_node/1)]
+      {:nodes, [string]} ->
+        {address, port} = parse_node(string)
+        [address: address, port: port]
+      {:nodes, _nodes} ->
+        raise ArgumentError, "multi-node use requires the :pool option to be set to Xandra.Cluster"
       {_key, _value} = option ->
-        option
+        [option]
     end)
+  end
+
+  defp parse_node(string) do
+    case String.split(string, ":", parts: 2) do
+      [address, port] ->
+        case Integer.parse(port) do
+          {port, ""} ->
+            {String.to_charlist(address), port}
+          _ ->
+            raise ArgumentError, "invalid item #{inspect(string)} in the :nodes option"
+        end
+      [address] ->
+        {String.to_charlist(address), @default_port}
+    end
   end
 end
