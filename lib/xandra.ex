@@ -116,7 +116,7 @@ defmodule Xandra do
 
   @default_port 9042
   @default_start_options [
-    nodes: ["127.0.0.1:#{@default_port}"],
+    nodes: ["127.0.0.1"],
     idle_timeout: 30_000,
   ]
 
@@ -131,11 +131,8 @@ defmodule Xandra do
 
   These are the Xandra-specific options supported by this function:
 
-    * `:host` - (binary) the host of the Cassandra server to connect
-      to. Defaults to `"127.0.0.1"`.
-
-    * `:port` - (integer) the port of the Cassandra server to connect
-      to. Defaults to `9042`.
+    * `:nodes` - (list of strings) the Cassandra nodes to connect
+      to. Defaults to `["127.0.0.1:9042"]`.
 
     * `:compressor` - (module) the compressor module to use for compressing and
       decompressing data. See the "Compression" section in the module

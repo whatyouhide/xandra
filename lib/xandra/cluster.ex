@@ -41,7 +41,7 @@ defmodule Xandra.Cluster do
           {:ok, {pool_module, pool_ref}, module, state}
         end
       {:error, :empty} ->
-        {:error, Error.exception(message: "not connected to any of nodes")}
+        {:error, Error.exception(message: "not connected to any of the nodes")}
     end
   end
 
