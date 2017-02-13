@@ -1,7 +1,7 @@
 defmodule Xandra.Connection.Utils do
   @moduledoc false
 
-  alias Xandra.{Connection.Error, Frame, Protocol}
+  alias Xandra.{ConnectionError, Frame, Protocol}
 
   @spec recv_frame(:gen_tcp.socket, nil | module) ::
         {:ok, Frame.t} | {:error, :closed | :inet.posix}
@@ -19,7 +19,7 @@ defmodule Xandra.Connection.Utils do
     end
   end
 
-  @spec request_options(:gen_tcp.socket) :: {:ok, term} | {:error, Error.t}
+  @spec request_options(:gen_tcp.socket) :: {:ok, term} | {:error, ConnectionError.t}
   def request_options(socket) do
     payload =
       Frame.new(:options)
@@ -31,11 +31,11 @@ defmodule Xandra.Connection.Utils do
       {:ok, Protocol.decode_response(frame)}
     else
       {:error, reason} ->
-        {:error, Error.new("request options", reason)}
+        {:error, ConnectionError.new("request options", reason)}
     end
   end
 
-  @spec startup_connection(:gen_tcp.socket, map, nil | module) :: :ok | {:error, Error.t}
+  @spec startup_connection(:gen_tcp.socket, map, nil | module) :: :ok | {:error, ConnectionError.t}
   def startup_connection(socket, requested_options, compressor \\ nil)
       when is_map(requested_options) and is_atom(compressor) do
     # We have to encode the STARTUP frame without compression as in this frame
@@ -53,7 +53,7 @@ defmodule Xandra.Connection.Utils do
        :ok
     else
       {:error, reason} ->
-        {:error, Error.new("startup connection", reason)}
+        {:error, ConnectionError.new("startup connection", reason)}
     end
   end
 end

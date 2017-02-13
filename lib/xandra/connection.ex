@@ -3,8 +3,8 @@ defmodule Xandra.Connection do
 
   use DBConnection
 
-  alias Xandra.{Prepared, Frame, Protocol}
-  alias __MODULE__.{Error, Utils}
+  alias Xandra.{ConnectionError, Prepared, Frame, Protocol}
+  alias __MODULE__.Utils
 
   @default_timeout 5_000
   @default_socket_options [packet: :raw, mode: :binary, active: false]
@@ -29,7 +29,7 @@ defmodule Xandra.Connection do
             error
         end
       {:error, reason} ->
-        {:error, Error.new("TCP connect", reason)}
+        {:error, ConnectionError.new("TCP connect", reason)}
     end
   end
 
@@ -61,7 +61,7 @@ defmodule Xandra.Connection do
           {:ok, prepared, state}
         else
           {:error, reason} ->
-            {:disconnect, Error.new("prepare", reason), state}
+            {:disconnect, ConnectionError.new("prepare", reason), state}
           %Xandra.Error{} = reason ->
             {:error, reason, state}
         end
@@ -76,7 +76,7 @@ defmodule Xandra.Connection do
       {:ok, frame, state}
     else
       {:error, reason} ->
-        {:disconnect, Error.new("execute", reason), state}
+        {:disconnect, ConnectionError.new("execute", reason), state}
     end
   end
 
@@ -92,8 +92,8 @@ defmodule Xandra.Connection do
     case Utils.request_options(socket) do
       {:ok, _options} ->
         {:ok, state}
-      {:error, %Error{reason: reason}} ->
-        {:disconnect, Error.new("ping", reason), state}
+      {:error, %ConnectionError{reason: reason}} ->
+        {:disconnect, ConnectionError.new("ping", reason), state}
     end
   end
 
@@ -118,7 +118,7 @@ defmodule Xandra.Connection do
         requested_options = Map.put(requested_options, "COMPRESSION", compression_algorithm)
         Utils.startup_connection(socket, requested_options, compressor)
       else
-        {:error, Error.new("startup connection", {:unsupported_compression, compressor.algorithm()})}
+        {:error, ConnectionError.new("startup connection", {:unsupported_compression, compressor.algorithm()})}
       end
     else
       Utils.startup_connection(socket, requested_options, compressor)

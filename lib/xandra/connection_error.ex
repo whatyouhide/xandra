@@ -1,4 +1,4 @@
-defmodule Xandra.Connection.Error do
+defmodule Xandra.ConnectionError do
   @moduledoc """
   An exception struct that represents an error in the connection to the
   Cassandra server.
@@ -34,7 +34,7 @@ defmodule Xandra.Connection.Error do
   end
 
   def message(%__MODULE__{} = exception) do
-    "on action \"#{exception.action}\": #{format_reason(exception.reason)}"
+    "action \"#{exception.action}\" failed with reason: #{format_reason(exception.reason)}"
   end
 
   defp format_reason(reason) do

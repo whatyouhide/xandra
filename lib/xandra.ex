@@ -19,11 +19,11 @@ defmodule Xandra do
       error. Examples of these errors are syntax errors in queries, non-existent
       tables, and so on. See `Xandra.Error` for more information.
 
-    * a `Xandra.Connection.Error` struct: such structs represent errors in the
+    * a `Xandra.ConnectionError` struct: such structs represent errors in the
       communication with the Cassandra server. For example, if the Cassandra
       server dies while the connection is waiting for a response from the
-      server, a `Xandra.Connection.Error` error will be returned. See
-      `Xandra.Connection.Error` for more information.
+      server, a `Xandra.ConnectionError` error will be returned. See
+      `Xandra.ConnectionError` for more information.
 
   ## Parameters, encoding, and types
 
@@ -110,7 +110,7 @@ defmodule Xandra do
 
   @type statement :: String.t
   @type values :: list | map
-  @type error :: Error.t | Connection.Error.t
+  @type error :: Error.t | ConnectionError.t
   @type result :: Xandra.Void.t | Page.t | Xandra.SetKeyspace.t | Xandra.SchemaChange.t
   @type conn :: DBConnection.conn
 
@@ -261,7 +261,7 @@ defmodule Xandra do
   batch (see `Xandra.Batch`).
 
   Errors returned by this function can be either `Xandra.Error` or
-  `Xandra.Connection.Error` structs. See the module documentation for more
+  `Xandra.ConnectionError` structs. See the module documentation for more
   information about errors.
 
   Supports all the options supported by `DBConnection.prepare/3`, and the
@@ -348,7 +348,7 @@ defmodule Xandra do
   structs.
 
   When `{:error, error}` is returned, `error` can be either a `Xandra.Error` or
-  a `Xandra.Connection.Error` struct. See the module documentation for more
+  a `Xandra.ConnectionError` struct. See the module documentation for more
   information on errors.
 
   ## Options for batch queries
