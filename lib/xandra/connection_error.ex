@@ -33,8 +33,16 @@ defmodule Xandra.ConnectionError do
     %__MODULE__{action: action, reason: reason}
   end
 
-  def message(%__MODULE__{} = exception) do
-    "action \"#{exception.action}\" failed with reason: #{format_reason(exception.reason)}"
+  def message(%__MODULE__{action: action, reason: reason}) do
+    "action \"#{action}\" failed with reason: #{format_reason(reason)}"
+  end
+
+  defp format_reason({:unsupported_compression, algorithm}) do
+    "unsupported compression algorithm #{inspect(algorithm)}"
+  end
+
+  defp format_reason(:closed) do
+    "socket is closed"
   end
 
   defp format_reason(reason) do
