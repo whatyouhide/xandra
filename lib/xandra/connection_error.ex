@@ -37,6 +37,10 @@ defmodule Xandra.ConnectionError do
     "action \"#{exception.action}\" failed with reason: #{format_reason(exception.reason)}"
   end
 
+  defp format_reason({:cluster, :not_connected}) do
+    "not connected to any of the nodes"
+  end
+
   defp format_reason(reason) do
     case :inet.format_error(reason) do
       'unknown POSIX error' -> inspect(reason)
