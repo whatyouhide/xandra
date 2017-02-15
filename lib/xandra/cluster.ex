@@ -5,7 +5,8 @@ defmodule Xandra.Cluster do
 
   @default_pool_module DBConnection.Connection
 
-  alias __MODULE__.{ControlConnection, StatusChange, Error}
+  alias __MODULE__.{ControlConnection, StatusChange}
+  alias Xandra.ConnectionError
 
   require Logger
 
@@ -42,7 +43,8 @@ defmodule Xandra.Cluster do
           {:ok, {pool_module, pool_ref}, module, state}
         end
       {:error, :empty} ->
-        {:error, Error.exception(message: "not connected to any of the nodes")}
+        action = "checkout from cluster #{inspect(name())}"
+        {:error, ConnectionError.new(action, {:cluster, :not_connected})}
     end
   end
 
