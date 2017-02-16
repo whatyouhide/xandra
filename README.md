@@ -11,7 +11,7 @@ Xandra is a [Cassandra][cassandra] driver built natively in Elixir and focused o
 
 ## Features
 
-This library is in its early stages when it comes to features, but we're already successfully using it in production at [Football Addicts][football-addicts]. Currently, the supported features are:
+This library is in its early stages when it comes to features, but we're already [successfully using it in production at Football Addicts][production-use]. Currently, the supported features are:
 
   * performing queries (including parameterized queries) on the Cassandra database
   * connection pooling
@@ -92,4 +92,4 @@ Xandra is released under the ISC license, see the [LICENSE](LICENSE) file.
 
 [documentation]: https://hexdocs.pm/xandra
 [cassandra]: http://cassandra.apache.org
-[football-addicts]: https://www.footballaddicts.com
+[production-use]: http://tech.footballaddicts.com/blog/the-pursuit-of-instant-pushes
