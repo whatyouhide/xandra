@@ -27,7 +27,7 @@ defmodule Xandra.Cluster do
   node:
 
       Xandra.start_link([
-        nodes: ["cassandra1.example.com", "cassandra2.example.com"],
+        nodes: ["cassandra1.example.net", "cassandra2.example.net"],
         pool: Xandra.Cluster,
         underlying_pool: DBConnection.Poolboy,
         pool_size: 10,

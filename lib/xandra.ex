@@ -139,9 +139,9 @@ defmodule Xandra do
 
     * `:nodes` - (list of strings) the Cassandra nodes to connect to. Defaults
       to `["127.0.0.1:9042"]`. Each node in the list has to be in the form
-      `"HOST:PORT"` or in the form `"HOST"`: if the latter is used, the default
-      port (`#{@default_port}`) will be used for that node. This option has to
-      contain only one node unless the `:pool` option is set to
+      `"ADDRESS:PORT"` or in the form `"ADDRESS"`: if the latter is used, the
+      default port (`#{@default_port}`) will be used for that node. This option
+      must contain only one node unless the `:pool` option is set to
       `Xandra.Cluster`; see the documentation for `Xandra.Cluster` for more
       information.
 
