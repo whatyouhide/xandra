@@ -16,6 +16,11 @@ defmodule Xandra.ConnectionError do
       negotiating the connection algorithm fails because such compressor module
       uses an algorithm that the Cassandra server does not support.
 
+    * `{:cluster, :not_connected}` - this happens when a `Xandra.Cluster`-based
+      connection is not connected to any node (for example, because all the
+      specified nodes are currently down). See the documentation for
+      `Xandra.Cluster` for more information.
+
   Since this struct is an exception, it is possible to raise it with
   `Kernel.raise/1`. If the intent is to format connection errors as strings (for
   example, for logging purposes), it is possible to use `Exception.message/1` to
