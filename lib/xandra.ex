@@ -91,6 +91,12 @@ defmodule Xandra do
   `start_link/2`. These options are described in the documentation for
   `DBConnection.start_link/2`.
 
+  ## Clustering
+
+  Xandra supports connecting to multiple nodes in a Cassandra cluster and
+  executing queries on different nodes based on load balancing strategies. See
+  the documentation for `Xandra.Cluster` for more information.
+
   ## Compression
 
   Xandra supports compression. To inform the Cassandra server that the
@@ -131,8 +137,13 @@ defmodule Xandra do
 
   These are the Xandra-specific options supported by this function:
 
-    * `:nodes` - (list of strings) the Cassandra nodes to connect
-      to. Defaults to `["127.0.0.1:9042"]`.
+    * `:nodes` - (list of strings) the Cassandra nodes to connect to. Defaults
+      to `["127.0.0.1:9042"]`. Each node in the list has to be in the form
+      `"HOST:PORT"` or in the form `"HOST"`: if the latter is used, the default
+      port (`#{@default_port}`) will be used for that node. This option has to
+      contain only one node unless the `:pool` option is set to
+      `Xandra.Cluster`; see the documentation for `Xandra.Cluster` for more
+      information.
 
     * `:compressor` - (module) the compressor module to use for compressing and
       decompressing data. See the "Compression" section in the module

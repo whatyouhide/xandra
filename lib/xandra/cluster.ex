@@ -1,4 +1,72 @@
 defmodule Xandra.Cluster do
+  @moduledoc """
+  A `DBConnection.Pool` pool that implements clustering support.
+
+  This module implements a `DBConnection.Pool` pool that implements support for
+  connecting to multiple nodes and executing queries on such nodes based on a
+  given "strategy".
+
+  ## Usage
+
+  To use this pool, the `:pool` option in `Xandra.start_link/1` needs to be set
+  to `Xandra.Cluster`. `Xandra.Cluster` is a "proxy" pool in the sense that it
+  only proxies requests to other underlying pools of Xandra connections; the
+  underlying pool can be specified with the `:underlying_pool` option. When you
+  start a `Xandra.Cluster` connection, it will start one pool
+  (`:underlying_pool`) of connections to each of the nodes specified in
+  `:nodes`. The default `:underlying_pool` is `DBConnection.Connection`, which
+  means by default only a single connection to each specified node will be
+  established.
+
+  Note that regardless of the underlying pool, `Xandra.Cluster` will establish
+  one extra connection to each node in the specified list of nodes (used for
+  internal purposes).
+
+  Here is an example of how one could use `Xandra.Cluster` to connect to
+  multiple nodes, while using `:poolboy` for pooling the connections to each
+  node:
+
+      Xandra.start_link([
+        nodes: ["cassandra1.example.com", "cassandra2.example.com"],
+        pool: Xandra.Cluster,
+        underlying_pool: DBConnection.Poolboy,
+        pool_size: 10,
+      ])
+
+  The code above will establish a pool of ten connections to each of the nodes
+  specified in `:nodes`, for a total of twenty connections going out of the
+  current machine, plus two extra connections (one per node) used for internal
+  purposes.
+
+  Once a `Xandra.Cluster` pool is started, queries executed through such pool
+  will be "routed" to nodes in the provided list of nodes; see the "Load
+  balancing strategies" section below.
+
+  ## Load balancing strategies
+
+  For now, the only load balancing "strategy" implemented is randomized access:
+  when you execute a query against a `Xandra.Cluster` connection, it will choose
+  one of connected nodes at random and execute the query on that node.
+
+  ## Disconnections and reconnections
+
+  `Xandra.Cluster` also supports nodes disconnecting and reconnecting: if Xandra
+  detects one of the nodes in `:nodes` going down, it will not execute queries
+  against it anymore, but will start executing queries on it as soon as it
+  detects such node is back up.
+
+  ## Options
+
+  These are the options that `Xandra.start_link/1` accepts when
+  `pool: Xandra.Cluster` is passed to it:
+
+    * `:underlying_pool` - (module) the `DBConnection.Pool` pool used to pool
+      connections to each of the specified nodes.
+
+  To pass options to the underlying pool, you can just pass them alongside other
+  options to `Xandra.start_link/1`.
+  """
+
   use GenServer
 
   @behaviour DBConnection.Pool
