@@ -55,6 +55,10 @@ defmodule Xandra.Cluster do
   against it anymore, but will start executing queries on it as soon as it
   detects such node is back up.
 
+  If all specified nodes happen to be down when a query is executed, a
+  `Xandra.ConnectionError` with reason `{:cluster, :not_connected}` will be
+  returned.
+
   ## Options
 
   These are the options that `Xandra.start_link/1` accepts when
