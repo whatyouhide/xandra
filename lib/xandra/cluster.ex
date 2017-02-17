@@ -44,7 +44,7 @@ defmodule Xandra.Cluster do
 
   ## Load balancing strategies
 
-  For now, the only load balancing "strategy" implemented is randomiz choice of
+  For now, the only load balancing "strategy" implemented is random choice of
   nodes: when you execute a query against a `Xandra.Cluster` connection, it will
   choose one of connected nodes at random and execute the query on that node.
 
