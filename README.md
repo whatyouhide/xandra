@@ -20,7 +20,7 @@ This library is in its early stages when it comes to features, but we're already
   * batch queries
   * page streaming
   * compression
-  * clustering (basic support, only randomized access to nodes for now)
+  * clustering (only random load balancing for now)
 
 In the future, we plan to add several more features, like more strategies for clustering and query retrying strategies. See [the documentation][documentation] for detailed explanation of how the supported features work.
 
