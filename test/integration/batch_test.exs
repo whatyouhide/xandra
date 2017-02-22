@@ -74,6 +74,13 @@ defmodule BatchTest do
     assert {:error, %Error{reason: :invalid}} = Xandra.execute(conn, invalid_batch)
   end
 
+  test "a friendly error is raised if a query uses named parameters in a batch" do
+    assert_raise ArgumentError, ~r/queries inside batch queries only support/, fn ->
+      batch = Batch.new
+      Batch.add(batch, "SELECT * FROM users WHERE name = :name", %{"name" => "Meg"})
+    end
+  end
+
   test "empty batch", %{conn: conn} do
     assert {:ok, %Void{}} = Xandra.execute(conn, Batch.new())
   end
