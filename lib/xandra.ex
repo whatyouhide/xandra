@@ -579,23 +579,26 @@ defmodule Xandra do
 
   def execute(conn, %Prepared{} = prepared, params, options) do
     options = put_paging_state(options)
-    case DBConnection.execute(conn, prepared, params, options) do
-      {:ok, %Error{reason: :unprepared}} ->
-        # We can ignore the newly returned prepared query since it will have the
-        # same id of the query we are repreparing.
-        case DBConnection.prepare_execute(conn, prepared, params, Keyword.put(options, :force, true)) do
-          {:ok, _prepared, %Error{} = error} ->
-            {:error, error}
-          {:ok, _prepared, result} ->
-            {:ok, result}
-          {:error, _reason} = error ->
-            error
-        end
-      {:ok, %Error{} = error} ->
-        {:error, error}
-      other ->
-        other
+    executor = fn conn ->
+      case DBConnection.execute(conn, prepared, params, options) do
+        {:ok, %Error{reason: :unprepared}} ->
+          # We can ignore the newly returned prepared query since it will have the
+          # same id of the query we are repreparing.
+          case DBConnection.prepare_execute(conn, prepared, params, Keyword.put(options, :force, true)) do
+            {:ok, _prepared, %Error{} = error} ->
+              {:error, error}
+            {:ok, _prepared, result} ->
+              {:ok, result}
+            {:error, _reason} = error ->
+              error
+          end
+        {:ok, %Error{} = error} ->
+          {:error, error}
+        other ->
+          other
+      end
     end
+    DBConnection.run(conn, executor, options)
   end
 
   @doc """
