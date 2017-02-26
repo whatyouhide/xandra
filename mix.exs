@@ -37,7 +37,7 @@ defmodule Xandra.Mixfile do
   end
 
   defp deps() do
-    [{:db_connection, "~> 1.0.0"},
+    [{:db_connection, "~> 1.0"},
      {:snappy, github: "skunkwerks/snappy-erlang-nif", only: [:dev, :test]},
      {:ex_doc, "~> 0.14", only: :dev}]
   end
