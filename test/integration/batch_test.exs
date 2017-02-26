@@ -74,10 +74,25 @@ defmodule BatchTest do
     assert {:error, %Error{reason: :invalid}} = Xandra.execute(conn, invalid_batch)
   end
 
-  test "a friendly error is raised if a query uses named parameters in a batch" do
-    assert_raise ArgumentError, ~r/queries inside batch queries only support/, fn ->
-      batch = Batch.new
-      Batch.add(batch, "SELECT * FROM users WHERE name = :name", %{"name" => "Meg"})
+  test "named params are supported in prepared queries even if they aren't in the protocol", %{conn: conn} do
+    statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
+    prepared_insert = Xandra.prepare!(conn, statement)
+
+    batch = Batch.add(Batch.new(), prepared_insert, %{"id" => 1, "name" => "Beth"})
+
+    assert {:ok, %Void{}} = Xandra.execute(conn, batch)
+
+    result = Xandra.execute!(conn, "SELECT name FROM users WHERE id = 1")
+    assert Enum.to_list(result) == [
+      %{"name" => "Beth"},
+    ]
+  end
+
+  test "a friendly error is raised if named parameters are used with simple queries" do
+    message = ~r/simple queries \(not prepared\) inside batch queries only support positional/
+    assert_raise ArgumentError, message, fn ->
+      statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
+      Batch.add(Batch.new(), statement, %{"id" => 1, "name" => "Summer"})
     end
   end
 

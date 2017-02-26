@@ -74,10 +74,21 @@ defmodule Xandra.Batch do
     add_query(batch, prepared, values)
   end
 
+  def add(%__MODULE__{} = batch, %Prepared{} = prepared, values) when is_map(values) do
+    positional_values = Enum.map(prepared.bound_columns, fn {_keyspace, _table, name, _type} ->
+      case Map.fetch(values, name) do
+        {:ok, value} -> value
+        :error -> raise "missing named parameter #{inspect(name)} for prepared query in batch"
+      end
+    end)
+
+    add(batch, prepared, positional_values)
+  end
+
   def add(%__MODULE__{}, _query, values) when is_map(values) do
     raise ArgumentError,
-      "queries inside batch queries only support positional parameters and " <>
-      "not named parameters (because of a Cassandra limitation), got: " <>
+      "simple queries (not prepared) inside batch queries only support positional " <>
+      "parameters and not named parameters (because of a Cassandra limitation), got: " <>
       inspect(values)
   end
 
