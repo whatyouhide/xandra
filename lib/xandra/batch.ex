@@ -43,9 +43,10 @@ defmodule Xandra.Batch do
   `query` has to be either a simple query (statement) or a prepared query. Note
   that parameters have to be added alongside their corresponding query when
   adding a query to a batch. In contrast with functions like `Xandra.execute/4`,
-  queries in batch queries only support positional parameters and **do not**
-  support named parameters; this is a current Cassandra limitation. If a map of
-  named parameters is passed, an `ArgumentError` exception is raised.
+  simple queries in batch queries only support positional parameters and **do
+  not** support named parameters; this is a current Cassandra limitation. If a
+  map of named parameters is passed alongside a simple query, an `ArgumentError`
+  exception is raised. Named parameters are supported with prepared queries.
 
   ## Examples
 
