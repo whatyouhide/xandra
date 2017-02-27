@@ -74,6 +74,38 @@ defmodule BatchTest do
     assert {:error, %Error{reason: :invalid}} = Xandra.execute(conn, invalid_batch)
   end
 
+  test "named params are supported in prepared queries even if they aren't in the protocol", %{conn: conn} do
+    statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
+    prepared_insert = Xandra.prepare!(conn, statement)
+
+    batch = Batch.add(Batch.new(), prepared_insert, %{"id" => 1, "name" => "Beth"})
+
+    assert {:ok, %Void{}} = Xandra.execute(conn, batch)
+
+    result = Xandra.execute!(conn, "SELECT name FROM users WHERE id = 1")
+    assert Enum.to_list(result) == [
+      %{"name" => "Beth"},
+    ]
+  end
+
+  test "an error is raised if named parameters are used with simple queries" do
+    message = ~r/non-prepared statements inside batch queries only support positional/
+    assert_raise ArgumentError, message, fn ->
+      statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
+      Batch.add(Batch.new(), statement, %{"id" => 1, "name" => "Summer"})
+    end
+  end
+
+  test "an error is raised if a named parameter is missing for prepared queries", %{conn: conn} do
+    message = "missing named parameter \"name\" for prepared query, got: %{\"id\" => 1}"
+    assert_raise ArgumentError, message, fn ->
+      statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
+      prepared_insert = Xandra.prepare!(conn, statement)
+      batch = Batch.add(Batch.new(), prepared_insert, %{"id" => 1})
+      Xandra.execute(conn, batch)
+    end
+  end
+
   test "empty batch", %{conn: conn} do
     assert {:ok, %Void{}} = Xandra.execute(conn, Batch.new())
   end

@@ -48,4 +48,13 @@ defmodule PreparedTest do
     prepared = Xandra.prepare!(conn, "SELECT * FROM users")
     assert inspect(prepared) == ~s(#Xandra.Prepared<"SELECT * FROM users">)
   end
+
+  test "missing named params raise an error", %{conn: conn} do
+    message = "missing named parameter \"name\" for prepared query, got: %{\"code\" => 1}"
+    assert_raise ArgumentError, message, fn ->
+      statement = "INSERT INTO users (code, name) VALUES (:code, :name)"
+      prepared_insert = Xandra.prepare!(conn, statement)
+      Xandra.execute(conn, prepared_insert, %{"code" => 1})
+    end
+  end
 end
