@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.1
+
+- Made statement re-preparing happen on the same connection.
+
 ## v0.3.0
 
 - Renamed `Xandra.Connection.Error` to `Xandra.ConnectionError`.
