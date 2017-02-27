@@ -645,6 +645,34 @@ defmodule Xandra do
     end
   end
 
+  @doc """
+  Acquires a locked connection from `conn` and executes `fun` passing such
+  connection as the argument.
+
+  All options are forwarded to `DBConnection.run/3` (and thus some of them to
+  the underlying pool).
+
+  The return value of this function is the return value of `fun`.
+
+  If `fun` takes too long to execute (see the `:timeout` option), an error will
+  be logged but nothing will be raised; for this reason, consider the scenario
+  where the acquired connection disconnects in the middle of `fun`.
+
+  ## Examples
+
+  Preparing a query and executing it on the same connection:
+
+      Xandra.run(conn, fn conn ->
+        prepared = Xandra.prepare!(conn, "INSERT INTO users (name, age) VALUES (:name, :age)")
+        Xandra.execute!(conn, prepared, %{"name" => "John", "age" => 84})
+      end)
+
+  """
+  @spec run(conn, Keyword.t, (conn -> result)) :: result when result: var
+  def run(conn, options \\ [], fun) do
+    DBConnection.run(conn, fun, options)
+  end
+
   defp put_paging_state(options) do
     case Keyword.pop(options, :cursor) do
       {%Page{paging_state: nil}, _options} ->
