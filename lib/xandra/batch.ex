@@ -81,7 +81,7 @@ defmodule Xandra.Batch do
   def add(%__MODULE__{}, _query, values) when is_map(values) do
     raise ArgumentError,
       "non-prepared statements inside batch queries only support positional " <>
-      "parameters (it's a Cassandra limitation), got: #{inspect(values)}"
+      "parameters (this is a current Cassandra limitation), got: #{inspect(values)}"
   end
 
   defp add_query(batch, query, values) do

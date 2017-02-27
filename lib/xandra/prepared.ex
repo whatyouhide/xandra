@@ -14,16 +14,16 @@ defmodule Xandra.Prepared do
   }
 
   @doc false
-  def rewrite_named_params_to_positional(%__MODULE__{} = prepared, named_params)
-      when is_map(named_params) do
+  def rewrite_named_params_to_positional(%__MODULE__{} = prepared, params)
+      when is_map(params) do
     Enum.map(prepared.bound_columns, fn {_keyspace, _table, name, _type} ->
-      case Map.fetch(named_params, name) do
+      case Map.fetch(params, name) do
         {:ok, value} ->
           value
         :error ->
           raise ArgumentError,
             "missing named parameter #{inspect(name)} for prepared query, " <>
-            "got: #{inspect(named_params)}"
+            "got: #{inspect(params)}"
       end
     end)
   end
