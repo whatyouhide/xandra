@@ -71,19 +71,8 @@ defmodule Xandra.Batch do
   end
 
   def add(%__MODULE__{} = batch, %Prepared{} = prepared, values)
-      when is_list(values) do
-    add_query(batch, prepared, values)
-  end
-
-  def add(%__MODULE__{} = batch, %Prepared{} = prepared, values) when is_map(values) do
-    positional_values = Enum.map(prepared.bound_columns, fn {_keyspace, _table, name, _type} ->
-      case Map.fetch(values, name) do
-        {:ok, value} -> value
-        :error -> raise "missing named parameter #{inspect(name)} for prepared query in batch"
-      end
-    end)
-
-    add(batch, prepared, positional_values)
+      when is_list(values) or is_map(values) do
+    add_query(batch, prepared, Prepared.normalize_params_to_positional(prepared, values))
   end
 
   def add(%__MODULE__{}, _query, values) when is_map(values) do

@@ -96,6 +96,16 @@ defmodule BatchTest do
     end
   end
 
+  test "an error is raised if a named parameter is missing for prepared queries", %{conn: conn} do
+    message = ~r/missing named parameter "name" for prepared query #Xandra\.Prepared<.*>/
+    assert_raise ArgumentError, message, fn ->
+      statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
+      prepared_insert = Xandra.prepare!(conn, statement)
+      batch = Batch.add(Batch.new(), prepared_insert, %{"id" => 1})
+      Xandra.execute(conn, batch)
+    end
+  end
+
   test "empty batch", %{conn: conn} do
     assert {:ok, %Void{}} = Xandra.execute(conn, Batch.new())
   end
