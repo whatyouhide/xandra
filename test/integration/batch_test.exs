@@ -88,8 +88,8 @@ defmodule BatchTest do
     ]
   end
 
-  test "a friendly error is raised if named parameters are used with simple queries" do
-    message = ~r/simple queries \(not prepared\) inside batch queries only support positional/
+  test "an error is raised if named parameters are used with simple queries" do
+    message = ~r/non-prepared statements inside batch queries only support positional/
     assert_raise ArgumentError, message, fn ->
       statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
       Batch.add(Batch.new(), statement, %{"id" => 1, "name" => "Summer"})
@@ -97,7 +97,7 @@ defmodule BatchTest do
   end
 
   test "an error is raised if a named parameter is missing for prepared queries", %{conn: conn} do
-    message = ~r/missing named parameter "name" for prepared query #Xandra\.Prepared<.*>/
+    message = "missing named parameter \"name\" for prepared query, got: %{\"id\" => 1}"
     assert_raise ArgumentError, message, fn ->
       statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
       prepared_insert = Xandra.prepare!(conn, statement)

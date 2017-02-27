@@ -70,16 +70,18 @@ defmodule Xandra.Batch do
     add_query(batch, %Simple{statement: statement}, values)
   end
 
-  def add(%__MODULE__{} = batch, %Prepared{} = prepared, values)
-      when is_list(values) or is_map(values) do
-    add_query(batch, prepared, Prepared.normalize_params_to_positional(prepared, values))
+  def add(%__MODULE__{} = batch, %Prepared{} = prepared, values) when is_map(values) do
+    add_query(batch, prepared, Prepared.rewrite_named_params_to_positional(prepared, values))
+  end
+
+  def add(%__MODULE__{} = batch, %Prepared{} = prepared, values) when is_list(values) do
+    add_query(batch, prepared, values)
   end
 
   def add(%__MODULE__{}, _query, values) when is_map(values) do
     raise ArgumentError,
-      "simple queries (not prepared) inside batch queries only support positional " <>
-      "parameters and not named parameters (because of a Cassandra limitation), got: " <>
-      inspect(values)
+      "non-prepared statements inside batch queries only support positional " <>
+      "parameters (it's a Cassandra limitation), got: #{inspect(values)}"
   end
 
   defp add_query(batch, query, values) do
