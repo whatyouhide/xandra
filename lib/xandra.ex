@@ -665,7 +665,7 @@ defmodule Xandra do
 
   """
   @spec run(conn, Keyword.t, (conn -> result)) :: result when result: var
-  def run(conn, options \\ [], fun) do
+  def run(conn, options \\ [], fun) when is_function(fun, 1) do
     DBConnection.run(conn, fun, options)
   end
 
