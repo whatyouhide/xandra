@@ -654,10 +654,6 @@ defmodule Xandra do
 
   The return value of this function is the return value of `fun`.
 
-  If `fun` takes too long to execute (see the `:timeout` option), an error will
-  be logged but nothing will be raised; for this reason, consider the scenario
-  where the acquired connection disconnects in the middle of `fun`.
-
   ## Examples
 
   Preparing a query and executing it on the same connection:
