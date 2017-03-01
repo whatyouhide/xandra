@@ -579,7 +579,7 @@ defmodule Xandra do
 
   def execute(conn, %Prepared{} = prepared, params, options) do
     options = put_paging_state(options)
-    executor = fn conn ->
+    run(conn, options, fn conn ->
       case DBConnection.execute(conn, prepared, params, options) do
         {:ok, %Error{reason: :unprepared}} ->
           # We can ignore the newly returned prepared query since it will have the
@@ -597,8 +597,7 @@ defmodule Xandra do
         other ->
           other
       end
-    end
-    DBConnection.run(conn, executor, options)
+    end)
   end
 
   @doc """
