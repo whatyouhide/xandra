@@ -20,8 +20,16 @@ defmodule Xandra.RetryStrategy do
 
   @type strategy :: term
 
-  @callback init(options :: Keyword.t) :: strategy
+  @callback new(options :: Keyword.t) :: strategy
 
-  @callback handle_retry(error :: term, options :: Keyword.t, strategy) ::
-            :ignore | :error | {:retry, new_options :: Keyword.t, new_strategy :: strategy}
+  @callback retry(error :: term, options :: Keyword.t, strategy) ::
+            :error | {:retry, new_options :: Keyword.t, new_strategy :: strategy}
+end
+
+defmodule Xandra.RetryStrategy.Fallthrough do
+  @behaviour Xandra.RetryStrategy
+
+  def new(_options), do: :no_state
+
+  def retry(_error, _options, :no_state), do: :error
 end
