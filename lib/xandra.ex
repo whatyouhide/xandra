@@ -698,6 +698,10 @@ defmodule Xandra do
         {:retry, new_options, new_retry_state} ->
           new_options = Keyword.put(new_options, :current_retry_state, new_retry_state)
           execute_with_retrying(new_options, execute_fun)
+        other ->
+          raise ArgumentError,
+            "invalid return value from retry strategy #{inspect(retry_strategy_mod)} " <>
+            "with strategy #{inspect(retry_strategy)}: #{inspect(other)}"
       end
     end
   end
