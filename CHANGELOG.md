@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.3.2
+
+- Added support for named params for prepared queries in batches and started raising an explanatory error message if named params are used in simple queries in batches.
+- Added `Xandra.run/3` to execute a function with a single Xandra connection checked out from the pool.
+
 ## v0.3.1
 
 - Made statement re-preparing happen on the same connection.
