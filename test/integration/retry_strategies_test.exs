@@ -3,27 +3,6 @@ defmodule Xandra.RetryStrategiesTest do
 
   alias Xandra.Error
 
-  test "ignoring errors", %{conn: conn} do
-    defmodule IgnoreStrategy do
-      @behaviour Xandra.RetryStrategy
-
-      def init(_opts), do: :ok
-
-      def handle_retry(error, _options, :ok) do
-        send(self(), {:retrying, error})
-        :ignore
-      end
-    end
-
-    assert Xandra.execute!(conn, "USE nonexistent_keyspace", [], retry_strategy: IgnoreStrategy) ==
-           :failed
-
-    assert_received {:retrying, %Error{reason: :invalid}}
-  after
-    :code.delete(IgnoreStrategy)
-    :code.purge(IgnoreStrategy)
-  end
-
   test "strategy that retries for a fixed amount of times", %{conn: conn} do
     defmodule CounterStrategy do
       @behaviour Xandra.RetryStrategy

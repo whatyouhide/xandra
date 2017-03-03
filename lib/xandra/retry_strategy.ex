@@ -1,5 +1,7 @@
 defmodule Xandra.RetryStrategy do
   @moduledoc """
+  TODO
+
   ## Examples
 
   This is an example of a retry strategy that retries a fixed number of times before failing:
@@ -27,6 +29,10 @@ defmodule Xandra.RetryStrategy do
 end
 
 defmodule Xandra.RetryStrategy.Fallthrough do
+  @moduledoc """
+  TODO
+  """
+
   @behaviour Xandra.RetryStrategy
 
   def new(_options), do: :no_state
