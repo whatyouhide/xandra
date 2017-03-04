@@ -420,8 +420,18 @@ defmodule Xandra do
   end
 
   def execute(conn, %Batch{} = batch, options) when is_list(options) do
-    with {:ok, %Error{} = error} <- DBConnection.execute(conn, batch, nil, options),
-         do: {:error, error}
+    run(conn, options, fn conn ->
+      case DBConnection.execute(conn, batch, nil, options) do
+        {:ok, %Error{reason: :unprepared}} ->
+          with :ok <- reprepare_queries(conn, batch.queries, options) do
+            execute(conn, batch, options)
+          end
+        {:ok, %Error{} = error} ->
+          {:error, error}
+        other ->
+          other
+      end
+    end)
   end
 
   @doc """
@@ -666,6 +676,20 @@ defmodule Xandra do
   @spec run(conn, Keyword.t, (conn -> result)) :: result when result: var
   def run(conn, options \\ [], fun) when is_function(fun, 1) do
     DBConnection.run(conn, fun, options)
+  end
+
+  defp reprepare_queries(conn, [%Simple{} | rest], options) do
+    reprepare_queries(conn, rest, options)
+  end
+
+  defp reprepare_queries(conn, [%Prepared{statement: statement} | rest], options) do
+    with {:ok, _prepared} <- prepare(conn, statement, Keyword.put(options, :force, true)) do
+      reprepare_queries(conn, rest, options)
+    end
+  end
+
+  defp reprepare_queries(_conn, [], _options) do
+    :ok
   end
 
   defp put_paging_state(options) do
