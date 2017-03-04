@@ -96,7 +96,7 @@ defmodule Xandra.Batch do
       batch
     end
 
-    def encode(batch, _values, options) do
+    def encode(batch, nil, options) do
       batch = %{batch | queries: Enum.reverse(batch.queries)}
 
       Frame.new(:batch)

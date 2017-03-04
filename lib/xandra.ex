@@ -420,7 +420,7 @@ defmodule Xandra do
   end
 
   def execute(conn, %Batch{} = batch, options) when is_list(options) do
-    with {:ok, %Error{} = error} <- DBConnection.execute(conn, batch, :no_params, options),
+    with {:ok, %Error{} = error} <- DBConnection.execute(conn, batch, nil, options),
          do: {:error, error}
   end
 
