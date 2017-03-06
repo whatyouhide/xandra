@@ -97,6 +97,12 @@ defmodule Xandra do
   executing queries on different nodes based on load balancing strategies. See
   the documentation for `Xandra.Cluster` for more information.
 
+  ## Retrying failed queries
+
+  Xandra takes a customizable and extensible approach to retrying failed queries
+  through "retry strategies" that encapsulate the logic for retrying
+  queries. See `Xandra.RetryStrategy` for documentation on retry strategies.
+
   ## Compression
 
   Xandra supports compression. To inform the Cassandra server that the
@@ -420,18 +426,7 @@ defmodule Xandra do
   end
 
   def execute(conn, %Batch{} = batch, options) when is_list(options) do
-    run(conn, options, fn conn ->
-      case DBConnection.execute(conn, batch, nil, options) do
-        {:ok, %Error{reason: :unprepared}} ->
-          with :ok <- reprepare_queries(conn, batch.queries, options) do
-            execute(conn, batch, options)
-          end
-        {:ok, %Error{} = error} ->
-          {:error, error}
-        other ->
-          other
-      end
-    end)
+    execute_with_retrying(conn, batch, nil, options)
   end
 
   @doc """
@@ -497,6 +492,12 @@ defmodule Xandra do
     * `:compressor` - (module) the compressor module used to compress and
       decompress data. See the "Compression" section in the module
       documentation. By default, this option is not present.
+
+    * `:retry_strategy` - (module) the module implementing the
+      `Xandra.RetryStrategy` behaviour that is used in case the query fails to
+      determine whether to retry it or not. See the "Retrying failed queries"
+      section in the module documentation. By default, this option is not
+      present.
 
   ## Parameters
 
@@ -580,34 +581,11 @@ defmodule Xandra do
   def execute(conn, query, params, options)
 
   def execute(conn, statement, params, options) when is_binary(statement) do
-    options = put_paging_state(options)
-    query = %Simple{statement: statement}
-    with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, options) do
-      {:error, error}
-    end
+    execute_with_retrying(conn, %Simple{statement: statement}, params, put_paging_state(options))
   end
 
   def execute(conn, %Prepared{} = prepared, params, options) do
-    options = put_paging_state(options)
-    run(conn, options, fn conn ->
-      case DBConnection.execute(conn, prepared, params, options) do
-        {:ok, %Error{reason: :unprepared}} ->
-          # We can ignore the newly returned prepared query since it will have the
-          # same id of the query we are repreparing.
-          case DBConnection.prepare_execute(conn, prepared, params, Keyword.put(options, :force, true)) do
-            {:ok, _prepared, %Error{} = error} ->
-              {:error, error}
-            {:ok, _prepared, result} ->
-              {:ok, result}
-            {:error, _reason} = error ->
-              error
-          end
-        {:ok, %Error{} = error} ->
-          {:error, error}
-        other ->
-          other
-      end
-    end)
+    execute_with_retrying(conn, prepared, params, put_paging_state(options))
   end
 
   @doc """
@@ -705,6 +683,78 @@ defmodule Xandra do
           "expected a Xandra.Page struct as the value of the :cursor option, " <>
           "got: #{inspect(other)}"
     end
+  end
+
+  defp execute_with_retrying(conn, query, params, options) do
+    case Keyword.pop(options, :retry_strategy) do
+      {nil, options} ->
+        execute_without_retrying(conn, query, params, options)
+      {retry_strategy, options} ->
+        execute_with_retrying(conn, query, params, options, retry_strategy)
+    end
+  end
+
+  defp execute_with_retrying(conn, query, params, options, retry_strategy) do
+    with {:error, reason} <- execute_without_retrying(conn, query, params, options) do
+      {retry_state, options} = Keyword.pop_lazy(options, :retrying_state, fn ->
+        retry_strategy.new(options)
+      end)
+
+      case retry_strategy.retry(reason, options, retry_state) do
+        :error ->
+          {:error, reason}
+        {:retry, new_options, new_retry_state} ->
+          new_options = Keyword.put(new_options, :retrying_state, new_retry_state)
+          execute_with_retrying(conn, query, params, new_options, retry_strategy)
+        other ->
+          raise ArgumentError,
+            "invalid return value #{inspect(other)} from retry strategy #{inspect(retry_strategy)} " <>
+            "with state #{inspect(retry_state)}"
+      end
+    end
+  end
+
+  defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
+    run(conn, options, fn conn ->
+      case DBConnection.execute(conn, batch, nil, options) do
+        {:ok, %Error{reason: :unprepared}} ->
+          with :ok <- reprepare_queries(conn, batch.queries, options) do
+            execute(conn, batch, options)
+          end
+        {:ok, %Error{} = error} ->
+          {:error, error}
+        other ->
+          other
+      end
+    end)
+  end
+
+  defp execute_without_retrying(conn, %Simple{} = query, params, options) do
+    with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, options) do
+      {:error, error}
+    end
+  end
+
+  defp execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
+    run(conn, options, fn conn ->
+      case DBConnection.execute(conn, prepared, params, options) do
+        {:ok, %Error{reason: :unprepared}} ->
+          # We can ignore the newly returned prepared query since it will have the
+          # same id of the query we are repreparing.
+          case DBConnection.prepare_execute(conn, prepared, params, Keyword.put(options, :force, true)) do
+            {:ok, _prepared, %Error{} = error} ->
+              {:error, error}
+            {:ok, _prepared, result} ->
+              {:ok, result}
+            {:error, _reason} = error ->
+              error
+          end
+        {:ok, %Error{} = error} ->
+          {:error, error}
+        other ->
+          other
+      end
+    end)
   end
 
   defp parse_start_options(options) do
