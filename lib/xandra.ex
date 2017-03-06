@@ -685,9 +685,6 @@ defmodule Xandra do
     end
   end
 
-  # This function executes "execute_fun" passing "options" to it, and if
-  # "execute_fun" returns an error, it handle the retrying logic (with retry
-  # strategies).
   defp execute_with_retrying(conn, query, params, options) do
     with {:error, reason} <- execute_without_retrying(conn, query, params, options) do
       retry_strategy = Keyword.get(options, :retry_strategy, Xandra.RetryStrategy.Fallthrough)
