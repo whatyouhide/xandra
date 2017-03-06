@@ -696,7 +696,7 @@ defmodule Xandra do
 
   defp execute_with_retrying(conn, query, params, options, retry_strategy) do
     with {:error, reason} <- execute_without_retrying(conn, query, params, options) do
-      {retry_state, options} = Keyword.pop_lazy(options, :current_retry_state, fn ->
+      {retry_state, options} = Keyword.pop_lazy(options, :retrying_state, fn ->
         retry_strategy.new(options)
       end)
 
@@ -704,7 +704,7 @@ defmodule Xandra do
         :error ->
           {:error, reason}
         {:retry, new_options, new_retry_state} ->
-          new_options = Keyword.put(new_options, :current_retry_state, new_retry_state)
+          new_options = Keyword.put(new_options, :retrying_state, new_retry_state)
           execute_with_retrying(conn, query, params, new_options, retry_strategy)
         other ->
           raise ArgumentError,
