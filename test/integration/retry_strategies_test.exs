@@ -7,15 +7,15 @@ defmodule Xandra.RetryStrategiesTest do
     defmodule CounterStrategy do
       @behaviour Xandra.RetryStrategy
 
-      def init(options) do
+      def new(options) do
         Keyword.fetch!(options, :retries_count)
       end
 
-      def handle_retry(_error, _options, 0) do
+      def retry(_error, _options, 0) do
         :error
       end
 
-      def handle_retry(error, options, retries_count) do
+      def retry(error, options, retries_count) do
         send(self(), {:retrying, error, retries_count})
         {:retry, options, retries_count - 1}
       end
@@ -35,17 +35,17 @@ defmodule Xandra.RetryStrategiesTest do
     :code.purge(CounterStrategy)
   end
 
-  test "an error is raised if an handle_retry/3 returns an invalid value", %{conn: conn} do
+  test "an error is raised if an retry/3 returns an invalid value", %{conn: conn} do
     defmodule BadStrategy do
       @behaviour Xandra.RetryStrategy
 
-      def init(_options), do: %{}
-      def handle_retry(_error, _options, _state), do: :bad_return_value
+      def new(_options), do: %{}
+      def retry(_error, _options, _state), do: :bad_return_value
     end
 
     message =
       "invalid return value from retry strategy Xandra.RetryStrategiesTest.BadStrategy " <>
-      "with strategy %{}: :bad_return_value"
+      "with state %{}: :bad_return_value"
     assert_raise ArgumentError, message, fn ->
       Xandra.execute(conn, "USE nonexistend_keyspace", [], retry_strategy: BadStrategy)
     end
