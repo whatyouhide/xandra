@@ -688,7 +688,7 @@ defmodule Xandra do
   defp execute_with_retrying(conn, query, params, options) do
     with {:error, reason} <- execute_without_retrying(conn, query, params, options) do
       retry_strategy = Keyword.get(options, :retry_strategy, Xandra.RetryStrategy.Fallthrough)
-      retry_state = Keyword.get_lazy(options, :current_retry_state, fn ->
+      {retry_state, options} = Keyword.pop_lazy(options, :current_retry_state, fn ->
         retry_strategy.new(options)
       end)
 
