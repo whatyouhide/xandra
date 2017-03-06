@@ -426,9 +426,7 @@ defmodule Xandra do
   end
 
   def execute(conn, %Batch{} = batch, options) when is_list(options) do
-    execute_with_retrying(options, fn options ->
-      execute_without_retrying(conn, batch, options)
-    end)
+    execute_with_retrying(conn, batch, nil, options)
   end
 
   @doc """
@@ -583,18 +581,11 @@ defmodule Xandra do
   def execute(conn, query, params, options)
 
   def execute(conn, statement, params, options) when is_binary(statement) do
-    options = put_paging_state(options)
-    query = %Simple{statement: statement}
-    execute_with_retrying(options, fn options ->
-      execute_without_retrying(conn, query, params, options)
-    end)
+    execute_with_retrying(conn, %Simple{statement: statement}, params, put_paging_state(options))
   end
 
   def execute(conn, %Prepared{} = prepared, params, options) do
-    options = put_paging_state(options)
-    execute_with_retrying(options, fn options ->
-      execute_without_retrying(conn, prepared, params, options)
-    end)
+    execute_with_retrying(conn, prepared, params, put_paging_state(options))
   end
 
   @doc """
@@ -697,8 +688,8 @@ defmodule Xandra do
   # This function executes "execute_fun" passing "options" to it, and if
   # "execute_fun" returns an error, it handle the retrying logic (with retry
   # strategies).
-  defp execute_with_retrying(options, execute_fun) do
-    with {:error, reason} <- execute_fun.(options) do
+  defp execute_with_retrying(conn, query, params, options) do
+    with {:error, reason} <- execute_without_retrying(conn, query, params, options) do
       retry_strategy = Keyword.get(options, :retry_strategy, Xandra.RetryStrategy.Fallthrough)
       retry_state = Keyword.get_lazy(options, :current_retry_state, fn ->
         retry_strategy.new(options)
@@ -709,7 +700,7 @@ defmodule Xandra do
           {:error, reason}
         {:retry, new_options, new_retry_state} ->
           new_options = Keyword.put(new_options, :current_retry_state, new_retry_state)
-          execute_with_retrying(new_options, execute_fun)
+          execute_with_retrying(conn, query, params, new_options)
         other ->
           raise ArgumentError,
             "invalid return value from retry strategy #{inspect(retry_strategy)} " <>
@@ -718,7 +709,7 @@ defmodule Xandra do
     end
   end
 
-  defp execute_without_retrying(conn, %Batch{} = batch, options) do
+  defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
     run(conn, options, fn conn ->
       case DBConnection.execute(conn, batch, nil, options) do
         {:ok, %Error{reason: :unprepared}} ->
@@ -733,13 +724,13 @@ defmodule Xandra do
     end)
   end
 
-  def execute_without_retrying(conn, %Simple{} = query, params, options) do
+  defp execute_without_retrying(conn, %Simple{} = query, params, options) do
     with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, options) do
       {:error, error}
     end
   end
 
-  def execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
+  defp execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
     run(conn, options, fn conn ->
       case DBConnection.execute(conn, prepared, params, options) do
         {:ok, %Error{reason: :unprepared}} ->
