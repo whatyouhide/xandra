@@ -703,8 +703,8 @@ defmodule Xandra do
           execute_with_retrying(conn, query, params, new_options)
         other ->
           raise ArgumentError,
-            "invalid return value from retry strategy #{inspect(retry_strategy)} " <>
-            "with state #{inspect(retry_state)}: #{inspect(other)}"
+            "invalid return value #{inspect(other)} from retry strategy #{inspect(retry_strategy)} " <>
+            "with state #{inspect(retry_state)}"
       end
     end
   end

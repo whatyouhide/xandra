@@ -36,21 +36,21 @@ defmodule Xandra.RetryStrategiesTest do
   end
 
   test "an error is raised if an retry/3 returns an invalid value", %{conn: conn} do
-    defmodule BadStrategy do
+    defmodule InvalidStrategy do
       @behaviour Xandra.RetryStrategy
 
       def new(_options), do: %{}
-      def retry(_error, _options, _state), do: :bad_return_value
+      def retry(_error, _options, _state), do: :invalid_value
     end
 
     message =
-      "invalid return value from retry strategy Xandra.RetryStrategiesTest.BadStrategy " <>
-      "with state %{}: :bad_return_value"
+      "invalid return value :invalid_value from " <>
+      "retry strategy Xandra.RetryStrategiesTest.InvalidStrategy with state %{}"
     assert_raise ArgumentError, message, fn ->
-      Xandra.execute(conn, "USE nonexistend_keyspace", [], retry_strategy: BadStrategy)
+      Xandra.execute(conn, "USE nonexistend_keyspace", [], retry_strategy: InvalidStrategy)
     end
   after
-    :code.delete(BadStrategy)
-    :code.purge(BadStrategy)
+    :code.delete(InvalidStrategy)
+    :code.purge(InvalidStrategy)
   end
 end
