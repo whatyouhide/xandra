@@ -114,13 +114,3 @@ defmodule Xandra.RetryStrategy do
   @callback retry(error :: term, options :: Keyword.t, state) ::
             :error | {:retry, new_options :: Keyword.t, new_state :: state}
 end
-
-defmodule Xandra.RetryStrategy.Fallthrough do
-  @moduledoc false
-
-  @behaviour Xandra.RetryStrategy
-
-  def new(_options), do: :no_state
-
-  def retry(_error, _options, :no_state), do: :error
-end

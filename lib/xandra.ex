@@ -686,8 +686,16 @@ defmodule Xandra do
   end
 
   defp execute_with_retrying(conn, query, params, options) do
+    case Keyword.pop(options, :retry_strategy) do
+      {nil, options} ->
+        execute_without_retrying(conn, query, params, options)
+      {retry_strategy, options} ->
+        execute_with_retrying(conn, query, params, options, retry_strategy)
+    end
+  end
+
+  defp execute_with_retrying(conn, query, params, options, retry_strategy) do
     with {:error, reason} <- execute_without_retrying(conn, query, params, options) do
-      retry_strategy = Keyword.get(options, :retry_strategy, Xandra.RetryStrategy.Fallthrough)
       {retry_state, options} = Keyword.pop_lazy(options, :current_retry_state, fn ->
         retry_strategy.new(options)
       end)
@@ -697,7 +705,7 @@ defmodule Xandra do
           {:error, reason}
         {:retry, new_options, new_retry_state} ->
           new_options = Keyword.put(new_options, :current_retry_state, new_retry_state)
-          execute_with_retrying(conn, query, params, new_options)
+          execute_with_retrying(conn, query, params, new_options, retry_strategy)
         other ->
           raise ArgumentError,
             "invalid return value #{inspect(other)} from retry strategy #{inspect(retry_strategy)} " <>
