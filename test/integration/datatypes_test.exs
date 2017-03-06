@@ -173,34 +173,53 @@ defmodule DataTypesTest do
   end
 
   test "user defined types", %{conn: conn} do
-    # User defined types
     statement = """
-    CREATE TYPE IF NOT EXISTS address (
-      number int,
-      street text,
-      city text,
+    CREATE TYPE IF NOT EXISTS name (
+      first_name text,
+      last_name text,
     )
     """
     Xandra.execute!(conn, statement)
+
     statement = """
-    CREATE TABLE users (
-      id int PRIMARY KEY,
-      address frozen<address>,
+    CREATE TYPE IF NOT EXISTS profile (
+      username text,
+      name frozen<name>,
     );
     """
     Xandra.execute!(conn, statement)
+
     statement = """
-    INSERT INTO users (id, address) VALUES (
-      1, { number: 101, street: 'street', city: 'city' }
-    )
+    CREATE TABLE users (
+      id int PRIMARY KEY,
+      profile frozen<profile>,
+    );
     """
     Xandra.execute!(conn, statement)
+
     statement = """
-    SELECT id, address FROM users
+    INSERT INTO users (id, profile) VALUES (?, ?)
+    """
+    foo_profile = %{
+      "username" => "foo",
+      "name" => %{"first_name" => "Kung", "last_name" => "Foo"},
+    }
+    bar_profile = %{
+      "username" => "bar",
+      "name" => %{"last_name" => "Bar"},
+    }
+    prepared = Xandra.prepare!(conn, statement)
+    Xandra.execute!(conn, prepared, [1, foo_profile])
+    Xandra.execute!(conn, prepared, [2, bar_profile])
+
+    statement = """
+    SELECT id, profile FROM users
     """
     page = Xandra.execute!(conn, statement)
-    assert [row] = Enum.to_list(page)
-    assert row["id"] == 1
-    assert row["address"] == %{"number" => 101, "street" => "street", "city" => "city"}
+    assert [foo, bar] = Enum.to_list(page)
+    assert foo["id"] == 1
+    assert foo["profile"] == foo_profile
+    assert bar["id"] == 2
+    assert bar["profile"] == %{"username" => "bar", "name" => %{"first_name" => nil, "last_name" => "Bar"}}
   end
 end

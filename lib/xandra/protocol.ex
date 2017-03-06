@@ -231,6 +231,10 @@ defmodule Xandra.Protocol do
     encode_query_value(TypeParser.parse(type), value)
   end
 
+  defp encode_query_value(_type, nil) do
+    encode_value(:int, -1)
+  end
+
   defp encode_query_value(type, value) do
     result = encode_value(type, value)
     <<byte_size(result)::32>> <> result
@@ -287,6 +291,12 @@ defmodule Xandra.Protocol do
     for {key, value} <- map, into: <<map_size(map)::32>> do
       encode_query_value(key_type, key) <>
         encode_query_value(value_type, value)
+    end
+  end
+
+  defp encode_value({:udt, fields}, map) when is_map(map) do
+    for {field_name, field_type} <- fields, into: <<>> do
+      encode_query_value(field_type, map[field_name])
     end
   end
 
