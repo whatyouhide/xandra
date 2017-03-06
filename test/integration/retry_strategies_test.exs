@@ -22,11 +22,11 @@ defmodule Xandra.RetryStrategiesTest do
     end
 
     assert_raise KeyError, fn ->
-      Xandra.execute(conn, "USE nonexistend_keyspace", [], retry_strategy: CounterStrategy)
+      Xandra.execute(conn, "USE nonexistent_keyspace", [], retry_strategy: CounterStrategy)
     end
 
     options = [retry_strategy: CounterStrategy, retries_count: 2]
-    assert {:error, _} = Xandra.execute(conn, "USE nonexistend_keyspace", [], options)
+    assert {:error, _} = Xandra.execute(conn, "USE nonexistent_keyspace", [], options)
 
     assert_received {:retrying, %Error{reason: :invalid}, 2}
     assert_received {:retrying, %Error{reason: :invalid}, 1}
@@ -35,7 +35,7 @@ defmodule Xandra.RetryStrategiesTest do
     :code.purge(CounterStrategy)
   end
 
-  test "an error is raised if an retry/3 returns an invalid value", %{conn: conn} do
+  test "an error is raised if retry/3 returns an invalid value", %{conn: conn} do
     defmodule InvalidStrategy do
       @behaviour Xandra.RetryStrategy
 
