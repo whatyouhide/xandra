@@ -97,6 +97,12 @@ defmodule Xandra do
   executing queries on different nodes based on load balancing strategies. See
   the documentation for `Xandra.Cluster` for more information.
 
+  ## Retrying failed queries
+
+  Xandra takes a customizable and extensible approach to retrying failed queries
+  through "retry strategies" that encapsulate the logic for retrying
+  queries. See `Xandra.RetryStrategy` for documentation on retry strategies.
+
   ## Compression
 
   Xandra supports compression. To inform the Cassandra server that the
@@ -488,6 +494,12 @@ defmodule Xandra do
     * `:compressor` - (module) the compressor module used to compress and
       decompress data. See the "Compression" section in the module
       documentation. By default, this option is not present.
+
+    * `:retry_strategy` - (module) the module implementing the
+      `Xandra.RetryStrategy` behaviour that is used in case the query fails to
+      determine whether to retry it or not. See the "Retrying failed queries"
+      section in the module documentation. By default, this option is not
+      present.
 
   ## Parameters
 

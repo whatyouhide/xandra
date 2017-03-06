@@ -21,8 +21,9 @@ This library is in its early stages when it comes to features, but we're already
   * page streaming
   * compression
   * clustering (only random load balancing for now)
+  * customizable retry strategies for failed queries
 
-In the future, we plan to add several more features, like more strategies for clustering and query retrying strategies. See [the documentation][documentation] for detailed explanation of how the supported features work.
+In the future, we plan to add more features, like more strategies for clustering and authentication support. See [the documentation][documentation] for detailed explanation of how the supported features work.
 
 ## Installation
 
