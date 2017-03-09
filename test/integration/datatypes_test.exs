@@ -66,16 +66,16 @@ defmodule DataTypesTest do
     values = [
       {"int", 2},
       {"ascii", "ascii"},
-      {"bigint", 1000000000},
+      {"bigint", -1000000000},
       {"blob", <<0x00FF::16>>},
       {"boolean", true},
-      {"decimal", {1323, 2}},
+      {"decimal", {1323, -2}},
       {"double", 3.1415},
       {"float", -1.25},
       {"inet", {192, 168, 0, 1}},
-      {"int", 42},
+      {"int", -42},
       {"text", "эликсир"},
-      {"timestamp", 2167219200},
+      {"timestamp", -2167219200},
       {"timeuuid", "fe2b4360-28c6-11e2-81c1-0800200c9a66"},
       {"uuid", "00b69180-d0e1-11e2-8b8b-0800200c9a66"},
       {"varchar", "тоже эликсир"},
@@ -85,16 +85,16 @@ defmodule DataTypesTest do
     page = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 2", [])
     assert [row] = Enum.to_list(page)
     assert Map.fetch!(row, "ascii") == "ascii"
-    assert Map.fetch!(row, "bigint") == 1000000000
+    assert Map.fetch!(row, "bigint") == -1000000000
     assert Map.fetch!(row, "blob") == <<0, 0xFF>>
     assert Map.fetch!(row, "boolean") == true
-    assert Map.fetch!(row, "decimal") == {1323, 2}
+    assert Map.fetch!(row, "decimal") == {1323, -2}
     assert Map.fetch!(row, "double") == 3.1415
     assert Map.fetch!(row, "float") == -1.25
     assert Map.fetch!(row, "inet") == {192, 168, 0, 1}
-    assert Map.fetch!(row, "int") == 42
+    assert Map.fetch!(row, "int") == -42
     assert Map.fetch!(row, "text") == "эликсир"
-    assert Map.fetch!(row, "timestamp") == 2167219200
+    assert Map.fetch!(row, "timestamp") == -2167219200
     assert Map.fetch!(row, "timeuuid") == <<254, 43, 67, 96, 40, 198, 17, 226, 129, 193, 8, 0, 32, 12, 154, 102>>
     assert Map.fetch!(row, "uuid") == <<0, 182, 145, 128, 208, 225, 17, 226, 139, 139, 8, 0, 32, 12, 154, 102>>
     assert Map.fetch!(row, "varchar") == "тоже эликсир"
