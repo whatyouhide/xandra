@@ -1,8 +1,12 @@
 # Changelog
 
+## v0.4.1
+
+- Fixed a bug where negative varint values were decoded incorrectly.
+
 ## v0.4.0
 
-- Fixed a bug where prepared queries inside batch queries where not being reprepared in case of "unprepared" errors. Now, prepared queries that fail with "unprepared" errors in batch queries are reprepared before executing the batch again.
+- Fixed a bug where prepared queries inside batch queries were not being reprepared in case of "unprepared" errors. Now, prepared queries that fail with "unprepared" errors in batch queries are reprepared before executing the batch again.
 - Added support for "retry strategies" (modules that implement `Xandra.RetryStrategy`) to handle retrying of failed queries.
 
 ## v0.3.2
