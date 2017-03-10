@@ -596,7 +596,7 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_value(buffer, size, :varint) do
-    <<int::size(size)-unit(8), buffer::bytes>> = buffer
+    <<int::size(size)-unit(8)-signed, buffer::bytes>> = buffer
     {int, buffer}
   end
 

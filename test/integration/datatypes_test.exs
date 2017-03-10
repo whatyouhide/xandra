@@ -79,7 +79,7 @@ defmodule DataTypesTest do
       {"timeuuid", "fe2b4360-28c6-11e2-81c1-0800200c9a66"},
       {"uuid", "00b69180-d0e1-11e2-8b8b-0800200c9a66"},
       {"varchar", "тоже эликсир"},
-      {"varint", 6789065678192312391879827349},
+      {"varint", -6789065678192312391879827349},
     ]
     Xandra.execute!(conn, statement, values)
     page = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 2", [])
@@ -98,7 +98,7 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "timeuuid") == <<254, 43, 67, 96, 40, 198, 17, 226, 129, 193, 8, 0, 32, 12, 154, 102>>
     assert Map.fetch!(row, "uuid") == <<0, 182, 145, 128, 208, 225, 17, 226, 139, 139, 8, 0, 32, 12, 154, 102>>
     assert Map.fetch!(row, "varchar") == "тоже эликсир"
-    assert Map.fetch!(row, "varint") == 6789065678192312391879827349
+    assert Map.fetch!(row, "varint") == -6789065678192312391879827349
   end
 
   test "collection datatypes", %{conn: conn} do
