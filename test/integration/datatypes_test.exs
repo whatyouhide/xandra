@@ -9,14 +9,18 @@ defmodule DataTypesTest do
      bigint bigint,
      blob blob,
      boolean boolean,
+     date date,
      decimal decimal,
      double double,
      float float,
      inet inet,
      int int,
+     smallint smallint,
      text text,
+     time time,
      timestamp timestamp,
      timeuuid timeuuid,
+     tinyint tinyint,
      uuid uuid,
      varchar varchar,
      varint varint)
@@ -30,19 +34,23 @@ defmodule DataTypesTest do
      bigint,
      blob,
      boolean,
+     date,
      decimal,
      double,
      float,
      inet,
      int,
+     smallint,
      text,
+     time,
      timestamp,
      timeuuid,
+     tinyint,
      uuid,
      varchar,
      varint)
     VALUES
-    (#{"?" |> List.duplicate(16) |> Enum.join(", ")})
+    (#{"?" |> List.duplicate(20) |> Enum.join(", ")})
     """
 
     values = [
@@ -51,14 +59,18 @@ defmodule DataTypesTest do
       {"bigint", nil},
       {"blob", nil},
       {"boolean", nil},
+      {"date", nil},
       {"decimal", nil},
       {"double", nil},
       {"float", nil},
       {"inet", nil},
       {"int", nil},
+      {"smallint", nil},
       {"text", nil},
+      {"time", nil},
       {"timestamp", nil},
       {"timeuuid", nil},
+      {"tinyint", nil},
       {"uuid", nil},
       {"varchar", nil},
       {"varint", nil},
@@ -71,14 +83,18 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "bigint") == nil
     assert Map.fetch!(row, "blob") == nil
     assert Map.fetch!(row, "boolean") == nil
+    assert Map.fetch!(row, "date") == nil
     assert Map.fetch!(row, "decimal") == nil
     assert Map.fetch!(row, "double") == nil
     assert Map.fetch!(row, "float") == nil
     assert Map.fetch!(row, "inet") == nil
     assert Map.fetch!(row, "int") == nil
+    assert Map.fetch!(row, "smallint") == nil
     assert Map.fetch!(row, "text") == nil
+    assert Map.fetch!(row, "time") == nil
     assert Map.fetch!(row, "timestamp") == nil
     assert Map.fetch!(row, "timeuuid") == nil
+    assert Map.fetch!(row, "tinyint") == nil
     assert Map.fetch!(row, "uuid") == nil
     assert Map.fetch!(row, "varchar") == nil
     assert Map.fetch!(row, "varint") == nil
@@ -89,14 +105,18 @@ defmodule DataTypesTest do
       {"bigint", -1000000000},
       {"blob", <<0x00FF::16>>},
       {"boolean", true},
+      {"date", 1358013521},
       {"decimal", {1323, -2}},
       {"double", 3.1415},
       {"float", -1.25},
       {"inet", {192, 168, 0, 1}},
       {"int", -42},
+      {"smallint", -33},
       {"text", "эликсир"},
+      {"time", 1358013521},
       {"timestamp", -2167219200},
       {"timeuuid", "fe2b4360-28c6-11e2-81c1-0800200c9a66"},
+      {"tinyint", -21},
       {"uuid", "00b69180-d0e1-11e2-8b8b-0800200c9a66"},
       {"varchar", "тоже эликсир"},
       {"varint", -6789065678192312391879827349},
@@ -108,14 +128,18 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "bigint") == -1000000000
     assert Map.fetch!(row, "blob") == <<0, 0xFF>>
     assert Map.fetch!(row, "boolean") == true
+    assert Map.fetch!(row, "date") == 1358013521
     assert Map.fetch!(row, "decimal") == {1323, -2}
     assert Map.fetch!(row, "double") == 3.1415
     assert Map.fetch!(row, "float") == -1.25
     assert Map.fetch!(row, "inet") == {192, 168, 0, 1}
     assert Map.fetch!(row, "int") == -42
+    assert Map.fetch!(row, "smallint") == -33
     assert Map.fetch!(row, "text") == "эликсир"
+    assert Map.fetch!(row, "time") == 1358013521
     assert Map.fetch!(row, "timestamp") == -2167219200
     assert Map.fetch!(row, "timeuuid") == <<254, 43, 67, 96, 40, 198, 17, 226, 129, 193, 8, 0, 32, 12, 154, 102>>
+    assert Map.fetch!(row, "tinyint") == -21
     assert Map.fetch!(row, "uuid") == <<0, 182, 145, 128, 208, 225, 17, 226, 139, 139, 8, 0, 32, 12, 154, 102>>
     assert Map.fetch!(row, "varchar") == "тоже эликсир"
     assert Map.fetch!(row, "varint") == -6789065678192312391879827349
@@ -127,7 +151,7 @@ defmodule DataTypesTest do
     (id int PRIMARY KEY,
      list_of_int list<int>,
      map_of_int_to_text map<int, text>,
-     set_of_int set<int>,
+     set_of_tinyint set<tinyint>,
      tuple_of_int_and_text tuple<int, text>)
     """
     Xandra.execute!(conn, statement, [])
@@ -137,7 +161,7 @@ defmodule DataTypesTest do
     (id,
      list_of_int,
      map_of_int_to_text,
-     set_of_int,
+     set_of_tinyint,
      tuple_of_int_and_text)
     VALUES
     (#{"?" |> List.duplicate(5) |> Enum.join(", ")})
@@ -147,7 +171,7 @@ defmodule DataTypesTest do
       {"int", 1},
       {"list<int>", nil},
       {"map<int, text>", nil},
-      {"set<int>", nil},
+      {"set<tinyint>", nil},
       {"tuple<int, text>", nil},
     ]
     Xandra.execute!(conn, statement, values)
@@ -156,14 +180,14 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "id") == 1
     assert Map.fetch!(row, "list_of_int") == nil
     assert Map.fetch!(row, "map_of_int_to_text") == nil
-    assert Map.fetch!(row, "set_of_int") == nil
+    assert Map.fetch!(row, "set_of_tinyint") == nil
     assert Map.fetch!(row, "tuple_of_int_and_text") == nil
 
     values = [
       {"int", 2},
       {"list<int>", [24, 42]},
       {"map<int, text>", %{24 => "24", 42 => "42"}},
-      {"set<int>", MapSet.new([42, 24])},
+      {"set<tinyint>", MapSet.new([42, 24])},
       {"tuple<int, text>", {24, "42"}},
     ]
     Xandra.execute!(conn, statement, values)
@@ -172,15 +196,15 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "id") == 2
     assert Map.fetch!(row, "list_of_int") == [24, 42]
     assert Map.fetch!(row, "map_of_int_to_text") == %{24 => "24", 42 => "42"}
-    assert Map.fetch!(row, "set_of_int") == MapSet.new([42, 24])
+    assert Map.fetch!(row, "set_of_tinyint") == MapSet.new([42, 24])
     assert Map.fetch!(row, "tuple_of_int_and_text") == {24, "42"}
 
     # Empty collections
     values = [
       {"int", 3},
       {"list<int>", []},
-      {"map<int, text>", %{}},
-      {"set<int>", MapSet.new([])},
+      {"map<tinyint, text>", %{}},
+      {"set<tinyint>", MapSet.new([])},
       # Tuples do not have empty representation
       {"tuple<int, text>", nil},
     ]
@@ -190,6 +214,6 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "id") == 3
     assert Map.fetch!(row, "list_of_int") == nil
     assert Map.fetch!(row, "map_of_int_to_text") == nil
-    assert Map.fetch!(row, "set_of_int") == nil
+    assert Map.fetch!(row, "set_of_tinyint") == nil
   end
 end
