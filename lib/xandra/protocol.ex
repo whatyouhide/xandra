@@ -231,6 +231,10 @@ defmodule Xandra.Protocol do
     encode_query_value(TypeParser.parse(type), value)
   end
 
+  defp encode_query_value(_type, nil) do
+    <<-1::32>>
+  end
+
   defp encode_query_value(type, value) do
     result = encode_value(type, value)
     <<byte_size(result)::32>> <> result
