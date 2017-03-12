@@ -42,7 +42,7 @@ defmodule DataTypesTest do
      varchar,
      varint)
     VALUES
-    (#{Enum.map_join(1..16, ", ", fn _ -> "?" end)})
+    (#{"?" |> List.duplicate(16) |> Enum.join(", ")})
     """
 
     values = [
@@ -140,7 +140,7 @@ defmodule DataTypesTest do
      set_of_int,
      tuple_of_int_and_text)
     VALUES
-    (#{Enum.map_join(1..5, ", ", fn _ -> "?" end)})
+    (#{"?" |> List.duplicate(5) |> Enum.join(", ")})
     """
 
     values = [
