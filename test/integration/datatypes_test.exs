@@ -23,26 +23,6 @@ defmodule DataTypesTest do
     """
     Xandra.execute!(conn, statement, [])
 
-    Xandra.execute!(conn, "INSERT INTO primitives (id) VALUES (1)", [])
-    page = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 1", [])
-    assert [row] = Enum.to_list(page)
-    assert Map.fetch!(row, "id") == 1
-    assert Map.fetch!(row, "ascii") == nil
-    assert Map.fetch!(row, "bigint") == nil
-    assert Map.fetch!(row, "blob") == nil
-    assert Map.fetch!(row, "boolean") == nil
-    assert Map.fetch!(row, "decimal") == nil
-    assert Map.fetch!(row, "double") == nil
-    assert Map.fetch!(row, "float") == nil
-    assert Map.fetch!(row, "inet") == nil
-    assert Map.fetch!(row, "int") == nil
-    assert Map.fetch!(row, "text") == nil
-    assert Map.fetch!(row, "timestamp") == nil
-    assert Map.fetch!(row, "timeuuid") == nil
-    assert Map.fetch!(row, "uuid") == nil
-    assert Map.fetch!(row, "varchar") == nil
-    assert Map.fetch!(row, "varint") == nil
-
     statement = """
     INSERT INTO primitives
     (id,
@@ -64,6 +44,45 @@ defmodule DataTypesTest do
     VALUES
     (#{Enum.map_join(1..16, ", ", fn _ -> "?" end)})
     """
+
+    values = [
+      {"int", 1},
+      {"ascii", nil},
+      {"bigint", nil},
+      {"blob", nil},
+      {"boolean", nil},
+      {"decimal", nil},
+      {"double", nil},
+      {"float", nil},
+      {"inet", nil},
+      {"int", nil},
+      {"text", nil},
+      {"timestamp", nil},
+      {"timeuuid", nil},
+      {"uuid", nil},
+      {"varchar", nil},
+      {"varint", nil},
+    ]
+    Xandra.execute!(conn, statement, values)
+    page = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 1", [])
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 1
+    assert Map.fetch!(row, "ascii") == nil
+    assert Map.fetch!(row, "bigint") == nil
+    assert Map.fetch!(row, "blob") == nil
+    assert Map.fetch!(row, "boolean") == nil
+    assert Map.fetch!(row, "decimal") == nil
+    assert Map.fetch!(row, "double") == nil
+    assert Map.fetch!(row, "float") == nil
+    assert Map.fetch!(row, "inet") == nil
+    assert Map.fetch!(row, "int") == nil
+    assert Map.fetch!(row, "text") == nil
+    assert Map.fetch!(row, "timestamp") == nil
+    assert Map.fetch!(row, "timeuuid") == nil
+    assert Map.fetch!(row, "uuid") == nil
+    assert Map.fetch!(row, "varchar") == nil
+    assert Map.fetch!(row, "varint") == nil
+
     values = [
       {"int", 2},
       {"ascii", "ascii"},
@@ -113,40 +132,6 @@ defmodule DataTypesTest do
     """
     Xandra.execute!(conn, statement, [])
 
-    Xandra.execute!(conn, "INSERT INTO collections (id) VALUES (1)", [])
-    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
-    assert [row] = Enum.to_list(page)
-    assert Map.fetch!(row, "id") == 1
-    assert Map.fetch!(row, "list_of_int") == nil
-    assert Map.fetch!(row, "map_of_int_to_text") == nil
-    assert Map.fetch!(row, "set_of_int") == nil
-    assert Map.fetch!(row, "tuple_of_int_and_text") == nil
-
-    # Empty collections
-    statement = """
-    INSERT INTO collections
-    (id,
-     list_of_int,
-     map_of_int_to_text,
-     set_of_int)
-    VALUES
-    (#{Enum.map_join(1..4, ", ", fn _ -> "?" end)})
-    """
-    values = [
-      {"int", 1},
-      {"list<int>", []},
-      {"map<int, text>", %{}},
-      {"set<int>", MapSet.new([])},
-    ]
-    Xandra.execute!(conn, statement, values)
-    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
-    assert [row] = Enum.to_list(page)
-    assert Map.fetch!(row, "id") == 1
-    assert Map.fetch!(row, "list_of_int") == nil
-    assert Map.fetch!(row, "map_of_int_to_text") == nil
-    assert Map.fetch!(row, "set_of_int") == nil
-
-    # Collections with items in them
     statement = """
     INSERT INTO collections
     (id,
@@ -157,20 +142,54 @@ defmodule DataTypesTest do
     VALUES
     (#{Enum.map_join(1..5, ", ", fn _ -> "?" end)})
     """
+
     values = [
       {"int", 1},
+      {"list<int>", nil},
+      {"map<int, text>", nil},
+      {"set<int>", nil},
+      {"tuple<int, text>", nil},
+    ]
+    Xandra.execute!(conn, statement, values)
+    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 1
+    assert Map.fetch!(row, "list_of_int") == nil
+    assert Map.fetch!(row, "map_of_int_to_text") == nil
+    assert Map.fetch!(row, "set_of_int") == nil
+    assert Map.fetch!(row, "tuple_of_int_and_text") == nil
+
+    values = [
+      {"int", 2},
       {"list<int>", [24, 42]},
       {"map<int, text>", %{24 => "24", 42 => "42"}},
       {"set<int>", MapSet.new([42, 24])},
       {"tuple<int, text>", {24, "42"}},
     ]
     Xandra.execute!(conn, statement, values)
-    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
+    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 2", [])
     assert [row] = Enum.to_list(page)
-    assert Map.fetch!(row, "id") == 1
+    assert Map.fetch!(row, "id") == 2
     assert Map.fetch!(row, "list_of_int") == [24, 42]
     assert Map.fetch!(row, "map_of_int_to_text") == %{24 => "24", 42 => "42"}
     assert Map.fetch!(row, "set_of_int") == MapSet.new([42, 24])
     assert Map.fetch!(row, "tuple_of_int_and_text") == {24, "42"}
+
+    # Empty collections
+    values = [
+      {"int", 3},
+      {"list<int>", []},
+      {"map<int, text>", %{}},
+      {"set<int>", MapSet.new([])},
+      # Tuples do not have empty representation
+      {"tuple<int, text>", nil},
+    ]
+    Xandra.execute!(conn, statement, values)
+    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 3", [])
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 3
+    assert Map.fetch!(row, "list_of_int") == nil
+    assert Map.fetch!(row, "map_of_int_to_text") == nil
+    assert Map.fetch!(row, "set_of_int") == nil
   end
 end
