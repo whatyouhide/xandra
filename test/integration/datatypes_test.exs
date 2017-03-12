@@ -61,7 +61,8 @@ defmodule DataTypesTest do
      uuid,
      varchar,
      varint)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES
+    (#{Enum.map_join(1..16, ", ", fn _ -> "?" end)})
     """
     values = [
       {"int", 2},
@@ -129,7 +130,7 @@ defmodule DataTypesTest do
      map_of_int_to_text,
      set_of_int)
     VALUES
-    (?, ?, ?, ?)
+    (#{Enum.map_join(1..4, ", ", fn _ -> "?" end)})
     """
     values = [
       {"int", 1},
@@ -153,7 +154,8 @@ defmodule DataTypesTest do
      map_of_int_to_text,
      set_of_int,
      tuple_of_int_and_text)
-    VALUES (?, ?, ?, ?, ?)
+    VALUES
+    (#{Enum.map_join(1..5, ", ", fn _ -> "?" end)})
     """
     values = [
       {"int", 1},
