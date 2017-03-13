@@ -206,7 +206,7 @@ defmodule DataTypesTest do
     CREATE TYPE IF NOT EXISTS profile (
       username text,
       name frozen<name>,
-    );
+    )
     """
     Xandra.execute!(conn, statement)
 
@@ -214,7 +214,7 @@ defmodule DataTypesTest do
     CREATE TABLE users (
       id int PRIMARY KEY,
       profile frozen<profile>,
-    );
+    )
     """
     Xandra.execute!(conn, statement)
 
@@ -238,9 +238,9 @@ defmodule DataTypesTest do
     """
     page = Xandra.execute!(conn, statement)
     assert [foo, bar] = Enum.to_list(page)
-    assert foo["id"] == 1
-    assert foo["profile"] == foo_profile
-    assert bar["id"] == 2
-    assert bar["profile"] == %{"username" => "bar", "name" => %{"first_name" => nil, "last_name" => "Bar"}}
+    assert Map.fetch!(foo, "id") == 1
+    assert Map.fetch!(foo, "profile") == foo_profile
+    assert Map.fetch!(bar, "id") == 2
+    assert Map.fetch!(bar, "profile") == %{"username" => "bar", "name" => %{"first_name" => nil, "last_name" => "Bar"}}
   end
 end
