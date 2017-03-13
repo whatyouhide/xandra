@@ -232,7 +232,7 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_value(_type, nil) do
-    encode_value(:int, -1)
+    <<-1::32>>
   end
 
   defp encode_query_value(type, value) do
@@ -606,7 +606,7 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_value(buffer, size, :varint) do
-    <<int::size(size)-unit(8), buffer::bytes>> = buffer
+    <<int::size(size)-unit(8)-signed, buffer::bytes>> = buffer
     {int, buffer}
   end
 
