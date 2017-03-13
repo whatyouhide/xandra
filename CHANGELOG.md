@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.2
+
+- Fixed a bug with encoding `nil` values in the protocol.
+
 ## v0.4.1
 
 - Fixed a bug where negative varint values were decoded incorrectly.
