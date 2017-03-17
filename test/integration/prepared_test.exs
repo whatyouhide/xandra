@@ -44,6 +44,17 @@ defmodule PreparedTest do
     assert Enum.to_list(page) == []
   end
 
+  test "dynamic result columns", %{conn: conn} do
+    statement = "INSERT INTO users (code, name) VALUES (3, 'Nelson') IF NOT EXISTS"
+    assert {:ok, prepared} = Xandra.prepare(conn, statement)
+
+    assert {:ok, page} = Xandra.execute(conn, prepared)
+    assert Enum.to_list(page) == [%{"[applied]" => true}]
+
+    assert {:ok, page} = Xandra.execute(conn, prepared)
+    assert Enum.to_list(page) == [%{"[applied]" => false, "code" => 3, "name" => "Nelson"}]
+  end
+
   test "inspecting prepared queries", %{conn: conn} do
     prepared = Xandra.prepare!(conn, "SELECT * FROM users")
     assert inspect(prepared) == ~s(#Xandra.Prepared<"SELECT * FROM users">)
