@@ -257,6 +257,10 @@ defmodule Xandra.Protocol do
     if boolean, do: <<1>>, else: <<0>>
   end
 
+  defp encode_value(:date, date) when date in 0..0xFFFFFFFF do
+    <<date::32>>
+  end
+
   defp encode_value(:decimal, {value, scale}) do
     encode_value(:int, scale) <> encode_value(:varint, value)
   end
@@ -299,12 +303,24 @@ defmodule Xandra.Protocol do
     encode_value({:list, inner_type}, MapSet.to_list(set))
   end
 
+  defp encode_value(:smallint, int) when is_integer(int) do
+    <<int::16>>
+  end
+
   defp encode_value(:text, text) when is_binary(text) do
     text
   end
 
+  defp encode_value(:time, time) when time in 0..86399999999999 do
+    <<time::64>>
+  end
+
   defp encode_value(:timestamp, timestamp) do
-    encode_value(:bigint, timestamp)
+    <<timestamp::64>>
+  end
+
+  defp encode_value(:tinyint, int) when is_integer(int) do
+    <<int>>
   end
 
   defp encode_value(:uuid, uuid) when is_binary(uuid) do
@@ -543,6 +559,10 @@ defmodule Xandra.Protocol do
     {value != 0, buffer}
   end
 
+  defp decode_value(<<value::32, buffer::bytes>>, 4, :date) do
+    {value, buffer}
+  end
+
   defp decode_value(buffer, size, :decimal) do
     {scale, buffer} = decode_value(buffer, 4, :int)
     {value, buffer} = decode_value(buffer, size - 4, :varint)
@@ -590,6 +610,10 @@ defmodule Xandra.Protocol do
     {MapSet.new(list), buffer}
   end
 
+  defp decode_value(<<value::16-signed, buffer::bytes>>, 2, :smallint) do
+    {value, buffer}
+  end
+
   defp decode_value(buffer, size, {:tuple, types}) do
     <<content::bytes-size(size)>> <> buffer = buffer
     {decode_tuple(content, types, []), buffer}
@@ -605,7 +629,15 @@ defmodule Xandra.Protocol do
     {int, buffer}
   end
 
+  defp decode_value(<<value::64, buffer::bytes>>, 8, :time) do
+    {value, buffer}
+  end
+
   defp decode_value(<<value::64-signed>> <> buffer, 8, :timestamp) do
+    {value, buffer}
+  end
+
+  defp decode_value(<<value::signed, buffer::bytes>>, 1, :tinyint) do
     {value, buffer}
   end
 
@@ -663,8 +695,8 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_type(<<0x0000::16>> <> buffer) do
-    {name, buffer} = decode_string(buffer)
-    {{:custom, name}, buffer}
+    {class, buffer} = decode_string(buffer)
+    {custom_type_to_native(class), buffer}
   end
 
   defp decode_type(<<0x0001::16>> <> buffer) do
@@ -747,6 +779,22 @@ defmodule Xandra.Protocol do
 
   defp decode_type(<<0x0031::16, count::16>> <> buffer) do
     decode_type_tuple(buffer, count, [])
+  end
+
+  custom_types = %{
+    "org.apache.cassandra.db.marshal.SimpleDateType" => :date,
+    "org.apache.cassandra.db.marshal.ShortType" => :smallint,
+    "org.apache.cassandra.db.marshal.ByteType" => :tinyint,
+    "org.apache.cassandra.db.marshal.TimeType" => :time,
+  }
+  for {class, type} <- custom_types do
+    defp custom_type_to_native(unquote(class)) do
+      unquote(type)
+    end
+  end
+
+  defp custom_type_to_native(class) do
+    raise "cannot decode custom type #{inspect(class)}"
   end
 
   defp decode_type_tuple(buffer, 0, acc) do
