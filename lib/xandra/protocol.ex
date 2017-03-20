@@ -611,8 +611,9 @@ defmodule Xandra.Protocol do
     {int, buffer}
   end
 
-  defp decode_value(buffer, _size, {:udt, fields}) do
-    decode_value_udt(buffer, fields, %{})
+  defp decode_value(buffer, size, {:udt, fields}) do
+    <<content::bytes-size(size)>> <> buffer = buffer
+    {decode_value_udt(content, fields, %{}), buffer}
   end
 
   defp decode_value(<<value::64-signed>> <> buffer, 8, :timestamp) do
@@ -623,8 +624,8 @@ defmodule Xandra.Protocol do
     {value, buffer}
   end
 
-  defp decode_value_udt(buffer, [], result) do
-    {result, buffer}
+  defp decode_value_udt(<<>>, [], result) do
+    result
   end
 
   defp decode_value_udt(buffer, [{field_name, field_type} | rest], result) do
