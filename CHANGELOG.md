@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.3
+
+- Fixed a bug where conditional prepared queries failed to decode.
+
 ## v0.4.2
 
 - Fixed a bug with encoding `nil` values in the protocol.
