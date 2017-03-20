@@ -295,12 +295,6 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_value({:udt, fields}, map) when is_map(map) do
-    for {field_name, field_type} <- fields, into: <<>> do
-      encode_query_value(field_type, map[field_name])
-    end
-  end
-
   defp encode_value({:set, inner_type}, %MapSet{} = set) do
     encode_value({:list, inner_type}, MapSet.to_list(set))
   end
@@ -311,6 +305,12 @@ defmodule Xandra.Protocol do
 
   defp encode_value(:timestamp, timestamp) do
     encode_value(:bigint, timestamp)
+  end
+
+  defp encode_value({:udt, fields}, value) when is_map(value) do
+    for {field_name, field_type} <- fields, into: <<>> do
+      encode_query_value(field_type, Map.get(value, field_name))
+    end
   end
 
   defp encode_value(:uuid, uuid) when is_binary(uuid) do
@@ -611,11 +611,8 @@ defmodule Xandra.Protocol do
     {int, buffer}
   end
 
-  defp decode_value(buffer, _size, {:udt, type_maps}) do
-    Enum.reduce(type_maps, {%{}, buffer}, fn({field, type}, {result, buffer}) ->
-      {value, buffer} = decode_value(buffer, type)
-      {Map.put(result, field, value), buffer}
-    end)
+  defp decode_value(buffer, _size, {:udt, fields}) do
+    decode_value_udt(buffer, fields, %{})
   end
 
   defp decode_value(<<value::64-signed>> <> buffer, 8, :timestamp) do
@@ -624,6 +621,15 @@ defmodule Xandra.Protocol do
 
   defp decode_value(<<value::16-bytes>> <> buffer, 16, type) when type in [:timeuuid, :uuid] do
     {value, buffer}
+  end
+
+  defp decode_value_udt(buffer, [], result) do
+    {result, buffer}
+  end
+
+  defp decode_value_udt(buffer, [{field_name, field_type} | rest], result) do
+    {value, buffer} = decode_value(buffer, field_type)
+    decode_value_udt(buffer, rest, Map.put(result, field_name, value))
   end
 
   defp decode_list(<<>>, 0, _type, acc) do
@@ -767,6 +773,17 @@ defmodule Xandra.Protocol do
     decode_type_tuple(buffer, count, [])
   end
 
+  defp decode_type_udt(buffer, 0, acc) do
+    {{:udt, Enum.reverse(acc)}, buffer}
+  end
+
+  defp decode_type_udt(buffer, count, acc) do
+    {field_name, buffer} = decode_string(buffer)
+    {field_type, buffer} = decode_type(buffer)
+
+    decode_type_udt(buffer, count - 1, [{field_name, field_type} | acc])
+  end
+
   defp decode_type_tuple(buffer, 0, acc) do
     {{:tuple, Enum.reverse(acc)}, buffer}
   end
@@ -805,16 +822,5 @@ defmodule Xandra.Protocol do
   defp decode_string_list(buffer, size, acc) do
     {elem, buffer} = decode_string(buffer)
     decode_string_list(buffer, size - 1, [elem | acc])
-  end
-
-  defp decode_type_udt(buffer, 0, acc) do
-    {{:udt, Enum.reverse(acc)}, buffer}
-  end
-
-  defp decode_type_udt(buffer, count, acc) do
-    {name, buffer} = decode_string(buffer)
-    {type, buffer} = decode_type(buffer)
-
-    decode_type_udt(buffer, count - 1, [{name, type} | acc])
   end
 end

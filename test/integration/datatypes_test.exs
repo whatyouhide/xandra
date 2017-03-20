@@ -193,54 +193,47 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "set_of_int") == nil
   end
 
-  test "user defined types", %{conn: conn} do
+  test "user-defined types", %{conn: conn} do
     statement = """
-    CREATE TYPE IF NOT EXISTS name (
-      first_name text,
-      last_name text,
-    )
+    CREATE TYPE IF NOT EXISTS full_name
+    (first_name text,
+     last_name text)
     """
     Xandra.execute!(conn, statement)
 
     statement = """
-    CREATE TYPE IF NOT EXISTS profile (
-      username text,
-      name frozen<name>,
-    )
+    CREATE TYPE IF NOT EXISTS profile
+    (nickname text,
+     real_name frozen<full_name>)
     """
     Xandra.execute!(conn, statement)
 
     statement = """
-    CREATE TABLE users (
-      id int PRIMARY KEY,
-      profile frozen<profile>,
-    )
+    CREATE TABLE users
+    (id int PRIMARY KEY,
+     profile frozen<profile>)
     """
     Xandra.execute!(conn, statement)
 
-    statement = """
-    INSERT INTO users (id, profile) VALUES (?, ?)
-    """
+    statement = "INSERT INTO users (id, profile) VALUES (?, ?)"
     foo_profile = %{
-      "username" => "foo",
-      "name" => %{"first_name" => "Kung", "last_name" => "Foo"},
+      "nickname" => "foo",
+      "real_name" => %{"first_name" => "Kung", "last_name" => "Foo"},
     }
     bar_profile = %{
-      "username" => "bar",
-      "name" => %{"last_name" => "Bar"},
+      "nickname" => "bar",
+      "real_name" => %{"last_name" => "Bar"},
     }
     prepared = Xandra.prepare!(conn, statement)
     Xandra.execute!(conn, prepared, [1, foo_profile])
     Xandra.execute!(conn, prepared, [2, bar_profile])
 
-    statement = """
-    SELECT id, profile FROM users
-    """
+    statement = "SELECT id, profile FROM users"
     page = Xandra.execute!(conn, statement)
     assert [foo, bar] = Enum.to_list(page)
     assert Map.fetch!(foo, "id") == 1
     assert Map.fetch!(foo, "profile") == foo_profile
     assert Map.fetch!(bar, "id") == 2
-    assert Map.fetch!(bar, "profile") == %{"username" => "bar", "name" => %{"first_name" => nil, "last_name" => "Bar"}}
+    assert Map.fetch!(bar, "profile") == %{"nickname" => "bar", "real_name" => %{"first_name" => nil, "last_name" => "Bar"}}
   end
 end
