@@ -204,7 +204,7 @@ defmodule DataTypesTest do
     statement = """
     CREATE TYPE IF NOT EXISTS profile
     (nickname text,
-     real_name frozen<full_name>)
+     full_name frozen<full_name>)
     """
     Xandra.execute!(conn, statement)
 
@@ -218,11 +218,11 @@ defmodule DataTypesTest do
     statement = "INSERT INTO users (id, profile) VALUES (?, ?)"
     foo_profile = %{
       "nickname" => "foo",
-      "real_name" => %{"first_name" => "Kung", "last_name" => "Foo"},
+      "full_name" => %{"first_name" => "Kung", "last_name" => "Foo"},
     }
     bar_profile = %{
       "nickname" => "bar",
-      "real_name" => %{"last_name" => "Bar"},
+      "full_name" => %{"last_name" => "Bar"},
     }
     prepared = Xandra.prepare!(conn, statement)
     Xandra.execute!(conn, prepared, [1, foo_profile])
@@ -234,6 +234,6 @@ defmodule DataTypesTest do
     assert Map.fetch!(foo, "id") == 1
     assert Map.fetch!(foo, "profile") == foo_profile
     assert Map.fetch!(bar, "id") == 2
-    assert Map.fetch!(bar, "profile") == %{"nickname" => "bar", "real_name" => %{"first_name" => nil, "last_name" => "Bar"}}
+    assert Map.fetch!(bar, "profile") == %{"nickname" => "bar", "full_name" => %{"first_name" => nil, "last_name" => "Bar"}}
   end
 end
