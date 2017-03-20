@@ -27,7 +27,7 @@ defmodule Xandra.Protocol do
     body =
       <<byte_size(statement)::32>> <>
       statement <>
-      encode_params([], values, options, false)
+      encode_params([], values, options, _skip_metadata? = false)
     %{frame | body: body}
   end
 
@@ -39,10 +39,11 @@ defmodule Xandra.Protocol do
 
   def encode_request(%Frame{kind: :execute} = frame, %Prepared{} = prepared, options) do
     %{id: id, bound_columns: columns, values: values} = prepared
+    skip_metadata? = prepared.result_columns != nil
     body =
       <<byte_size(id)::16>> <>
       id <>
-      encode_params(columns, values, options, true)
+      encode_params(columns, values, options, skip_metadata?)
     %{frame | body: body}
   end
 
