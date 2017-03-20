@@ -48,10 +48,15 @@ defmodule Xandra.Frame do
   @spec encode(t(kind), nil | module) :: binary
   def encode(%__MODULE__{} = frame, compressor \\ nil) when is_atom(compressor) do
     %{tracing: tracing?, kind: kind, stream_id: stream_id, body: body} = frame
-    opcode = Map.fetch!(@request_opcodes, kind)
-    flags = encode_flags(compressor, tracing?)
     body = maybe_compress_body(compressor, body)
-    <<@request_version, flags, stream_id::16, opcode, byte_size(body)::32, body::bytes>>
+    [
+      @request_version,
+      encode_flags(compressor, tracing?),
+      <<stream_id::16>>,
+      Map.fetch!(@request_opcodes, kind),
+      <<IO.iodata_length(body)::32>>,
+      body,
+    ]
   end
 
   @spec decode(binary, binary, nil | module) :: t(kind)
