@@ -10,7 +10,7 @@ defmodule Xandra.Protocol do
   def encode_request(frame, params, options \\ [])
 
   def encode_request(%Frame{kind: :options} = frame, nil, _options) do
-    %{frame | body: <<>>}
+    %{frame | body: []}
   end
 
   def encode_request(%Frame{kind: :startup} = frame, requested_options, _options)
@@ -69,14 +69,14 @@ defmodule Xandra.Protocol do
       encode_consistency_level(consistency),
       flags,
       encode_serial_consistency(serial_consistency),
-      if(timestamp, do: <<timestamp::64>>, else: <<>>),
+      if(timestamp, do: <<timestamp::64>>, else: []),
     ]
     %{frame | body: body}
   end
 
-  defp encode_batch_type(:logged), do: <<0>>
-  defp encode_batch_type(:unlogged), do: <<1>>
-  defp encode_batch_type(:counter), do: <<2>>
+  defp encode_batch_type(:logged), do: 0
+  defp encode_batch_type(:unlogged), do: 1
+  defp encode_batch_type(:counter), do: 2
 
   defp encode_string_list(list) do
     for string <- list, into: [<<length(list)::16>>] do
@@ -146,7 +146,7 @@ defmodule Xandra.Protocol do
 
     encoded_values =
       if values == [] or values == %{} do
-        <<>>
+        []
       else
         encode_query_values(columns, values)
       end
@@ -158,7 +158,7 @@ defmodule Xandra.Protocol do
       <<page_size::32>>,
       encode_paging_state(paging_state),
       encode_serial_consistency(serial_consistency),
-      if(timestamp, do: <<timestamp::64>>, else: <<>>),
+      if(timestamp, do: <<timestamp::64>>, else: []),
     ]
   end
 
@@ -166,12 +166,12 @@ defmodule Xandra.Protocol do
     if value do
       [<<byte_size(value)::32>>, value]
     else
-      <<>>
+      []
     end
   end
 
   defp encode_serial_consistency(nil) do
-    <<>>
+    []
   end
 
   defp encode_serial_consistency(consistency) when consistency in [:serial, :local_serial] do
@@ -185,9 +185,8 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_in_batch(%Simple{statement: statement, values: values}) do
-    kind = <<0>>
     [
-      kind,
+      _kind = 0,
       <<byte_size(statement)::32>>,
       statement,
       encode_query_values([], values),
@@ -195,9 +194,8 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_in_batch(%Prepared{id: id, bound_columns: bound_columns, values: values}) do
-    kind = <<1>>
     [
-      kind,
+      _kind = 1,
       <<byte_size(id)::16>>,
       id,
       encode_query_values(bound_columns, values),
@@ -264,7 +262,7 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_value(:boolean, boolean) when is_boolean(boolean) do
-    if boolean, do: <<1>>, else: <<0>>
+    if boolean, do: [1], else: [0]
   end
 
   defp encode_value(:date, date) when date in 0..0xFFFFFFFF do
