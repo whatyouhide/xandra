@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.1
+
+- Optimized request encoding by using iodata.
+
 ## v0.5.0
 
 - Added support for date, time, smallint, and tinyint types.
