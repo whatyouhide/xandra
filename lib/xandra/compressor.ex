@@ -44,10 +44,10 @@ defmodule Xandra.Compressor do
   @callback algorithm() :: :lz4 | :snappy
 
   @doc """
-  Compresses the given binary according to the algorithm returned by
+  Compresses the given iodata according to the algorithm returned by
   `c:algorithm/0`.
   """
-  @callback compress(binary) :: binary
+  @callback compress(iodata) :: iodata
 
   @doc """
   Deompresses the given binary according to the algorithm returned by
