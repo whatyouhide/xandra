@@ -333,6 +333,16 @@ defmodule Xandra.Protocol do
     <<int>>
   end
 
+  defp decode_value(<<value::16-bytes>> <> buffer, 16, type) when type in [:timeuuid, :uuid] do
+    {value, buffer}
+  end
+
+  defp encode_value({:udt, fields}, value) when is_map(value) do
+    for {field_name, field_type} <- fields do
+      encode_query_value(field_type, Map.get(value, field_name))
+    end
+  end
+
   defp encode_value(:uuid, uuid) when is_binary(uuid) do
     <<part1::8-bytes, ?-,
       part2::4-bytes, ?-,
@@ -642,6 +652,11 @@ defmodule Xandra.Protocol do
     {value, buffer}
   end
 
+  defp decode_value(buffer, size, {:udt, fields}) do
+    <<content::bytes-size(size)>> <> buffer = buffer
+    {decode_value_udt(content, fields, %{}), buffer}
+  end
+
   defp decode_value(<<value::64-signed>> <> buffer, 8, :timestamp) do
     {value, buffer}
   end
@@ -650,8 +665,13 @@ defmodule Xandra.Protocol do
     {value, buffer}
   end
 
-  defp decode_value(<<value::16-bytes>> <> buffer, 16, type) when type in [:timeuuid, :uuid] do
-    {value, buffer}
+  defp decode_value_udt(<<>>, [], result) do
+    result
+  end
+
+  defp decode_value_udt(buffer, [{field_name, field_type} | rest], result) do
+    {value, buffer} = decode_value(buffer, field_type)
+    decode_value_udt(buffer, rest, Map.put(result, field_name, value))
   end
 
   defp decode_list(<<>>, 0, _type, acc) do
@@ -784,7 +804,12 @@ defmodule Xandra.Protocol do
     {{:set, [type]}, buffer}
   end
 
-  # TODO: UDT
+  defp decode_type(<<0x0030::16>> <> buffer) do
+    {_keyspace, buffer} = decode_string(buffer)
+    {_name, buffer} = decode_string(buffer)
+    <<count::16>> <> buffer = buffer
+    decode_type_udt(buffer, count, [])
+  end
 
   defp decode_type(<<0x0031::16, count::16>> <> buffer) do
     decode_type_tuple(buffer, count, [])
@@ -804,6 +829,17 @@ defmodule Xandra.Protocol do
 
   defp custom_type_to_native(class) do
     raise "cannot decode custom type #{inspect(class)}"
+  end
+
+  defp decode_type_udt(buffer, 0, acc) do
+    {{:udt, Enum.reverse(acc)}, buffer}
+  end
+
+  defp decode_type_udt(buffer, count, acc) do
+    {field_name, buffer} = decode_string(buffer)
+    {field_type, buffer} = decode_type(buffer)
+
+    decode_type_udt(buffer, count - 1, [{field_name, field_type} | acc])
   end
 
   defp decode_type_tuple(buffer, 0, acc) do
