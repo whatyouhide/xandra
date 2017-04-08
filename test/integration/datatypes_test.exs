@@ -219,14 +219,14 @@ defmodule DataTypesTest do
 
   test "user-defined types", %{conn: conn} do
     statement = """
-    CREATE TYPE IF NOT EXISTS full_name
+    CREATE TYPE full_name
     (first_name text,
      last_name text)
     """
     Xandra.execute!(conn, statement)
 
     statement = """
-    CREATE TYPE IF NOT EXISTS profile
+    CREATE TYPE profile
     (nickname text,
      full_name frozen<full_name>)
     """
