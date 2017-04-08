@@ -10,7 +10,7 @@ defmodule Xandra.Protocol do
   def encode_request(frame, params, options \\ [])
 
   def encode_request(%Frame{kind: :options} = frame, nil, _options) do
-    %{frame | body: <<>>}
+    %{frame | body: []}
   end
 
   def encode_request(%Frame{kind: :startup} = frame, requested_options, _options)
@@ -24,26 +24,27 @@ defmodule Xandra.Protocol do
 
   def encode_request(%Frame{kind: :query} = frame, %Simple{} = query, options) do
     %{statement: statement, values: values} = query
-    body =
-      <<byte_size(statement)::32>> <>
-      statement <>
-      encode_params([], values, options, _skip_metadata? = false)
+    body = [
+      <<byte_size(statement)::32>>,
+      statement,
+      encode_params([], values, options, _skip_metadata? = false),
+    ]
     %{frame | body: body}
   end
 
   def encode_request(%Frame{kind: :prepare} = frame, %Prepared{} = prepared, _options) do
     %{statement: statement} = prepared
-    body = <<byte_size(statement)::32>> <> statement
-    %{frame | body: body}
+    %{frame | body: [<<byte_size(statement)::32>>, statement]}
   end
 
   def encode_request(%Frame{kind: :execute} = frame, %Prepared{} = prepared, options) do
     %{id: id, bound_columns: columns, values: values} = prepared
     skip_metadata? = prepared.result_columns != nil
-    body =
-      <<byte_size(id)::16>> <>
-      id <>
-      encode_params(columns, values, options, skip_metadata?)
+    body = [
+      <<byte_size(id)::16>>,
+      id,
+      encode_params(columns, values, options, skip_metadata?),
+    ]
     %{frame | body: body}
   end
 
@@ -60,33 +61,32 @@ defmodule Xandra.Protocol do
       |> set_flag(_default_timestamp = 0x20, timestamp)
 
     encoded_queries =
-      for query <- queries, into: <<length(queries)::16>>, do: encode_query_in_batch(query)
+      for query <- queries, into: [<<length(queries)::16>>], do: encode_query_in_batch(query)
 
-    body =
-      encode_batch_type(type) <>
-      encoded_queries <>
-      encode_consistency_level(consistency) <>
-      <<flags>> <>
-      encode_serial_consistency(serial_consistency) <>
-      if(timestamp, do: <<timestamp::64>>, else: <<>>)
-
+    body = [
+      encode_batch_type(type),
+      encoded_queries,
+      encode_consistency_level(consistency),
+      flags,
+      encode_serial_consistency(serial_consistency),
+      if(timestamp, do: <<timestamp::64>>, else: []),
+    ]
     %{frame | body: body}
   end
 
-  defp encode_batch_type(:logged), do: <<0>>
-  defp encode_batch_type(:unlogged), do: <<1>>
-  defp encode_batch_type(:counter), do: <<2>>
+  defp encode_batch_type(:logged), do: 0
+  defp encode_batch_type(:unlogged), do: 1
+  defp encode_batch_type(:counter), do: 2
 
   defp encode_string_list(list) do
-    for string <- list, into: <<length(list)::16>> do
-      <<byte_size(string)::16, string::binary>>
+    for string <- list, into: [<<length(list)::16>>] do
+      [<<byte_size(string)::16>>, string]
     end
   end
 
   defp encode_string_map(map) do
-    for {key, value} <- map, into: <<map_size(map)::16>> do
-      key_size = byte_size(key)
-      <<key_size::16, key::size(key_size)-bytes, byte_size(value)::16, value::bytes>>
+    for {key, value} <- map, into: [<<map_size(map)::16>>] do
+      [<<byte_size(key)::16>>, key, <<byte_size(value)::16>>, value]
     end
   end
 
@@ -146,30 +146,32 @@ defmodule Xandra.Protocol do
 
     encoded_values =
       if values == [] or values == %{} do
-        <<>>
+        []
       else
         encode_query_values(columns, values)
       end
 
-    encode_consistency_level(consistency) <>
-      <<flags>> <>
-      encoded_values <>
-      <<page_size::32>> <>
-      encode_paging_state(paging_state) <>
-      encode_serial_consistency(serial_consistency) <>
-      if(timestamp, do: <<timestamp::64>>, else: <<>>)
+    [
+      encode_consistency_level(consistency),
+      flags,
+      encoded_values,
+      <<page_size::32>>,
+      encode_paging_state(paging_state),
+      encode_serial_consistency(serial_consistency),
+      if(timestamp, do: <<timestamp::64>>, else: []),
+    ]
   end
 
   defp encode_paging_state(value) do
     if value do
-      <<byte_size(value)::32>> <> value
+      [<<byte_size(value)::32>>, value]
     else
-      <<>>
+      []
     end
   end
 
   defp encode_serial_consistency(nil) do
-    <<>>
+    []
   end
 
   defp encode_serial_consistency(consistency) when consistency in [:serial, :local_serial] do
@@ -183,27 +185,33 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_in_batch(%Simple{statement: statement, values: values}) do
-    kind = <<0>>
-    encoded_statement = <<byte_size(statement)::32>> <> statement
-    kind <> encoded_statement <> encode_query_values([], values)
+    [
+      _kind = 0,
+      <<byte_size(statement)::32>>,
+      statement,
+      encode_query_values([], values),
+    ]
   end
 
   defp encode_query_in_batch(%Prepared{id: id, bound_columns: bound_columns, values: values}) do
-    kind = <<1>>
-    encoded_id = <<byte_size(id)::16>> <> id
-    kind <> encoded_id <> encode_query_values(bound_columns, values)
+    [
+      _kind = 1,
+      <<byte_size(id)::16>>,
+      id,
+      encode_query_values(bound_columns, values),
+    ]
   end
 
   defp encode_query_values([], values) when is_list(values) do
-    for value <- values, into: <<length(values)::16>> do
+    for value <- values, into: [<<length(values)::16>>] do
       encode_query_value(value)
     end
   end
 
   defp encode_query_values([], values) when is_map(values) do
-    for {name, value} <- values, into: <<map_size(values)::16>> do
+    for {name, value} <- values, into: [<<map_size(values)::16>>] do
       name = to_string(name)
-      <<byte_size(name)::16>> <> name <> encode_query_value(value)
+      [<<byte_size(name)::16>>, name, encode_query_value(value)]
     end
   end
 
@@ -212,14 +220,14 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_values(columns, values) when map_size(values) == length(columns) do
-    for {_keyspace, _table, name, type} <- columns, into: <<map_size(values)::16>> do
+    for {_keyspace, _table, name, type} <- columns, into: [<<map_size(values)::16>>] do
       value = Map.fetch!(values, name)
-      <<byte_size(name)::16>> <> name <> encode_query_value(type, value)
+      [<<byte_size(name)::16>>, name, encode_query_value(type, value)]
     end
   end
 
   defp encode_bound_values([], [], result) do
-    IO.iodata_to_binary(result)
+    result
   end
 
   defp encode_bound_values([column | columns], [value | values], result) do
@@ -238,7 +246,7 @@ defmodule Xandra.Protocol do
 
   defp encode_query_value(type, value) do
     result = encode_value(type, value)
-    <<byte_size(result)::32>> <> result
+    [<<IO.iodata_length(result)::32>>, result]
   end
 
   defp encode_value(:ascii, ascii) when is_binary(ascii) do
@@ -254,11 +262,15 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_value(:boolean, boolean) when is_boolean(boolean) do
-    if boolean, do: <<1>>, else: <<0>>
+    if boolean, do: [1], else: [0]
+  end
+
+  defp encode_value(:date, date) when date in 0..0xFFFFFFFF do
+    <<date::32>>
   end
 
   defp encode_value(:decimal, {value, scale}) do
-    encode_value(:int, scale) <> encode_value(:varint, value)
+    [encode_value(:int, scale), encode_value(:varint, value)]
   end
 
   defp encode_value(:double, double) when is_float(double) do
@@ -284,14 +296,16 @@ defmodule Xandra.Protocol do
 
   defp encode_value({:list, [items_type]}, list) when is_list(list) do
     for item <- list,
-        into: <<length(list)::32>>,
+        into: [<<length(list)::32>>],
         do: encode_query_value(items_type, item)
   end
 
   defp encode_value({:map, [key_type, value_type]}, map) when is_map(map) do
-    for {key, value} <- map, into: <<map_size(map)::32>> do
-      encode_query_value(key_type, key) <>
-        encode_query_value(value_type, value)
+    for {key, value} <- map, into: [<<map_size(map)::32>>] do
+      [
+        encode_query_value(key_type, key),
+        encode_query_value(value_type, value),
+      ]
     end
   end
 
@@ -299,16 +313,32 @@ defmodule Xandra.Protocol do
     encode_value({:list, inner_type}, MapSet.to_list(set))
   end
 
+  defp encode_value(:smallint, int) when is_integer(int) do
+    <<int::16>>
+  end
+
   defp encode_value(:text, text) when is_binary(text) do
     text
   end
 
+  defp encode_value(:time, time) when time in 0..86399999999999 do
+    <<time::64>>
+  end
+
   defp encode_value(:timestamp, timestamp) do
-    encode_value(:bigint, timestamp)
+    <<timestamp::64>>
+  end
+
+  defp encode_value(:tinyint, int) when is_integer(int) do
+    <<int>>
+  end
+
+  defp decode_value(<<value::16-bytes>> <> buffer, 16, type) when type in [:timeuuid, :uuid] do
+    {value, buffer}
   end
 
   defp encode_value({:udt, fields}, value) when is_map(value) do
-    for {field_name, field_type} <- fields, into: <<>> do
+    for {field_name, field_type} <- fields do
       encode_query_value(field_type, Map.get(value, field_name))
     end
   end
@@ -342,7 +372,6 @@ defmodule Xandra.Protocol do
 
   defp encode_value({:tuple, types}, tuple) when length(types) == tuple_size(tuple) do
     for {type, item} <- Enum.zip(types, Tuple.to_list(tuple)),
-        into: <<>>,
         do: encode_query_value(type, item)
   end
 
@@ -549,6 +578,10 @@ defmodule Xandra.Protocol do
     {value != 0, buffer}
   end
 
+  defp decode_value(<<value::32, buffer::bytes>>, 4, :date) do
+    {value, buffer}
+  end
+
   defp decode_value(buffer, size, :decimal) do
     {scale, buffer} = decode_value(buffer, 4, :int)
     {value, buffer} = decode_value(buffer, size - 4, :varint)
@@ -596,6 +629,10 @@ defmodule Xandra.Protocol do
     {MapSet.new(list), buffer}
   end
 
+  defp decode_value(<<value::16-signed, buffer::bytes>>, 2, :smallint) do
+    {value, buffer}
+  end
+
   defp decode_value(buffer, size, {:tuple, types}) do
     <<content::bytes-size(size)>> <> buffer = buffer
     {decode_tuple(content, types, []), buffer}
@@ -611,6 +648,10 @@ defmodule Xandra.Protocol do
     {int, buffer}
   end
 
+  defp decode_value(<<value::64, buffer::bytes>>, 8, :time) do
+    {value, buffer}
+  end
+
   defp decode_value(buffer, size, {:udt, fields}) do
     <<content::bytes-size(size)>> <> buffer = buffer
     {decode_value_udt(content, fields, %{}), buffer}
@@ -620,7 +661,7 @@ defmodule Xandra.Protocol do
     {value, buffer}
   end
 
-  defp decode_value(<<value::16-bytes>> <> buffer, 16, type) when type in [:timeuuid, :uuid] do
+  defp decode_value(<<value::signed, buffer::bytes>>, 1, :tinyint) do
     {value, buffer}
   end
 
@@ -683,8 +724,8 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_type(<<0x0000::16>> <> buffer) do
-    {name, buffer} = decode_string(buffer)
-    {{:custom, name}, buffer}
+    {class, buffer} = decode_string(buffer)
+    {custom_type_to_native(class), buffer}
   end
 
   defp decode_type(<<0x0001::16>> <> buffer) do
@@ -772,6 +813,22 @@ defmodule Xandra.Protocol do
 
   defp decode_type(<<0x0031::16, count::16>> <> buffer) do
     decode_type_tuple(buffer, count, [])
+  end
+
+  custom_types = %{
+    "org.apache.cassandra.db.marshal.SimpleDateType" => :date,
+    "org.apache.cassandra.db.marshal.ShortType" => :smallint,
+    "org.apache.cassandra.db.marshal.ByteType" => :tinyint,
+    "org.apache.cassandra.db.marshal.TimeType" => :time,
+  }
+  for {class, type} <- custom_types do
+    defp custom_type_to_native(unquote(class)) do
+      unquote(type)
+    end
+  end
+
+  defp custom_type_to_native(class) do
+    raise "cannot decode custom type #{inspect(class)}"
   end
 
   defp decode_type_udt(buffer, 0, acc) do

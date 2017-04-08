@@ -6,14 +6,14 @@ defmodule CompressionTest do
 
     def algorithm(), do: :snappy
 
-    def compress(binary) do
-      {:ok, compressed} = :snappy.compress(binary)
-      compressed
+    def compress(body) do
+      {:ok, compressed_body} = :snappy.compress(body)
+      compressed_body
     end
 
-    def decompress(compressed) do
-      {:ok, binary} = :snappy.decompress(compressed)
-      binary
+    def decompress(compressed_body) do
+      {:ok, body} = :snappy.decompress(compressed_body)
+      body
     end
   end
 

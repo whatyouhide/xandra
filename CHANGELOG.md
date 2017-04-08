@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.1
+
+- Optimized request encoding by using iodata.
+
+## v0.5.0
+
+- Added support for date, time, smallint, and tinyint types.
+
 ## v0.4.3
 
 - Fixed a bug where conditional prepared queries failed to decode.
