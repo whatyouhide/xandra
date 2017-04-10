@@ -110,7 +110,6 @@ defmodule Xandra do
   keys. Retrieving the row inserted above would look like this:
 
       %{"profile" => profile} = conn |> Xandra.execute!("SELECT id, profile FROM users") |> Enum.fetch!(0)
-
       profile
       #=> %{"username" => "bperry", "full_name" => %{"first_name" => "Britta", "last_name" => "Perry"}}
 
