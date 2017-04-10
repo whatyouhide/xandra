@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.0
+
+- Added support for user-defined types.
+
 ## v0.5.1
 
 - Optimized request encoding by using iodata.

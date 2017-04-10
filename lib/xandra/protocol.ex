@@ -333,10 +333,6 @@ defmodule Xandra.Protocol do
     <<int>>
   end
 
-  defp decode_value(<<value::16-bytes>> <> buffer, 16, type) when type in [:timeuuid, :uuid] do
-    {value, buffer}
-  end
-
   defp encode_value({:udt, fields}, value) when is_map(value) do
     for {field_name, field_type} <- fields do
       encode_query_value(field_type, Map.get(value, field_name))
@@ -636,6 +632,10 @@ defmodule Xandra.Protocol do
   defp decode_value(buffer, size, {:tuple, types}) do
     <<content::bytes-size(size)>> <> buffer = buffer
     {decode_tuple(content, types, []), buffer}
+  end
+
+  defp decode_value(<<value::16-bytes>> <> buffer, 16, type) when type in [:timeuuid, :uuid] do
+    {value, buffer}
   end
 
   defp decode_value(buffer, size, :varchar) do
