@@ -82,6 +82,37 @@ defmodule Xandra do
         "properties" => %{"legs" => true, "arms" => true, "tail" => false},
       })
 
+  #### User-defined types
+
+  Xandra supports user-defined types (UDTs). A UDT can be inserted as a map with
+  string fields. For example, consider having created the following UDTs:
+
+      CREATE TYPE full_name (first_name text, last_name text)
+      CREATE TYPE profile (username text, full_name frozen<full_name>)
+
+  and having the following table:
+
+      CREATE TABLE users (id int PRIMARY KEY, profile frozen<profile>)
+
+  Inserting rows will look something like this:
+
+      prepared_insert = Xandra.prepare!(conn, "INSERT INTO users (id, profile) VALUES (?, ?)")
+
+      profile = %{
+        "username" => "bperry",
+        "full_name" => %{"first_name" => "Britta", "last_name" => "Perry"},
+      }
+      Xandra.execute!(conn, prepared_insert, [_id = 1, profile])
+
+  Note that inserting UDTs is only supported on prepared queries.
+
+  When retrieved, UDTs are once again represented as maps with string
+  keys. Retrieving the row inserted above would look like this:
+
+      %{"profile" => profile} = conn |> Xandra.execute!("SELECT id, profile FROM users") |> Enum.fetch!(0)
+      profile
+      #=> %{"username" => "bperry", "full_name" => %{"first_name" => "Britta", "last_name" => "Perry"}}
+
   ## Reconnections
 
   Thanks to the `DBConnection` library, Xandra is able to handle connection
