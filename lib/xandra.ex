@@ -87,12 +87,12 @@ defmodule Xandra do
   Xandra supports user-defined types (UDTs). A UDT can be inserted as a map with
   string fields. For example, consider having created the following UDTs:
 
-      CREATE TYPE full_name (first_name TEXT, last_name TEXT)
-      CREATE TYPE profile (username TEXT, full_name FROZEN<full_name>)
+      CREATE TYPE full_name (first_name text, last_name text)
+      CREATE TYPE profile (username text, full_name frozen<full_name>)
 
   and having the following table:
 
-      CREATE TABLE users (id INT PRIMARY KEY, profile FROZEN<profile>)
+      CREATE TABLE users (id int PRIMARY KEY, profile frozen<profile>)
 
   Inserting rows will look something like this:
 
