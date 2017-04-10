@@ -113,7 +113,6 @@ defmodule Xandra do
       profile
       #=> %{"username" => "bperry", "full_name" => %{"first_name" => "Britta", "last_name" => "Perry"}}
 
-
   ## Reconnections
 
   Thanks to the `DBConnection` library, Xandra is able to handle connection
