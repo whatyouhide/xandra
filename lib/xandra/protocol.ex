@@ -529,26 +529,25 @@ defmodule Xandra.Protocol do
     {%{page | paging_state: paging_state}, buffer}
   end
 
-  defp decode_page_content(<<row_count::32-signed>> <> buffer, columns) do
-    {content, <<>>} = decode_page_content(buffer, row_count, columns, columns, [[]])
-    content
+  defp decode_page_content(<<row_count::32-signed, buffer::bits>>, columns) do
+    decode_page_content(buffer, row_count, columns, columns, [[]])
   end
 
-  def decode_page_content(buffer, 0, columns, columns, [_ | acc]) do
-    {Enum.reverse(acc), buffer}
+  def decode_page_content(<<>>, 0, columns, columns, [[] | acc]) do
+    Enum.reverse(acc)
   end
 
-  def decode_page_content(buffer, row_count, columns, [], [values | acc]) do
+  def decode_page_content(<<buffer::bits>>, row_count, columns, [], [values | acc]) do
     decode_page_content(buffer, row_count - 1, columns, columns, [[], Enum.reverse(values) | acc])
   end
 
-  def decode_page_content(<<size::32-signed>> <> buffer, row_count, columns, [{_, _, _, type} | rest], [values | acc]) do
+  def decode_page_content(<<size::32-signed, buffer::bits>>, row_count, columns, [{_, _, _, type} | rest], [values | acc]) do
     {value, buffer} = decode_value(buffer, size, type)
     values = [value | values]
     decode_page_content(buffer, row_count, columns, rest, [values | acc])
   end
 
-  defp decode_value(<<size::32-signed>> <> buffer, type) do
+  defp decode_value(<<size::32-signed, buffer::bits>>, type) do
     decode_value(buffer, size, type)
   end
 
