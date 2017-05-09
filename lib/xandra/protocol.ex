@@ -542,9 +542,14 @@ defmodule Xandra.Protocol do
   end
 
   def decode_page_content(<<size::32-signed, buffer::bits>>, row_count, columns, [{_, _, _, type} | rest], [values | acc]) do
-    {value, buffer} = decode_value(buffer, size, type)
-    values = [value | values]
-    decode_page_content(buffer, row_count, columns, rest, [values | acc])
+    if size == -1 do
+      values = [nil | values]
+      decode_page_content(buffer, row_count, columns, rest, [values | acc])
+    else
+      <<data::size(size)-bytes, buffer::bits>> = buffer
+      values = [decode_value_new(data, type) | values]
+      decode_page_content(buffer, row_count, columns, rest, [values | acc])
+    end
   end
 
   defp decode_value(<<size::32-signed, buffer::bits>>, type) do
@@ -663,6 +668,63 @@ defmodule Xandra.Protocol do
   defp decode_value(<<value::signed, buffer::bytes>>, 1, :tinyint) do
     {value, buffer}
   end
+
+
+
+  defp decode_value_new(<<value::bits>>, :ascii), do: value
+  defp decode_value_new(<<value::64-signed>>, :bigint), do: value
+  defp decode_value_new(<<value::bits>>, :blob), do: value
+  defp decode_value_new(<<value::8>>, :boolean), do: (value != 0)
+  defp decode_value_new(<<value::32>>, :date), do: value
+  defp decode_value_new(<<scale::32-signed, rest::bits>>, :decimal) do
+    {decode_value_new(rest, :varint), scale}
+  end
+  defp decode_value_new(<<value::64-float>>, :double), do: value
+  defp decode_value_new(<<value::32-float>>, :float), do: value
+  defp decode_value_new(<<content::4-bytes>>, :inet) do
+    <<n1, n2, n3, n4>> = content
+    {n1, n2, n3, n4}
+  end
+  defp decode_value_new(<<content::16-bytes>>, :inet) do
+    <<n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15, n16>> = content
+    {n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15, n16}
+  end
+  defp decode_value_new(<<value::32-signed>>, :int), do: value
+  defp decode_value_new(content, {:list, [type]}) do
+    <<length::32-signed, rest::bits>> = content
+    decode_list(rest, length, type, [])
+  end
+  defp decode_value_new(<<content::bits>>, {:map, [key_type, value_type]}) do
+    <<count::32-signed, rest::bits>> = content
+    decode_map(rest, count, key_type, value_type, [])
+  end
+  defp decode_value_new(<<content::bits>>, {:set, [type]}) do
+    <<length::32-signed, rest::bits>> = content
+    list = decode_list(rest, length, type, [])
+    MapSet.new(list)
+  end
+  defp decode_value_new(<<value::16-signed>>, :smallint), do: value
+  defp decode_value_new(<<content::bits>>, {:tuple, types}) do
+    decode_tuple(content, types, [])
+  end
+  defp decode_value_new(<<value::16-bytes>>, type) when type in [:timeuuid, :uuid], do: value
+  defp decode_value_new(<<value::bits>>, :varchar), do: value
+  defp decode_value_new(<<content::bits>>, :varint) do
+    size = bit_size(content)
+    <<value::size(size)-signed>> = content
+    value
+  end
+  defp decode_value_new(<<value::64>>, :time), do: value
+  defp decode_value_new(<<content::bits>>, {:udt, fields}) do
+    decode_value_udt(content, fields, %{})
+  end
+  defp decode_value_new(<<value::64-signed>>, :timestamp), do: value
+  defp decode_value_new(<<value::signed>>, :tinyint), do: value
+
+
+
+
+
 
   defp decode_value_udt(<<>>, [], result) do
     result
