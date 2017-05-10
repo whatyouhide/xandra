@@ -445,7 +445,7 @@ defmodule Xandra.Protocol do
 
   defp decode_inet(<<size, buffer::bits>>) do
     <<data::size(size), buffer::bits>> = buffer
-    address = decode_value_new(data, :inet)
+    address = decode_value(data, :inet)
     <<port::32, buffer::bits>> = buffer
     {address, port, buffer}
   end
@@ -548,62 +548,62 @@ defmodule Xandra.Protocol do
       decode_page_content(buffer, row_count, columns, rest, [values | acc])
     else
       <<data::size(size)-bytes, buffer::bits>> = buffer
-      values = [decode_value_new(data, type) | values]
+      values = [decode_value(data, type) | values]
       decode_page_content(buffer, row_count, columns, rest, [values | acc])
     end
   end
 
 
 
-  defp decode_value_new(<<value::bits>>, :ascii), do: value
-  defp decode_value_new(<<value::64-signed>>, :bigint), do: value
-  defp decode_value_new(<<value::bits>>, :blob), do: value
-  defp decode_value_new(<<value::8>>, :boolean), do: (value != 0)
-  defp decode_value_new(<<value::32>>, :date), do: value
-  defp decode_value_new(<<scale::32-signed, rest::bits>>, :decimal) do
-    {decode_value_new(rest, :varint), scale}
+  defp decode_value(<<value::bits>>, :ascii), do: value
+  defp decode_value(<<value::64-signed>>, :bigint), do: value
+  defp decode_value(<<value::bits>>, :blob), do: value
+  defp decode_value(<<value::8>>, :boolean), do: (value != 0)
+  defp decode_value(<<value::32>>, :date), do: value
+  defp decode_value(<<scale::32-signed, rest::bits>>, :decimal) do
+    {decode_value(rest, :varint), scale}
   end
-  defp decode_value_new(<<value::64-float>>, :double), do: value
-  defp decode_value_new(<<value::32-float>>, :float), do: value
-  defp decode_value_new(<<content::4-bytes>>, :inet) do
+  defp decode_value(<<value::64-float>>, :double), do: value
+  defp decode_value(<<value::32-float>>, :float), do: value
+  defp decode_value(<<content::4-bytes>>, :inet) do
     <<n1, n2, n3, n4>> = content
     {n1, n2, n3, n4}
   end
-  defp decode_value_new(<<content::16-bytes>>, :inet) do
+  defp decode_value(<<content::16-bytes>>, :inet) do
     <<n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15, n16>> = content
     {n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15, n16}
   end
-  defp decode_value_new(<<value::32-signed>>, :int), do: value
-  defp decode_value_new(content, {:list, [type]}) do
+  defp decode_value(<<value::32-signed>>, :int), do: value
+  defp decode_value(content, {:list, [type]}) do
     <<length::32-signed, rest::bits>> = content
     decode_value_list(rest, length, type, [])
   end
-  defp decode_value_new(<<content::bits>>, {:map, [key_type, value_type]}) do
+  defp decode_value(<<content::bits>>, {:map, [key_type, value_type]}) do
     <<count::32-signed, rest::bits>> = content
     decode_map_key(rest, count, key_type, value_type, [])
   end
-  defp decode_value_new(<<content::bits>>, {:set, [type]}) do
+  defp decode_value(<<content::bits>>, {:set, [type]}) do
     <<length::32-signed, rest::bits>> = content
     list = decode_value_list(rest, length, type, [])
     MapSet.new(list)
   end
-  defp decode_value_new(<<value::16-signed>>, :smallint), do: value
-  defp decode_value_new(<<content::bits>>, {:tuple, types}) do
+  defp decode_value(<<value::16-signed>>, :smallint), do: value
+  defp decode_value(<<content::bits>>, {:tuple, types}) do
     decode_value_tuple(content, types, [])
   end
-  defp decode_value_new(<<value::16-bytes>>, type) when type in [:timeuuid, :uuid], do: value
-  defp decode_value_new(<<value::bits>>, :varchar), do: value
-  defp decode_value_new(<<content::bits>>, :varint) do
+  defp decode_value(<<value::16-bytes>>, type) when type in [:timeuuid, :uuid], do: value
+  defp decode_value(<<value::bits>>, :varchar), do: value
+  defp decode_value(<<content::bits>>, :varint) do
     size = bit_size(content)
     <<value::size(size)-signed>> = content
     value
   end
-  defp decode_value_new(<<value::64>>, :time), do: value
-  defp decode_value_new(<<content::bits>>, {:udt, fields}) do
+  defp decode_value(<<value::64>>, :time), do: value
+  defp decode_value(<<content::bits>>, {:udt, fields}) do
     decode_value_udt(content, fields, [])
   end
-  defp decode_value_new(<<value::64-signed>>, :timestamp), do: value
-  defp decode_value_new(<<value::signed>>, :tinyint), do: value
+  defp decode_value(<<value::64-signed>>, :timestamp), do: value
+  defp decode_value(<<value::signed>>, :tinyint), do: value
 
 
 
@@ -618,7 +618,7 @@ defmodule Xandra.Protocol do
       decode_value_udt(buffer, rest, [{field_name, nil} | result])
     else
       <<data::size(size)-bytes, buffer::bits>> = buffer
-      value = decode_value_new(data, field_type)
+      value = decode_value(data, field_type)
       decode_value_udt(buffer, rest, [{field_name, value} | result])
     end
   end
@@ -632,7 +632,7 @@ defmodule Xandra.Protocol do
       decode_value_list(buffer, length - 1, type, [nil | acc])
     else
       <<data::size(size)-bytes, buffer::bits>> = buffer
-      item = decode_value_new(data, type)
+      item = decode_value(data, type)
       decode_value_list(buffer, length - 1, type, [item | acc])
     end
   end
@@ -646,7 +646,7 @@ defmodule Xandra.Protocol do
       decode_map_value(buffer, count, key_type, value_type, [nil | acc])
     else
       <<data::size(size)-bytes, buffer::bits>> = buffer
-      key = decode_value_new(data, key_type)
+      key = decode_value(data, key_type)
       decode_map_value(buffer, count, key_type, value_type, [key | acc])
     end
   end
@@ -656,7 +656,7 @@ defmodule Xandra.Protocol do
       decode_map_key(buffer, count - 1, key_type, value_type, [{key, nil} | acc])
     else
       <<data::size(size)-bytes, buffer::bits>> = buffer
-      value = decode_value_new(data, value_type)
+      value = decode_value(data, value_type)
       decode_map_key(buffer, count - 1, key_type, value_type, [{key, value} | acc])
     end
   end
@@ -670,7 +670,7 @@ defmodule Xandra.Protocol do
       decode_value_tuple(buffer, types, [nil | acc])
     else
       <<data::size(size)-bytes, buffer::bits>> = buffer
-      item = decode_value_new(data, type)
+      item = decode_value(data, type)
       decode_value_tuple(buffer, types, [item | acc])
     end
   end
