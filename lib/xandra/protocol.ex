@@ -576,7 +576,7 @@ defmodule Xandra.Protocol do
   defp decode_value_new(<<value::32-signed>>, :int), do: value
   defp decode_value_new(content, {:list, [type]}) do
     <<length::32-signed, rest::bits>> = content
-    decode_list(rest, length, type, [])
+    decode_value_list(rest, length, type, [])
   end
   defp decode_value_new(<<content::bits>>, {:map, [key_type, value_type]}) do
     <<count::32-signed, rest::bits>> = content
@@ -584,7 +584,7 @@ defmodule Xandra.Protocol do
   end
   defp decode_value_new(<<content::bits>>, {:set, [type]}) do
     <<length::32-signed, rest::bits>> = content
-    list = decode_list(rest, length, type, [])
+    list = decode_value_list(rest, length, type, [])
     MapSet.new(list)
   end
   defp decode_value_new(<<value::16-signed>>, :smallint), do: value
@@ -623,17 +623,17 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp decode_list(<<>>, 0, _type, acc) do
+  defp decode_value_list(<<>>, 0, _type, acc) do
     Enum.reverse(acc)
   end
 
-  defp decode_list(<<size::32-signed, buffer::bits>>, length, type, acc) do
+  defp decode_value_list(<<size::32-signed, buffer::bits>>, length, type, acc) do
     if size == -1 do
-      decode_list(buffer, length - 1, type, [nil | acc])
+      decode_value_list(buffer, length - 1, type, [nil | acc])
     else
       <<data::size(size)-bytes, buffer::bits>> = buffer
       item = decode_value_new(data, type)
-      decode_list(buffer, length - 1, type, [item | acc])
+      decode_value_list(buffer, length - 1, type, [item | acc])
     end
   end
 
