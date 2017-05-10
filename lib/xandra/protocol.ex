@@ -635,7 +635,7 @@ defmodule Xandra.Protocol do
 
   defp decode_value(buffer, size, {:tuple, types}) do
     <<content::bytes-size(size)>> <> buffer = buffer
-    {decode_tuple(content, types, []), buffer}
+    {decode_value_tuple(content, types, []), buffer}
   end
 
   defp decode_value(<<value::16-bytes>> <> buffer, 16, type) when type in [:timeuuid, :uuid] do
@@ -705,7 +705,7 @@ defmodule Xandra.Protocol do
   end
   defp decode_value_new(<<value::16-signed>>, :smallint), do: value
   defp decode_value_new(<<content::bits>>, {:tuple, types}) do
-    decode_tuple(content, types, [])
+    decode_value_tuple(content, types, [])
   end
   defp decode_value_new(<<value::16-bytes>>, type) when type in [:timeuuid, :uuid], do: value
   defp decode_value_new(<<value::bits>>, :varchar), do: value
@@ -783,13 +783,18 @@ defmodule Xandra.Protocol do
     end
   end
 
-  def decode_tuple(<<>>, [], acc) do
+  defp decode_value_tuple(<<>>, [], acc) do
     acc |> Enum.reverse |> List.to_tuple
   end
 
-  def decode_tuple(buffer, [type | types], acc) do
-    {item, buffer} = decode_value(buffer, type)
-    decode_tuple(buffer, types, [item | acc])
+  defp decode_value_tuple(<<size::32-signed, buffer::bits>>, [type | types], acc) do
+    if size == -1 do
+      decode_value_tuple(buffer, types, [nil | acc])
+    else
+      <<data::size(size)-bytes, buffer::bits>> = buffer
+      item = decode_value_new(data, type)
+      decode_value_tuple(buffer, types, [item | acc])
+    end
   end
 
   defp decode_columns(buffer, 0, _table_spec, acc) do
