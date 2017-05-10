@@ -716,7 +716,7 @@ defmodule Xandra.Protocol do
   end
   defp decode_value_new(<<value::64>>, :time), do: value
   defp decode_value_new(<<content::bits>>, {:udt, fields}) do
-    decode_value_udt(content, fields, %{})
+    decode_value_udt(content, fields, [])
   end
   defp decode_value_new(<<value::64-signed>>, :timestamp), do: value
   defp decode_value_new(<<value::signed>>, :tinyint), do: value
@@ -725,14 +725,18 @@ defmodule Xandra.Protocol do
 
 
 
-
   defp decode_value_udt(<<>>, [], result) do
-    result
+    Map.new(result)
   end
 
-  defp decode_value_udt(buffer, [{field_name, field_type} | rest], result) do
-    {value, buffer} = decode_value(buffer, field_type)
-    decode_value_udt(buffer, rest, Map.put(result, field_name, value))
+  defp decode_value_udt(<<size::32-signed, buffer::bits>>, [{field_name, field_type} | rest], result) do
+    if size == -1 do
+      decode_value_udt(buffer, rest, [{field_name, nil} | result])
+    else
+      <<data::size(size)-bytes, buffer::bits>> = buffer
+      value = decode_value_new(data, field_type)
+      decode_value_udt(buffer, rest, [{field_name, value} | result])
+    end
   end
 
   defp decode_list(<<>>, 0, _type, acc) do
