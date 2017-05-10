@@ -696,7 +696,7 @@ defmodule Xandra.Protocol do
   end
   defp decode_value_new(<<content::bits>>, {:map, [key_type, value_type]}) do
     <<count::32-signed, rest::bits>> = content
-    decode_map(rest, count, key_type, value_type, [])
+    decode_map_key(rest, count, key_type, value_type, [])
   end
   defp decode_value_new(<<content::bits>>, {:set, [type]}) do
     <<length::32-signed, rest::bits>> = content
@@ -757,6 +757,30 @@ defmodule Xandra.Protocol do
     {key, buffer} = decode_value(buffer, key_type)
     {value, buffer} = decode_value(buffer, value_type)
     decode_map(buffer, count - 1, key_type, value_type, [{key, value} | acc])
+  end
+
+  defp decode_map_key(<<>>, 0, _key_type, _value_type, acc) do
+    Map.new(acc)
+  end
+
+  defp decode_map_key(<<size::32-signed, buffer::bits>>, count, key_type, value_type, acc) do
+    if size == -1 do
+      decode_map_value(buffer, count, key_type, value_type, [nil | acc])
+    else
+      <<data::size(size)-bytes, buffer::bits>> = buffer
+      key = decode_value_new(data, key_type)
+      decode_map_value(buffer, count, key_type, value_type, [key | acc])
+    end
+  end
+
+  defp decode_map_value(<<size::32-signed, buffer::bits>>, count, key_type, value_type, [key | acc]) do
+    if size == -1 do
+      decode_map_key(buffer, count - 1, key_type, value_type, [{key, nil} | acc])
+    else
+      <<data::size(size)-bytes, buffer::bits>> = buffer
+      value = decode_value_new(data, value_type)
+      decode_map_key(buffer, count - 1, key_type, value_type, [{key, value} | acc])
+    end
   end
 
   def decode_tuple(<<>>, [], acc) do
