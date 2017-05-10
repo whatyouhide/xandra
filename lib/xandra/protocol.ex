@@ -739,9 +739,14 @@ defmodule Xandra.Protocol do
     Enum.reverse(acc)
   end
 
-  defp decode_list(buffer, length, type, acc) do
-    {elem, buffer} = decode_value(buffer, type)
-    decode_list(buffer, length - 1, type, [elem | acc])
+  defp decode_list(<<size::32-signed, buffer::bits>>, length, type, acc) do
+    if size == -1 do
+      decode_list(buffer, length - 1, type, [nil | acc])
+    else
+      <<data::size(size)-bytes, buffer::bits>> = buffer
+      item = decode_value_new(data, type)
+      decode_list(buffer, length - 1, type, [item | acc])
+    end
   end
 
   defp decode_map(<<>>, 0, _key_type, _value_type, acc) do
