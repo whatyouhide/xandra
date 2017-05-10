@@ -443,10 +443,11 @@ defmodule Xandra.Protocol do
     decode_result_response(body, query)
   end
 
-  defp decode_inet(<<size, buffer::binary>>) do
-    {address, rest} = decode_value(buffer, size, :inet)
-    <<port::32, rest::binary>> = rest
-    {address, port, rest}
+  defp decode_inet(<<size, buffer::bits>>) do
+    <<data::size(size), buffer::bits>> = buffer
+    address = decode_value_new(data, :inet)
+    <<port::32, buffer::bits>> = buffer
+    {address, port, buffer}
   end
 
   # Void
