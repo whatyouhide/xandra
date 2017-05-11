@@ -451,12 +451,12 @@ defmodule Xandra.Protocol do
   end
 
   # Void
-  defp decode_result_response(<<0x0001::32-signed>>, _query) do
+  def decode_result_response(<<0x0001::32-signed>>, _query) do
     %Xandra.Void{}
   end
 
   # Page
-  defp decode_result_response(<<0x0002::32-signed>> <> buffer, query) do
+  def decode_result_response(<<0x0002::32-signed>> <> buffer, query) do
     page = new_page(query)
     {page, buffer} = decode_metadata(buffer, page)
     content = decode_page_content(buffer, page.columns)
@@ -464,13 +464,13 @@ defmodule Xandra.Protocol do
   end
 
   # SetKeyspace
-  defp decode_result_response(<<0x0003::32-signed>> <> buffer, _query) do
+  def decode_result_response(<<0x0003::32-signed>> <> buffer, _query) do
     {keyspace, <<>>} = decode_string(buffer)
     %Xandra.SetKeyspace{keyspace: keyspace}
   end
 
   # Prepared
-  defp decode_result_response(<<0x0004::32-signed>> <> buffer, %Prepared{} = prepared) do
+  def decode_result_response(<<0x0004::32-signed>> <> buffer, %Prepared{} = prepared) do
     {id, buffer} = decode_string(buffer)
     {%{columns: bound_columns}, buffer} = decode_metadata(buffer, %Page{})
     {%{columns: result_columns}, <<>>} = decode_metadata(buffer, %Page{})
@@ -478,7 +478,7 @@ defmodule Xandra.Protocol do
   end
 
   # SchemaChange
-  defp decode_result_response(<<0x0005::32-signed>> <> buffer, _query) do
+  def decode_result_response(<<0x0005::32-signed>> <> buffer, _query) do
     {effect, buffer} = decode_string(buffer)
     {target, buffer} = decode_string(buffer)
     options = decode_change_options(buffer, target)

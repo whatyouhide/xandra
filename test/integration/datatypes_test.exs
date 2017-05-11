@@ -1,6 +1,114 @@
 defmodule DataTypesTest do
   use XandraTest.IntegrationCase, async: true
 
+  defp benchmark(body) do
+    run_count = 1000
+    Enum.reduce(1..run_count, 0, fn _, sum ->
+      :timer.tc(Xandra.Protocol, :decode_result_response, [body, %Xandra.Simple{}]) |> elem(0) |> Kernel.+(sum)
+    end)
+    |> Kernel./(run_count)
+    |> IO.puts
+  end
+
+  # master:
+  #  2428.074
+  #  9862.354
+  #
+  # optimized:
+  #  1446.558
+  #  6317.003
+  #
+  @tag :focus
+  test "decoding performance" do
+    {nil_body, []} = Code.eval_file("./nil_body.exs")
+    benchmark(nil_body)
+
+    {data_body, []} = Code.eval_file("./data_body.exs")
+    benchmark(data_body)
+  end
+
+  test "request performace", %{conn: conn} do
+    statement = """
+    CREATE TABLE temp
+    (shard blob,
+     id int,
+     ascii ascii,
+     bigint bigint,
+     blob blob,
+     boolean boolean,
+     date date,
+     decimal decimal,
+     double double,
+     float float,
+     inet inet,
+     int int,
+     smallint smallint,
+     text text,
+     time time,
+     timestamp timestamp,
+     timeuuid timeuuid,
+     tinyint tinyint,
+     uuid uuid,
+     varchar varchar,
+     varint varint,
+     PRIMARY KEY (shard, id));
+    """
+    Xandra.execute!(conn, statement, [])
+
+    statement = """
+    INSERT INTO temp
+    (shard,
+     id,
+     ascii,
+     bigint,
+     blob,
+     boolean,
+     date,
+     decimal,
+     double,
+     float,
+     inet,
+     int,
+     smallint,
+     text,
+     time,
+     timestamp,
+     timeuuid,
+     tinyint,
+     uuid,
+     varchar,
+     varint)
+    VALUES
+    (0x00, #{"?" |> List.duplicate(20) |> Enum.join(", ")})
+    """
+
+    values = [
+      {"ascii", "ascii"},
+      {"bigint", -1000000000},
+      {"blob", <<0x00FF::16>>},
+      {"boolean", true},
+      {"date", 1358013521},
+      {"decimal", {1323, -2}},
+      {"double", 3.1415},
+      {"float", -1.25},
+      {"inet", {192, 168, 0, 1}},
+      {"int", -42},
+      {"smallint", -33},
+      {"text", "эликсир"},
+      {"time", 1358013521},
+      {"timestamp", -2167219200},
+      {"timeuuid", "fe2b4360-28c6-11e2-81c1-0800200c9a66"},
+      {"tinyint", -21},
+      {"uuid", "00b69180-d0e1-11e2-8b8b-0800200c9a66"},
+      {"varchar", "тоже эликсир"},
+      {"varint", -6789065678192312391879827349},
+    ]
+    for id <- 1..10_000 do
+      Xandra.execute!(conn, statement, [{"int", id} | values])
+    end
+    :timer.tc(Xandra, :execute!, [conn, "SELECT * FROM temp WHERE shard = 0x00", [], [page_size: 1000]]) |> elem(0) |> IO.puts
+  end
+
   test "primitive datatypes", %{conn: conn} do
     statement = """
     CREATE TABLE primitives
