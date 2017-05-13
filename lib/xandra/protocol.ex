@@ -545,12 +545,12 @@ defmodule Xandra.Protocol do
     decode_page_content(buffer, row_count, columns, columns, [[]])
   end
 
-  def decode_page_content(<<>>, 0, columns, columns, [[] | acc]) do
-    Enum.reverse(acc)
-  end
-
   def decode_page_content(<<buffer::bits>>, row_count, columns, [], [values | acc]) do
     decode_page_content(buffer, row_count - 1, columns, columns, [[], Enum.reverse(values) | acc])
+  end
+
+  def decode_page_content(<<>>, 0, columns, columns, [[] | acc]) do
+    Enum.reverse(acc)
   end
 
   def decode_page_content(<<size::32-signed, buffer::bits>>, row_count, columns, [{_, _, _, type} | rest], [values | acc]) do
@@ -620,10 +620,6 @@ defmodule Xandra.Protocol do
 
 
 
-  defp decode_value_udt(<<>>, [], result) do
-    Map.new(result)
-  end
-
   defp decode_value_udt(<<size::32-signed, buffer::bits>>, [{field_name, field_type} | rest], result) do
     if size == -1 do
       decode_value_udt(buffer, rest, [{field_name, nil} | result])
@@ -634,9 +630,10 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp decode_value_list(<<>>, 0, _type, acc) do
-    Enum.reverse(acc)
+  defp decode_value_udt(<<>>, [], result) do
+    Map.new(result)
   end
+
 
   defp decode_value_list(<<size::32-signed, buffer::bits>>, length, type, acc) do
     if size == -1 do
@@ -648,8 +645,8 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp decode_map_key(<<>>, 0, _key_type, _value_type, acc) do
-    Map.new(acc)
+  defp decode_value_list(<<>>, 0, _type, acc) do
+    Enum.reverse(acc)
   end
 
   defp decode_map_key(<<size::32-signed, buffer::bits>>, count, key_type, value_type, acc) do
@@ -662,6 +659,10 @@ defmodule Xandra.Protocol do
     end
   end
 
+  defp decode_map_key(<<>>, 0, _key_type, _value_type, acc) do
+    Map.new(acc)
+  end
+
   defp decode_map_value(<<size::32-signed, buffer::bits>>, count, key_type, value_type, [key | acc]) do
     if size == -1 do
       decode_map_key(buffer, count - 1, key_type, value_type, [{key, nil} | acc])
@@ -672,10 +673,6 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp decode_value_tuple(<<>>, [], acc) do
-    acc |> Enum.reverse |> List.to_tuple
-  end
-
   defp decode_value_tuple(<<size::32-signed, buffer::bits>>, [type | types], acc) do
     if size == -1 do
       decode_value_tuple(buffer, types, [nil | acc])
@@ -684,6 +681,10 @@ defmodule Xandra.Protocol do
       item = decode_value(data, type)
       decode_value_tuple(buffer, types, [item | acc])
     end
+  end
+
+  defp decode_value_tuple(<<>>, [], acc) do
+    acc |> Enum.reverse |> List.to_tuple
   end
 
   defp decode_columns(buffer, 0, _table_spec, acc) do
