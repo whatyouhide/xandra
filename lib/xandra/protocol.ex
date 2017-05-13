@@ -453,8 +453,8 @@ defmodule Xandra.Protocol do
   end
 
   def decode_response(%Frame{kind: :event, body: body}, nil) do
-    decode_string(body, temp)
-    "STATUS_CHANGE" = temp
+    decode_string(body, event)
+    "STATUS_CHANGE" = event
     decode_string(body, effect)
     {address, port, <<>>} = decode_inet(body)
     %StatusChange{effect: effect, address: address, port: port}
