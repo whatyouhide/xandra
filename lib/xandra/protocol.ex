@@ -7,13 +7,14 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defmacrop decode_value(buffer, value, size, type, do: block) do
+  defmacrop decode_value(buffer, value, type, do: block) do
     quote do
-      if unquote(size) < 0 do
+      <<size::32-signed, unquote(buffer)::bits>> = unquote(buffer)
+      if size < 0 do
         unquote(value) = nil
         unquote(block)
       else
-        <<data::size(unquote(size))-bytes, unquote(buffer)::bits>> = unquote(buffer)
+        <<data::size(size)-bytes, unquote(buffer)::bits>> = unquote(buffer)
         unquote(value) = decode_value(data, unquote(type))
         unquote(block)
       end
@@ -558,19 +559,20 @@ defmodule Xandra.Protocol do
     decode_page_content(buffer, row_count, columns, columns, [[]])
   end
 
+
+  def decode_page_content(<<>>, 0, columns, columns, [[] | acc]) do
+    Enum.reverse(acc)
+  end
+
   def decode_page_content(<<buffer::bits>>, row_count, columns, [], [values | acc]) do
     decode_page_content(buffer, row_count - 1, columns, columns, [[], Enum.reverse(values) | acc])
   end
 
-  def decode_page_content(<<size::32-signed, buffer::bits>>, row_count, columns, [{_, _, _, type} | rest], [values | acc]) do
-    decode_value(buffer, value, size, type) do
+  def decode_page_content(<<buffer::bits>>, row_count, columns, [{_, _, _, type} | rest], [values | acc]) do
+    decode_value(buffer, value, type) do
       values = [value | values]
       decode_page_content(buffer, row_count, columns, rest, [values | acc])
     end
-  end
-
-  def decode_page_content(<<>>, 0, columns, columns, [[] | acc]) do
-    Enum.reverse(acc)
   end
 
   defp decode_value(<<value::bits>>, :ascii), do: value
@@ -624,11 +626,8 @@ defmodule Xandra.Protocol do
   defp decode_value(<<value::signed>>, :tinyint), do: value
 
 
-
-
-
-  defp decode_value_udt(<<size::32-signed, buffer::bits>>, [{field_name, field_type} | rest], result) do
-    decode_value(buffer, value, size, field_type) do
+  defp decode_value_udt(<<buffer::bits>>, [{field_name, field_type} | rest], result) do
+    decode_value(buffer, value, field_type) do
       decode_value_udt(buffer, rest, [{field_name, value} | result])
     end
   end
@@ -637,20 +636,13 @@ defmodule Xandra.Protocol do
     Map.new(result)
   end
 
-
-  defp decode_value_list(<<size::32-signed, buffer::bits>>, length, type, acc) do
-    decode_value(buffer, item, size, type) do
-      decode_value_list(buffer, length - 1, type, [item | acc])
-    end
-  end
-
   defp decode_value_list(<<>>, 0, _type, acc) do
     Enum.reverse(acc)
   end
 
-  defp decode_map_key(<<size::32-signed, buffer::bits>>, count, key_type, value_type, acc) do
-    decode_value(buffer, key, size, key_type) do
-      decode_map_value(buffer, count, key_type, value_type, [key | acc])
+  defp decode_value_list(<<buffer::bits>>, length, type, acc) do
+    decode_value(buffer, item, type) do
+      decode_value_list(buffer, length - 1, type, [item | acc])
     end
   end
 
@@ -658,14 +650,20 @@ defmodule Xandra.Protocol do
     Map.new(acc)
   end
 
-  defp decode_map_value(<<size::32-signed, buffer::bits>>, count, key_type, value_type, [key | acc]) do
-    decode_value(buffer, value, size, value_type) do
+  defp decode_map_key(<<buffer::bits>>, count, key_type, value_type, acc) do
+    decode_value(buffer, key, key_type) do
+      decode_map_value(buffer, count, key_type, value_type, [key | acc])
+    end
+  end
+
+  defp decode_map_value(<<buffer::bits>>, count, key_type, value_type, [key | acc]) do
+    decode_value(buffer, value, value_type) do
       decode_map_key(buffer, count - 1, key_type, value_type, [{key, value} | acc])
     end
   end
 
-  defp decode_value_tuple(<<size::32-signed, buffer::bits>>, [type | types], acc) do
-    decode_value(buffer, item, size, type) do
+  defp decode_value_tuple(<<buffer::bits>>, [type | types], acc) do
+    decode_value(buffer, item, type) do
       decode_value_tuple(buffer, types, [item | acc])
     end
   end
