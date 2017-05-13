@@ -595,16 +595,16 @@ defmodule Xandra.Protocol do
   end
   defp decode_value(<<value::32-signed>>, :int), do: value
   defp decode_value(content, {:list, [type]}) do
-    <<length::32-signed, rest::bits>> = content
-    decode_value_list(rest, length, type, [])
+    <<count::32-signed, rest::bits>> = content
+    decode_value_list(rest, count, type, [])
   end
   defp decode_value(<<content::bits>>, {:map, [key_type, value_type]}) do
     <<count::32-signed, rest::bits>> = content
-    decode_map_key(rest, count, key_type, value_type, [])
+    decode_value_map_key(rest, count, key_type, value_type, [])
   end
   defp decode_value(<<content::bits>>, {:set, [type]}) do
-    <<length::32-signed, rest::bits>> = content
-    list = decode_value_list(rest, length, type, [])
+    <<count::32-signed, rest::bits>> = content
+    list = decode_value_list(rest, count, type, [])
     MapSet.new(list)
   end
   defp decode_value(<<value::16-signed>>, :smallint), do: value
@@ -640,25 +640,25 @@ defmodule Xandra.Protocol do
     Enum.reverse(acc)
   end
 
-  defp decode_value_list(<<buffer::bits>>, length, type, acc) do
+  defp decode_value_list(<<buffer::bits>>, count, type, acc) do
     decode_value(buffer, item, type) do
-      decode_value_list(buffer, length - 1, type, [item | acc])
+      decode_value_list(buffer, count - 1, type, [item | acc])
     end
   end
 
-  defp decode_map_key(<<>>, 0, _key_type, _value_type, acc) do
+  defp decode_value_map_key(<<>>, 0, _key_type, _value_type, acc) do
     Map.new(acc)
   end
 
-  defp decode_map_key(<<buffer::bits>>, count, key_type, value_type, acc) do
+  defp decode_value_map_key(<<buffer::bits>>, count, key_type, value_type, acc) do
     decode_value(buffer, key, key_type) do
-      decode_map_value(buffer, count, key_type, value_type, [key | acc])
+      decode_value_map_value(buffer, count, key_type, value_type, [key | acc])
     end
   end
 
-  defp decode_map_value(<<buffer::bits>>, count, key_type, value_type, [key | acc]) do
+  defp decode_value_map_value(<<buffer::bits>>, count, key_type, value_type, [key | acc]) do
     decode_value(buffer, value, value_type) do
-      decode_map_key(buffer, count - 1, key_type, value_type, [{key, value} | acc])
+      decode_value_map_key(buffer, count - 1, key_type, value_type, [{key, value} | acc])
     end
   end
 
@@ -808,7 +808,6 @@ defmodule Xandra.Protocol do
   defp decode_type_udt(<<buffer::bits>>, count, acc) do
     decode_string(buffer, field_name)
     {field_type, buffer} = decode_type(buffer)
-
     decode_type_udt(buffer, count - 1, [{field_name, field_type} | acc])
   end
 
@@ -821,30 +820,30 @@ defmodule Xandra.Protocol do
     decode_type_tuple(buffer, count - 1, [type | acc])
   end
 
-  defp decode_string_multimap(<<size::16, buffer::bits>>) do
-    decode_string_multimap(buffer, size, [])
+  defp decode_string_multimap(<<count::16, buffer::bits>>) do
+    decode_string_multimap(buffer, count, [])
   end
 
   defp decode_string_multimap(<<buffer::bits>>, 0, acc) do
     {Map.new(acc), buffer}
   end
 
-  defp decode_string_multimap(<<buffer::bits>>, size, acc) do
+  defp decode_string_multimap(<<buffer::bits>>, count, acc) do
     decode_string(buffer, key)
     {value, buffer} = decode_string_list(buffer)
-    decode_string_multimap(buffer, size - 1, [{key, value} | acc])
+    decode_string_multimap(buffer, count - 1, [{key, value} | acc])
   end
 
-  defp decode_string_list(<<size::16, buffer::bits>>) do
-    decode_string_list(buffer, size, [])
+  defp decode_string_list(<<count::16, buffer::bits>>) do
+    decode_string_list(buffer, count, [])
   end
 
   defp decode_string_list(<<buffer::bits>>, 0, acc) do
     {Enum.reverse(acc), buffer}
   end
 
-  defp decode_string_list(<<buffer::bits>>, size, acc) do
-    decode_string(buffer, elem)
-    decode_string_list(buffer, size - 1, [elem | acc])
+  defp decode_string_list(<<buffer::bits>>, count, acc) do
+    decode_string(buffer, item)
+    decode_string_list(buffer, count - 1, [item | acc])
   end
 end
