@@ -3,7 +3,20 @@ defmodule Xandra.Protocol do
 
   defmacrop decode_string(buffer, value) do
     quote do
-      <<size::16, var!(unquote(value))::size(size)-bytes, var!(unquote(buffer))::bits>> = var!(unquote(buffer))
+      <<size::16, unquote(value)::size(size)-bytes, unquote(buffer)::bits>> = unquote(buffer)
+    end
+  end
+
+  defmacrop decode_value(buffer, value, size, type, do: block) do
+    quote do
+      if unquote(size) < 0 do
+        unquote(value) = nil
+        unquote(block)
+      else
+        <<data::size(unquote(size))-bytes, unquote(buffer)::bits>> = unquote(buffer)
+        unquote(value) = decode_value(data, unquote(type))
+        unquote(block)
+      end
     end
   end
 
@@ -549,22 +562,16 @@ defmodule Xandra.Protocol do
     decode_page_content(buffer, row_count - 1, columns, columns, [[], Enum.reverse(values) | acc])
   end
 
-  def decode_page_content(<<>>, 0, columns, columns, [[] | acc]) do
-    Enum.reverse(acc)
-  end
-
   def decode_page_content(<<size::32-signed, buffer::bits>>, row_count, columns, [{_, _, _, type} | rest], [values | acc]) do
-    if size == -1 do
-      values = [nil | values]
-      decode_page_content(buffer, row_count, columns, rest, [values | acc])
-    else
-      <<data::size(size)-bytes, buffer::bits>> = buffer
-      values = [decode_value(data, type) | values]
+    decode_value(buffer, value, size, type) do
+      values = [value | values]
       decode_page_content(buffer, row_count, columns, rest, [values | acc])
     end
   end
 
-
+  def decode_page_content(<<>>, 0, columns, columns, [[] | acc]) do
+    Enum.reverse(acc)
+  end
 
   defp decode_value(<<value::bits>>, :ascii), do: value
   defp decode_value(<<value::64-signed>>, :bigint), do: value
@@ -621,11 +628,7 @@ defmodule Xandra.Protocol do
 
 
   defp decode_value_udt(<<size::32-signed, buffer::bits>>, [{field_name, field_type} | rest], result) do
-    if size == -1 do
-      decode_value_udt(buffer, rest, [{field_name, nil} | result])
-    else
-      <<data::size(size)-bytes, buffer::bits>> = buffer
-      value = decode_value(data, field_type)
+    decode_value(buffer, value, size, field_type) do
       decode_value_udt(buffer, rest, [{field_name, value} | result])
     end
   end
@@ -636,11 +639,7 @@ defmodule Xandra.Protocol do
 
 
   defp decode_value_list(<<size::32-signed, buffer::bits>>, length, type, acc) do
-    if size == -1 do
-      decode_value_list(buffer, length - 1, type, [nil | acc])
-    else
-      <<data::size(size)-bytes, buffer::bits>> = buffer
-      item = decode_value(data, type)
+    decode_value(buffer, item, size, type) do
       decode_value_list(buffer, length - 1, type, [item | acc])
     end
   end
@@ -650,11 +649,7 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_map_key(<<size::32-signed, buffer::bits>>, count, key_type, value_type, acc) do
-    if size == -1 do
-      decode_map_value(buffer, count, key_type, value_type, [nil | acc])
-    else
-      <<data::size(size)-bytes, buffer::bits>> = buffer
-      key = decode_value(data, key_type)
+    decode_value(buffer, key, size, key_type) do
       decode_map_value(buffer, count, key_type, value_type, [key | acc])
     end
   end
@@ -664,21 +659,13 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_map_value(<<size::32-signed, buffer::bits>>, count, key_type, value_type, [key | acc]) do
-    if size == -1 do
-      decode_map_key(buffer, count - 1, key_type, value_type, [{key, nil} | acc])
-    else
-      <<data::size(size)-bytes, buffer::bits>> = buffer
-      value = decode_value(data, value_type)
+    decode_value(buffer, value, size, value_type) do
       decode_map_key(buffer, count - 1, key_type, value_type, [{key, value} | acc])
     end
   end
 
   defp decode_value_tuple(<<size::32-signed, buffer::bits>>, [type | types], acc) do
-    if size == -1 do
-      decode_value_tuple(buffer, types, [nil | acc])
-    else
-      <<data::size(size)-bytes, buffer::bits>> = buffer
-      item = decode_value(data, type)
+    decode_value(buffer, item, size, type) do
       decode_value_tuple(buffer, types, [item | acc])
     end
   end
