@@ -815,22 +815,22 @@ defmodule Xandra.Protocol do
     raise "cannot decode custom type #{inspect(class)}"
   end
 
-  defp decode_type_udt(buffer, 0, acc) do
+  defp decode_type_udt(<<buffer::bits>>, 0, acc) do
     {{:udt, Enum.reverse(acc)}, buffer}
   end
 
-  defp decode_type_udt(buffer, count, acc) do
+  defp decode_type_udt(<<buffer::bits>>, count, acc) do
     decode_string(buffer, field_name)
     {field_type, buffer} = decode_type(buffer)
 
     decode_type_udt(buffer, count - 1, [{field_name, field_type} | acc])
   end
 
-  defp decode_type_tuple(buffer, 0, acc) do
+  defp decode_type_tuple(<<buffer::bits>>, 0, acc) do
     {{:tuple, Enum.reverse(acc)}, buffer}
   end
 
-  defp decode_type_tuple(buffer, count, acc) do
+  defp decode_type_tuple(<<buffer::bits>>, count, acc) do
     {type, buffer} = decode_type(buffer)
     decode_type_tuple(buffer, count - 1, [type | acc])
   end
@@ -839,11 +839,11 @@ defmodule Xandra.Protocol do
     decode_string_multimap(buffer, size, [])
   end
 
-  defp decode_string_multimap(buffer, 0, acc) do
+  defp decode_string_multimap(<<buffer::bits>>, 0, acc) do
     {Map.new(acc), buffer}
   end
 
-  defp decode_string_multimap(buffer, size, acc) do
+  defp decode_string_multimap(<<buffer::bits>>, size, acc) do
     decode_string(buffer, key)
     {value, buffer} = decode_string_list(buffer)
     decode_string_multimap(buffer, size - 1, [{key, value} | acc])
@@ -853,11 +853,11 @@ defmodule Xandra.Protocol do
     decode_string_list(buffer, size, [])
   end
 
-  defp decode_string_list(buffer, 0, acc) do
+  defp decode_string_list(<<buffer::bits>>, 0, acc) do
     {Enum.reverse(acc), buffer}
   end
 
-  defp decode_string_list(buffer, size, acc) do
+  defp decode_string_list(<<buffer::bits>>, size, acc) do
     decode_string(buffer, elem)
     decode_string_list(buffer, size - 1, [elem | acc])
   end
