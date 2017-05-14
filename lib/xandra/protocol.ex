@@ -7,7 +7,7 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defmacrop decode_value(buffer, value, type, do: block) do
+  defmacrop decode_value({:<-, _, [value, buffer]}, type, do: block) do
     quote do
       <<size::32-signed, unquote(buffer)::bits>> = unquote(buffer)
       if size < 0 do
@@ -568,7 +568,7 @@ defmodule Xandra.Protocol do
   end
 
   def decode_page_content(<<buffer::bits>>, row_count, columns, [{_, _, _, type} | rest], [values | result]) do
-    decode_value(buffer, value, type) do
+    decode_value(value <- buffer, type) do
       values = [value | values]
       decode_page_content(buffer, row_count, columns, rest, [values | result])
     end
@@ -645,7 +645,7 @@ defmodule Xandra.Protocol do
   defp decode_value(<<value::signed>>, :tinyint), do: value
 
   defp decode_value_udt(<<buffer::bits>>, [{field_name, field_type} | rest], result) do
-    decode_value(buffer, value, field_type) do
+    decode_value(value <- buffer, field_type) do
       decode_value_udt(buffer, rest, [{field_name, value} | result])
     end
   end
@@ -659,7 +659,7 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_value_list(<<buffer::bits>>, count, type, result) do
-    decode_value(buffer, item, type) do
+    decode_value(item <- buffer, type) do
       decode_value_list(buffer, count - 1, type, [item | result])
     end
   end
@@ -669,19 +669,19 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_value_map_key(<<buffer::bits>>, count, key_type, value_type, result) do
-    decode_value(buffer, key, key_type) do
+    decode_value(key <- buffer, key_type) do
       decode_value_map_value(buffer, count, key_type, value_type, [key | result])
     end
   end
 
   defp decode_value_map_value(<<buffer::bits>>, count, key_type, value_type, [key | result]) do
-    decode_value(buffer, value, value_type) do
+    decode_value(value <- buffer, value_type) do
       decode_value_map_key(buffer, count - 1, key_type, value_type, [{key, value} | result])
     end
   end
 
   defp decode_value_tuple(<<buffer::bits>>, [type | types], result) do
-    decode_value(buffer, item, type) do
+    decode_value(item <- buffer, type) do
       decode_value_tuple(buffer, types, [item | result])
     end
   end
