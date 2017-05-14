@@ -1,7 +1,7 @@
 defmodule Xandra.Protocol do
   @moduledoc false
 
-  defmacrop decode_string(buffer, value) do
+  defmacrop decode_string({:<-, _, [value, buffer]}) do
     quote do
       <<size::16, unquote(value)::size(size)-bytes, unquote(buffer)::bits>> = unquote(buffer)
     end
@@ -427,7 +427,7 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_error_message(_reason, buffer) do
-    decode_string(buffer, message)
+    decode_string(message <- buffer)
     _ = buffer
     message
   end
@@ -453,9 +453,9 @@ defmodule Xandra.Protocol do
   end
 
   def decode_response(%Frame{kind: :event, body: body}, nil) do
-    decode_string(body, event)
+    decode_string(event <- body)
     "STATUS_CHANGE" = event
-    decode_string(body, effect)
+    decode_string(effect <- body)
     {address, port, <<>>} = decode_inet(body)
     %StatusChange{effect: effect, address: address, port: port}
   end
@@ -486,14 +486,14 @@ defmodule Xandra.Protocol do
 
   # SetKeyspace
   defp decode_result_response(<<0x0003::32-signed, buffer::bits>>, _query) do
-    decode_string(buffer, keyspace)
+    decode_string(keyspace <- buffer)
     <<>> = buffer
     %Xandra.SetKeyspace{keyspace: keyspace}
   end
 
   # Prepared
   defp decode_result_response(<<0x0004::32-signed, buffer::bits>>, %Prepared{} = prepared) do
-    decode_string(buffer, id)
+    decode_string(id <- buffer)
     {%{columns: bound_columns}, buffer} = decode_metadata(buffer, %Page{})
     {%{columns: result_columns}, <<>>} = decode_metadata(buffer, %Page{})
     %{prepared | id: id, bound_columns: bound_columns, result_columns: result_columns}
@@ -501,8 +501,8 @@ defmodule Xandra.Protocol do
 
   # SchemaChange
   defp decode_result_response(<<0x0005::32-signed, buffer::bits>>, _query) do
-    decode_string(buffer, effect)
-    decode_string(buffer, target)
+    decode_string(effect <- buffer)
+    decode_string(target <- buffer)
     options = decode_change_options(buffer, target)
     %Xandra.SchemaChange{effect: effect, target: target, options: options}
   end
@@ -515,14 +515,14 @@ defmodule Xandra.Protocol do
     do: %Page{columns: result_columns}
 
   defp decode_change_options(<<buffer::bits>>, "KEYSPACE") do
-    decode_string(buffer, keyspace)
+    decode_string(keyspace <- buffer)
     <<>> = buffer
     %{keyspace: keyspace}
   end
 
   defp decode_change_options(<<buffer::bits>>, target) when target in ["TABLE", "TYPE"] do
-    decode_string(buffer, keyspace)
-    decode_string(buffer, subject)
+    decode_string(keyspace <- buffer)
+    decode_string(subject <- buffer)
     <<>> = buffer
     %{keyspace: keyspace, subject: subject}
   end
@@ -535,8 +535,8 @@ defmodule Xandra.Protocol do
       no_metadata == 1 ->
         {page, buffer}
       global_table_spec == 1 ->
-        decode_string(buffer, keyspace)
-        decode_string(buffer, table)
+        decode_string(keyspace <- buffer)
+        decode_string(table <- buffer)
         {columns, buffer} = decode_columns(buffer, column_count, {keyspace, table}, [])
         {%{page | columns: columns}, buffer}
       true ->
@@ -695,9 +695,9 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_columns(<<buffer::bits>>, column_count, nil, result) do
-    decode_string(buffer, keyspace)
-    decode_string(buffer, table)
-    decode_string(buffer, name)
+    decode_string(keyspace <- buffer)
+    decode_string(table <- buffer)
+    decode_string(name <- buffer)
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
     decode_columns(buffer, column_count - 1, nil, [entry | result])
@@ -705,14 +705,14 @@ defmodule Xandra.Protocol do
 
   defp decode_columns(<<buffer::bits>>, column_count, table_spec, result) do
     {keyspace, table} = table_spec
-    decode_string(buffer, name)
+    decode_string(name <- buffer)
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
     decode_columns(buffer, column_count - 1, table_spec, [entry | result])
   end
 
   defp decode_type(<<0x0000::16, buffer::bits>>) do
-    decode_string(buffer, class)
+    decode_string(class <- buffer)
     {custom_type_to_native(class), buffer}
   end
 
@@ -793,8 +793,8 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_type(<<0x0030::16, buffer::bits>>) do
-    decode_string(buffer, _keyspace)
-    decode_string(buffer, _name)
+    decode_string(_keyspace <- buffer)
+    decode_string(_name <- buffer)
     <<count::16, buffer::bits>> = buffer
     decode_type_udt(buffer, count, [])
   end
@@ -824,7 +824,7 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_type_udt(<<buffer::bits>>, count, result) do
-    decode_string(buffer, field_name)
+    decode_string(field_name <- buffer)
     {field_type, buffer} = decode_type(buffer)
     decode_type_udt(buffer, count - 1, [{field_name, field_type} | result])
   end
@@ -847,7 +847,7 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_string_multimap(<<buffer::bits>>, count, result) do
-    decode_string(buffer, key)
+    decode_string(key <- buffer)
     {value, buffer} = decode_string_list(buffer)
     decode_string_multimap(buffer, count - 1, [{key, value} | result])
   end
@@ -861,7 +861,7 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_string_list(<<buffer::bits>>, count, result) do
-    decode_string(buffer, item)
+    decode_string(item <- buffer)
     decode_string_list(buffer, count - 1, [item | result])
   end
 end
