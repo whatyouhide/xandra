@@ -249,14 +249,14 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_bound_values([], [], result) do
-    result
+  defp encode_bound_values([], [], acc) do
+    acc
   end
 
-  defp encode_bound_values([column | columns], [value | values], result) do
+  defp encode_bound_values([column | columns], [value | values], acc) do
     {_keyspace, _table, _name, type} = column
-    result = [result | encode_query_value(type, value)]
-    encode_bound_values(columns, values, result)
+    acc = [acc | encode_query_value(type, value)]
+    encode_bound_values(columns, values, acc)
   end
 
   defp encode_query_value({type, value}) when is_binary(type) do
@@ -268,8 +268,8 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_value(type, value) do
-    result = encode_value(type, value)
-    [<<IO.iodata_length(result)::32>>, result]
+    acc = encode_value(type, value)
+    [<<IO.iodata_length(acc)::32>>, acc]
   end
 
   defp encode_value(:ascii, ascii) when is_binary(ascii) do
@@ -562,18 +562,18 @@ defmodule Xandra.Protocol do
   end
 
 
-  def decode_page_content(<<>>, 0, columns, columns, [[] | result]) do
-    Enum.reverse(result)
+  def decode_page_content(<<>>, 0, columns, columns, [[] | acc]) do
+    Enum.reverse(acc)
   end
 
-  def decode_page_content(<<buffer::bits>>, row_count, columns, [], [values | result]) do
-    decode_page_content(buffer, row_count - 1, columns, columns, [[], Enum.reverse(values) | result])
+  def decode_page_content(<<buffer::bits>>, row_count, columns, [], [values | acc]) do
+    decode_page_content(buffer, row_count - 1, columns, columns, [[], Enum.reverse(values) | acc])
   end
 
-  def decode_page_content(<<buffer::bits>>, row_count, columns, [{_, _, _, type} | rest], [values | result]) do
+  def decode_page_content(<<buffer::bits>>, row_count, columns, [{_, _, _, type} | rest], [values | acc]) do
     decode_value(value <- buffer, type) do
       values = [value | values]
-      decode_page_content(buffer, row_count, columns, rest, [values | result])
+      decode_page_content(buffer, row_count, columns, rest, [values | acc])
     end
   end
 
@@ -647,71 +647,71 @@ defmodule Xandra.Protocol do
 
   defp decode_value(<<value::signed>>, :tinyint), do: value
 
-  defp decode_value_udt(<<buffer::bits>>, [{field_name, field_type} | rest], result) do
+  defp decode_value_udt(<<buffer::bits>>, [{field_name, field_type} | rest], acc) do
     decode_value(value <- buffer, field_type) do
-      decode_value_udt(buffer, rest, [{field_name, value} | result])
+      decode_value_udt(buffer, rest, [{field_name, value} | acc])
     end
   end
 
-  defp decode_value_udt(<<>>, [], result) do
-    Map.new(result)
+  defp decode_value_udt(<<>>, [], acc) do
+    Map.new(acc)
   end
 
-  defp decode_value_list(<<>>, 0, _type, result) do
-    Enum.reverse(result)
+  defp decode_value_list(<<>>, 0, _type, acc) do
+    Enum.reverse(acc)
   end
 
-  defp decode_value_list(<<buffer::bits>>, count, type, result) do
+  defp decode_value_list(<<buffer::bits>>, count, type, acc) do
     decode_value(item <- buffer, type) do
-      decode_value_list(buffer, count - 1, type, [item | result])
+      decode_value_list(buffer, count - 1, type, [item | acc])
     end
   end
 
-  defp decode_value_map_key(<<>>, 0, _key_type, _value_type, result) do
-    Map.new(result)
+  defp decode_value_map_key(<<>>, 0, _key_type, _value_type, acc) do
+    Map.new(acc)
   end
 
-  defp decode_value_map_key(<<buffer::bits>>, count, key_type, value_type, result) do
+  defp decode_value_map_key(<<buffer::bits>>, count, key_type, value_type, acc) do
     decode_value(key <- buffer, key_type) do
-      decode_value_map_value(buffer, count, key_type, value_type, [key | result])
+      decode_value_map_value(buffer, count, key_type, value_type, [key | acc])
     end
   end
 
-  defp decode_value_map_value(<<buffer::bits>>, count, key_type, value_type, [key | result]) do
+  defp decode_value_map_value(<<buffer::bits>>, count, key_type, value_type, [key | acc]) do
     decode_value(value <- buffer, value_type) do
-      decode_value_map_key(buffer, count - 1, key_type, value_type, [{key, value} | result])
+      decode_value_map_key(buffer, count - 1, key_type, value_type, [{key, value} | acc])
     end
   end
 
-  defp decode_value_tuple(<<buffer::bits>>, [type | types], result) do
+  defp decode_value_tuple(<<buffer::bits>>, [type | types], acc) do
     decode_value(item <- buffer, type) do
-      decode_value_tuple(buffer, types, [item | result])
+      decode_value_tuple(buffer, types, [item | acc])
     end
   end
 
-  defp decode_value_tuple(<<>>, [], result) do
-    result |> Enum.reverse |> List.to_tuple
+  defp decode_value_tuple(<<>>, [], acc) do
+    acc |> Enum.reverse |> List.to_tuple
   end
 
-  defp decode_columns(buffer, 0, _table_spec, result) do
-    {Enum.reverse(result), buffer}
+  defp decode_columns(buffer, 0, _table_spec, acc) do
+    {Enum.reverse(acc), buffer}
   end
 
-  defp decode_columns(<<buffer::bits>>, column_count, nil, result) do
+  defp decode_columns(<<buffer::bits>>, column_count, nil, acc) do
     decode_string(keyspace <- buffer)
     decode_string(table <- buffer)
     decode_string(name <- buffer)
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
-    decode_columns(buffer, column_count - 1, nil, [entry | result])
+    decode_columns(buffer, column_count - 1, nil, [entry | acc])
   end
 
-  defp decode_columns(<<buffer::bits>>, column_count, table_spec, result) do
+  defp decode_columns(<<buffer::bits>>, column_count, table_spec, acc) do
     {keyspace, table} = table_spec
     decode_string(name <- buffer)
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
-    decode_columns(buffer, column_count - 1, table_spec, [entry | result])
+    decode_columns(buffer, column_count - 1, table_spec, [entry | acc])
   end
 
   defp decode_type(<<0x0000::16, buffer::bits>>) do
@@ -822,49 +822,49 @@ defmodule Xandra.Protocol do
     raise "cannot decode custom type #{inspect(class)}"
   end
 
-  defp decode_type_udt(<<buffer::bits>>, 0, result) do
-    {{:udt, Enum.reverse(result)}, buffer}
+  defp decode_type_udt(<<buffer::bits>>, 0, acc) do
+    {{:udt, Enum.reverse(acc)}, buffer}
   end
 
-  defp decode_type_udt(<<buffer::bits>>, count, result) do
+  defp decode_type_udt(<<buffer::bits>>, count, acc) do
     decode_string(field_name <- buffer)
     {field_type, buffer} = decode_type(buffer)
-    decode_type_udt(buffer, count - 1, [{field_name, field_type} | result])
+    decode_type_udt(buffer, count - 1, [{field_name, field_type} | acc])
   end
 
-  defp decode_type_tuple(<<buffer::bits>>, 0, result) do
-    {{:tuple, Enum.reverse(result)}, buffer}
+  defp decode_type_tuple(<<buffer::bits>>, 0, acc) do
+    {{:tuple, Enum.reverse(acc)}, buffer}
   end
 
-  defp decode_type_tuple(<<buffer::bits>>, count, result) do
+  defp decode_type_tuple(<<buffer::bits>>, count, acc) do
     {type, buffer} = decode_type(buffer)
-    decode_type_tuple(buffer, count - 1, [type | result])
+    decode_type_tuple(buffer, count - 1, [type | acc])
   end
 
   defp decode_string_multimap(<<count::16, buffer::bits>>) do
     decode_string_multimap(buffer, count, [])
   end
 
-  defp decode_string_multimap(<<buffer::bits>>, 0, result) do
-    {Map.new(result), buffer}
+  defp decode_string_multimap(<<buffer::bits>>, 0, acc) do
+    {Map.new(acc), buffer}
   end
 
-  defp decode_string_multimap(<<buffer::bits>>, count, result) do
+  defp decode_string_multimap(<<buffer::bits>>, count, acc) do
     decode_string(key <- buffer)
     {value, buffer} = decode_string_list(buffer)
-    decode_string_multimap(buffer, count - 1, [{key, value} | result])
+    decode_string_multimap(buffer, count - 1, [{key, value} | acc])
   end
 
   defp decode_string_list(<<count::16, buffer::bits>>) do
     decode_string_list(buffer, count, [])
   end
 
-  defp decode_string_list(<<buffer::bits>>, 0, result) do
-    {Enum.reverse(result), buffer}
+  defp decode_string_list(<<buffer::bits>>, 0, acc) do
+    {Enum.reverse(acc), buffer}
   end
 
-  defp decode_string_list(<<buffer::bits>>, count, result) do
+  defp decode_string_list(<<buffer::bits>>, count, acc) do
     decode_string(item <- buffer)
-    decode_string_list(buffer, count - 1, [item | result])
+    decode_string_list(buffer, count - 1, [item | acc])
   end
 end
