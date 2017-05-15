@@ -20,6 +20,7 @@ defmodule Xandra.Frame do
     :execute => 0x0A,
     :register => 0x0B,
     :batch => 0x0D,
+    :auth_response => 0x0F,
   }
 
   @response_version 0x83
@@ -27,9 +28,11 @@ defmodule Xandra.Frame do
   @response_opcodes %{
     0x00 => :error,
     0x02 => :ready,
+    0x03 => :authenticate,
     0x06 => :supported,
     0x08 => :result,
     0x0C => :event,
+    0x10 => :auth_success,
   }
 
   @spec new(kind) :: t(kind) when kind: var

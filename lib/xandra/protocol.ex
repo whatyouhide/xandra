@@ -41,6 +41,20 @@ defmodule Xandra.Protocol do
     %{frame | body: encode_string_map(requested_options)}
   end
 
+  def encode_request(%Frame{kind: :auth_response} = frame, _requested_options, options) do
+    case Keyword.fetch(options, :authentication) do
+      {:ok, authentication} ->
+        with {authenticator, auth_options} <- authentication,
+             body <- authenticator.response_body(auth_options) do
+          %{frame | body: [<<IO.iodata_length(body)::32>>, body]}
+        else
+          _ -> raise ":authentication must be in {mod, mod_options} format"
+        end
+      :error ->
+        raise "Cassandra asked for authentication but you did not provide :authentication"
+    end
+  end
+
   def encode_request(%Frame{kind: :register} = frame, events, _options) when is_list(events) do
     %{frame | body: encode_string_list(events)}
   end
