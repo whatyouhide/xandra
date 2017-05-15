@@ -1,6 +1,14 @@
 defmodule Xandra.Protocol do
   @moduledoc false
 
+  use Bitwise
+
+  alias Xandra.{Batch, Error, Frame, Prepared, Page, Simple, TypeParser}
+  alias Xandra.Cluster.StatusChange
+
+  # We need these two macros to make
+  # a single match context possible.
+
   defmacrop decode_string({:<-, _, [value, buffer]}) do
     quote do
       <<size::16, unquote(value)::size(size)-bytes, unquote(buffer)::bits>> = unquote(buffer)
@@ -20,11 +28,6 @@ defmodule Xandra.Protocol do
       end
     end
   end
-
-  use Bitwise
-
-  alias Xandra.{Batch, Error, Frame, Prepared, Page, Simple, TypeParser}
-  alias Xandra.Cluster.StatusChange
 
   @spec encode_request(Frame.t(kind), term, Keyword.t) :: Frame.t(kind) when kind: var
   def encode_request(frame, params, options \\ [])
