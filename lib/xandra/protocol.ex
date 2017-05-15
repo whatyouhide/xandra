@@ -561,16 +561,15 @@ defmodule Xandra.Protocol do
     decode_page_content(buffer, row_count, columns, columns, [[]])
   end
 
-
-  def decode_page_content(<<>>, 0, columns, columns, [[] | acc]) do
+  defp decode_page_content(<<>>, 0, columns, columns, [[] | acc]) do
     Enum.reverse(acc)
   end
 
-  def decode_page_content(<<buffer::bits>>, row_count, columns, [], [values | acc]) do
+  defp decode_page_content(<<buffer::bits>>, row_count, columns, [], [values | acc]) do
     decode_page_content(buffer, row_count - 1, columns, columns, [[], Enum.reverse(values) | acc])
   end
 
-  def decode_page_content(<<buffer::bits>>, row_count, columns, [{_, _, _, type} | rest], [values | acc]) do
+  defp decode_page_content(<<buffer::bits>>, row_count, columns, [{_, _, _, type} | rest], [values | acc]) do
     decode_value(value <- buffer, type) do
       values = [value | values]
       decode_page_content(buffer, row_count, columns, rest, [values | acc])
