@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.1
+
+- Optimized page content decoding by using single match context.
+
 ## v0.6.0
 
 - Added support for user-defined types.
