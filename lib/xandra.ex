@@ -130,7 +130,7 @@ defmodule Xandra do
 
   ## Authentication
 
-  Xandra supports authentication to Cassandra driver. See the documentation for
+  Xandra supports Cassandra authentication. See the documentation for
   `Xandra.Authenticator` for more information.
 
   ## Retrying failed queries
@@ -191,7 +191,7 @@ defmodule Xandra do
       decompressing data. See the "Compression" section in the module
       documentation. By default this option is not present.
 
-    * `:authentication` - (tuple) a tuple of two elements: the authenticator
+    * `:authentication` - (tuple) a two-element tuple: the authenticator
       module to use for authentication and its supported options. See the
       "Authentication" section in the module documentation.
 
@@ -214,9 +214,6 @@ defmodule Xandra do
 
       # Start a connection and register it under a name:
       {:ok, _conn} = Xandra.start_link(name: :xandra)
-
-      # Start a connection that requires authentication:
-      {:ok, conn} = Xandra.start_link(authentication: {MyAuthenticator, foo: "foo", bar: "bar"})
 
       # Start a named pool of connections:
       {:ok, _pool} = Xandra.start_link(name: :xandra_pool, pool: DBConnection.Poolboy)
