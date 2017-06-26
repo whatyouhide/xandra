@@ -5,9 +5,9 @@ defmodule Xandra.Authenticator.Password do
 
   ## Example
 
-    authentication_options = [username: "xandra", password: "secret"]
-    Xandra.start_link(authentication: {Xandra.Authenticator.Password, authentication_options})
-  
+    authenticator_options = [username: "xandra", password: "secret"]
+    Xandra.start_link(authentication: {Xandra.Authenticator.Password, authenticator_options})
+
   """
   @behaviour Xandra.Authenticator
 

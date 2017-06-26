@@ -14,7 +14,7 @@ defmodule Xandra.Authenticator do
 
   To use the authenticator defined above:
 
-    Xandra.start_link(authentication: {MyAuthenticator, user: "my_user", password: "my_password"}
+    Xandra.start_link(authentication: {MyAuthenticator, user: "foo", password: "bar"})
 
   Xandra supports Cassandra's PasswordAuthenticator by default, see
   `Xandra.Authenticator.Password` for more information.

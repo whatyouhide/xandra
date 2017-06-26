@@ -48,10 +48,10 @@ defmodule Xandra.Protocol do
              body <- authenticator.response_body(auth_options) do
           %{frame | body: [<<IO.iodata_length(body)::32>>, body]}
         else
-          _ -> raise ":authentication must be in {mod, mod_options} format"
+          _ -> raise "the :authentication option must be an {auth_module, auth_options} tuple, got: #{inspect(authentication)}"
         end
       :error ->
-        raise "Cassandra asked for authentication but you did not provide :authentication"
+        raise "Cassandra server requires authentication but the :authentication option was not provided"
     end
   end
 

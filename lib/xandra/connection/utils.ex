@@ -56,7 +56,7 @@ defmodule Xandra.Connection.Utils do
         %Frame{kind: :authenticate} ->
           authenticate_connection(socket, requested_options, compressor, options)
         _ ->
-          raise "protocol violation, got frame: #{inspect(frame)}"
+          raise "protocol violation, got unexpected frame: #{inspect(frame)}"
       end
     else
       {:error, reason} ->
@@ -75,7 +75,7 @@ defmodule Xandra.Connection.Utils do
       case frame do
         %Frame{kind: :auth_success} -> :ok
         %Frame{kind: :error} -> {:error, Protocol.decode_response(frame)}
-        _ -> raise "protocol violation, got frame: #{inspect(frame)}"
+        _ -> raise "protocol violation, got unexpected frame: #{inspect(frame)}"
       end
     else
       {:error, reason} ->
