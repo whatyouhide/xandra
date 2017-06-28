@@ -128,6 +128,11 @@ defmodule Xandra do
   executing queries on different nodes based on load balancing strategies. See
   the documentation for `Xandra.Cluster` for more information.
 
+  ## Authentication
+
+  Xandra supports Cassandra authentication. See the documentation for
+  `Xandra.Authenticator` for more information.
+
   ## Retrying failed queries
 
   Xandra takes a customizable and extensible approach to retrying failed queries
@@ -185,6 +190,10 @@ defmodule Xandra do
     * `:compressor` - (module) the compressor module to use for compressing and
       decompressing data. See the "Compression" section in the module
       documentation. By default this option is not present.
+
+    * `:authentication` - (tuple) a two-element tuple: the authenticator
+      module to use for authentication and its supported options. See the
+      "Authentication" section in the module documentation.
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of connections to Cassandra, the `:pool` option can
