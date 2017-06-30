@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.7.0
+
+- Added support for authentication.
+
 ## v0.6.1
 
 - Optimized page content decoding by using single match context.
