@@ -4,17 +4,17 @@ defmodule Xandra.Authenticator do
 
   ## Examples
 
-    defmodule MyAuthenticator do
-      @behaviour Xandra.Authenticator
+      defmodule MyAuthenticator do
+        @behaviour Xandra.Authenticator
 
-      def response_body(options) do
-        ["user:", Keyword.fetch!(options, :user), "_password:", Keyword.fetch!(options, :password)]
+        def response_body(options) do
+          ["user:", Keyword.fetch!(options, :user), "_password:", Keyword.fetch!(options, :password)]
+        end
       end
-    end
 
   To use the authenticator defined above:
 
-    Xandra.start_link(authentication: {MyAuthenticator, user: "foo", password: "bar"})
+      Xandra.start_link(authentication: {MyAuthenticator, user: "foo", password: "bar"})
 
   Xandra supports Cassandra's PasswordAuthenticator by default, see
   `Xandra.Authenticator.Password` for more information.
