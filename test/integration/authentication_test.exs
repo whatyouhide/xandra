@@ -6,7 +6,11 @@ defmodule AuthenticationTest do
 
   @moduletag :authentication
 
-  test "challenge is passed", %{conn: conn, keyspace: keyspace} do
-    assert Xandra.execute!(conn, "USE #{keyspace}")
+  test "challenge is passed", %{keyspace: keyspace, start_options: start_options} do
+    call_options = [pool: Xandra.Cluster]
+
+    {:ok, cluster} = Xandra.start_link(call_options ++ start_options)
+
+    assert ClusteringTest.await_connected(cluster, call_options, &Xandra.execute!(&1, "USE #{keyspace}"))
   end
 end

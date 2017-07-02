@@ -102,9 +102,9 @@ defmodule Xandra.Cluster do
     GenServer.start_link(__MODULE__, {state, nodes}, name: name)
   end
 
-  def init({%__MODULE__{} = state, nodes}) do
+  def init({%__MODULE__{options: options} = state, nodes}) do
     {:ok, pool_supervisor} = Supervisor.start_link([], strategy: :one_for_one, max_restarts: 0)
-    start_control_connections(nodes)
+    start_control_connections(nodes, options)
     {:ok, %{state | pool_supervisor: pool_supervisor}}
   end
 
@@ -157,10 +157,10 @@ defmodule Xandra.Cluster do
     {:noreply, toggle_pool(state, status_change)}
   end
 
-  defp start_control_connections(nodes) do
+  defp start_control_connections(nodes, options) do
     cluster = self()
     Enum.each(nodes, fn({address, port}) ->
-      ControlConnection.start_link(cluster, address, port)
+      ControlConnection.start_link(cluster, address, port, options)
     end)
   end
 

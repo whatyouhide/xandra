@@ -9,10 +9,18 @@ defmodule Xandra.Cluster.ControlConnection do
   @default_timeout 5_000
   @socket_options [packet: :raw, mode: :binary, active: false]
 
-  defstruct [:address, :port, :cluster, :socket, new: true, buffer: <<>>]
+  defstruct [
+    :address,
+    :port,
+    :cluster,
+    :socket,
+    :options,
+    new: true,
+    buffer: <<>>,
+  ]
 
-  def start_link(cluster, address, port) do
-    state = %__MODULE__{cluster: cluster, address: address, port: port}
+  def start_link(cluster, address, port, options) do
+    state = %__MODULE__{cluster: cluster, address: address, port: port, options: options}
     Connection.start_link(__MODULE__, state)
   end
 
@@ -20,12 +28,12 @@ defmodule Xandra.Cluster.ControlConnection do
     {:connect, :init, state}
   end
 
-  def connect(_action, %__MODULE__{address: address, port: port} = state) do
+  def connect(_action, %__MODULE__{address: address, port: port, options: options} = state) do
     case :gen_tcp.connect(address, port, @socket_options, @default_timeout) do
       {:ok, socket} ->
         state = %{state | socket: socket}
         with {:ok, supported_options} <- Utils.request_options(socket),
-             :ok <- startup_connection(socket, supported_options),
+             :ok <- startup_connection(socket, supported_options, options),
              :ok <- register_to_events(socket),
              :ok <- :inet.setopts(socket, active: true),
              {:ok, state} <- report_active(state) do
@@ -69,10 +77,10 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  defp startup_connection(socket, supported_options) do
+  defp startup_connection(socket, supported_options, options) do
     %{"CQL_VERSION" => [cql_version | _]} = supported_options
     requested_options = %{"CQL_VERSION" => cql_version}
-    Utils.startup_connection(socket, requested_options)
+    Utils.startup_connection(socket, requested_options, nil, options)
   end
 
   defp register_to_events(socket) do
