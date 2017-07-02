@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.7.1
+
+- Made `Xandra.Cluster` to fully utilize authentication.
+
 ## v0.7.0
 
 - Added support for authentication.
