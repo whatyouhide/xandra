@@ -482,7 +482,7 @@ defmodule Xandra.Protocol do
     decode_result_response(body, query)
   end
 
-  defp decode_inet(<<size, data::binary-size(size), buffer::bits>>) do
+  defp decode_inet(<<size, data::size(size)-bytes, buffer::bits>>) do
     address = decode_value(data, :inet)
     <<port::32, buffer::bits>> = buffer
     {address, port, buffer}
