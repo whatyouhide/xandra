@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.7.2
+
+- Fixed a bug in the binary protocol that affected nodes going up/down when using `Xandra.Cluster`.
+
 ## v0.7.1
 
 - Made `Xandra.Cluster` to fully utilize authentication.
