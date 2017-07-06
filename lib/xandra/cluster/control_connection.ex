@@ -10,17 +10,24 @@ defmodule Xandra.Cluster.ControlConnection do
   @socket_options [packet: :raw, mode: :binary, active: false]
 
   defstruct [
+    :cluster,
+    :node_ref,
     :address,
     :port,
-    :cluster,
     :socket,
     :options,
     new: true,
     buffer: <<>>,
   ]
 
-  def start_link(cluster, address, port, options) do
-    state = %__MODULE__{cluster: cluster, address: address, port: port, options: options}
+  def start_link(cluster, node_ref, address, port, options) do
+    state = %__MODULE__{
+      cluster: cluster,
+      node_ref: node_ref,
+      address: address,
+      port: port,
+      options: options,
+    }
     Connection.start_link(__MODULE__, state)
   end
 
@@ -70,9 +77,9 @@ defmodule Xandra.Cluster.ControlConnection do
     {:ok, state}
   end
 
-  defp report_active(%{new: true, cluster: cluster, socket: socket} = state) do
+  defp report_active(%{new: true, cluster: cluster, node_ref: node_ref, socket: socket} = state) do
     with {:ok, {address, port}} <- :inet.peername(socket) do
-      Xandra.Cluster.activate(cluster, address, port)
+      Xandra.Cluster.activate(cluster, node_ref, address, port)
       {:ok, %{state | new: false, address: address}}
     end
   end

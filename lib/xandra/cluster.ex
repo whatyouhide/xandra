@@ -82,7 +82,14 @@ defmodule Xandra.Cluster do
 
   require Logger
 
-  defstruct [:options, :pool_supervisor, :pool_module, pools: %{}]
+  defstruct [
+    :options,
+    :node_refs,
+    :load_balancing,
+    :pool_supervisor,
+    :pool_module,
+    pools: %{},
+  ]
 
   def ensure_all_started(options, type) do
     {pool_module, options} = Keyword.pop(options, :underlying_pool, @default_pool_module)
@@ -95,17 +102,22 @@ defmodule Xandra.Cluster do
 
   def start_link(Xandra.Connection, options) do
     {pool_module, options} = Keyword.pop(options, :underlying_pool, @default_pool_module)
+    {load_balancing, options} = Keyword.pop(options, :load_balancing, :random)
     {nodes, options} = Keyword.pop(options, :nodes)
     {name, options} = Keyword.pop(options, :name)
 
-    state = %__MODULE__{options: Keyword.delete(options, :pool), pool_module: pool_module}
+    state = %__MODULE__{
+      options: Keyword.delete(options, :pool),
+      load_balancing: load_balancing,
+      pool_module: pool_module,
+    }
     GenServer.start_link(__MODULE__, {state, nodes}, name: name)
   end
 
   def init({%__MODULE__{options: options} = state, nodes}) do
     {:ok, pool_supervisor} = Supervisor.start_link([], strategy: :one_for_one, max_restarts: 0)
-    start_control_connections(nodes, options)
-    {:ok, %{state | pool_supervisor: pool_supervisor}}
+    node_refs = start_control_connections(nodes, options)
+    {:ok, %{state | node_refs: node_refs, pool_supervisor: pool_supervisor}}
   end
 
   def checkout(cluster, options) do
@@ -132,25 +144,30 @@ defmodule Xandra.Cluster do
     pool_module.stop(pool_ref, error, state, options)
   end
 
-  def activate(cluster, address, port) do
-    GenServer.cast(cluster, {:activate, address, port})
+  def activate(cluster, node_ref, address, port) do
+    GenServer.cast(cluster, {:activate, node_ref, address, port})
   end
 
   def update(cluster, status_change) do
     GenServer.cast(cluster, {:update, status_change})
   end
 
-  def handle_call(:checkout, _from, %__MODULE__{pools: pools} = state) do
+  def handle_call(:checkout, _from, %__MODULE__{} = state) do
+    %{node_refs: node_refs,
+      load_balancing: load_balancing,
+      pool_module: pool_module,
+      pools: pools} = state
+
     if Enum.empty?(pools) do
       {:reply, {:error, :empty}, state}
     else
-      {_address, pool} = Enum.random(pools)
-      {:reply, {:ok, state.pool_module, pool}, state}
+      pool = select_pool(load_balancing, pools, node_refs)
+      {:reply, {:ok, pool_module, pool}, state}
     end
   end
 
-  def handle_cast({:activate, address, port}, %__MODULE__{} = state) do
-    {:noreply, start_pool(state, address, port)}
+  def handle_cast({:activate, node_ref, address, port}, %__MODULE__{} = state) do
+    {:noreply, start_pool(state, node_ref, address, port)}
   end
 
   def handle_cast({:update, %StatusChange{} = status_change}, %__MODULE__{} = state) do
@@ -159,19 +176,26 @@ defmodule Xandra.Cluster do
 
   defp start_control_connections(nodes, options) do
     cluster = self()
-    Enum.each(nodes, fn({address, port}) ->
-      ControlConnection.start_link(cluster, address, port, options)
+    Enum.map(nodes, fn({address, port}) ->
+      node_ref = make_ref()
+      ControlConnection.start_link(cluster, node_ref, address, port, options)
+      {node_ref, nil}
     end)
   end
 
-  defp start_pool(state, address, port) do
-    %{options: options, pool_module: pool_module,
-      pools: pools, pool_supervisor: pool_supervisor} = state
+  defp start_pool(state, node_ref, address, port) do
+    %{options: options,
+      node_refs: node_refs,
+      pool_module: pool_module,
+      pool_supervisor: pool_supervisor,
+      pools: pools} = state
+
     options = [address: address, port: port] ++ options
     child_spec = pool_module.child_spec(Xandra.Connection, options, id: address)
     case Supervisor.start_child(pool_supervisor, child_spec) do
       {:ok, pool} ->
-        %{state | pools: Map.put(pools, address, pool)}
+        node_refs = List.keystore(node_refs, node_ref, 0, {node_ref, address})
+        %{state | node_refs: node_refs, pools: Map.put(pools, address, pool)}
       {:error, {:already_started, _pool}} ->
         Logger.warn(fn ->
           "Xandra cluster #{inspect(name())} " <>
@@ -190,7 +214,8 @@ defmodule Xandra.Cluster do
   end
 
   defp toggle_pool(state, %{effect: "UP", address: address}) do
-    %{pools: pools, pool_supervisor: pool_supervisor} = state
+    %{pool_supervisor: pool_supervisor, pools: pools} = state
+
     case Supervisor.restart_child(pool_supervisor, address) do
       {:error, reason} when reason in [:not_found, :running, :restarting] ->
         state
@@ -200,8 +225,20 @@ defmodule Xandra.Cluster do
   end
 
   defp toggle_pool(state, %{effect: "DOWN", address: address}) do
-    %{pools: pools, pool_supervisor: pool_supervisor} = state
+    %{pool_supervisor: pool_supervisor, pools: pools} = state
+
     Supervisor.terminate_child(pool_supervisor, address)
     %{state | pools: Map.delete(pools, address)}
+  end
+
+  defp select_pool(:random, pools, _node_refs) do
+    {_address, pool} = Enum.random(pools)
+    pool
+  end
+
+  defp select_pool(:priority, pools, node_refs) do
+    Enum.find_value(node_refs, fn {_node_ref, address} ->
+      Map.get(pools, address)
+    end)
   end
 end
