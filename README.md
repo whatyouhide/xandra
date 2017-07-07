@@ -20,12 +20,12 @@ This library is in its early stages when it comes to features, but we're already
   * batch queries
   * page streaming
   * compression
-  * clustering (only random load balancing for now)
+  * clustering (random, and priority load balancing for now)
   * customizable retry strategies for failed queries
   * user-defined types
   * authentication
 
-In the future, we plan to add more features, like more strategies for clustering. See [the documentation][documentation] for detailed explanation of how the supported features work.
+In the future, we plan to add more features, like more load balancing strategies for clustering. See [the documentation][documentation] for detailed explanation of how the supported features work.
 
 ## Installation
 

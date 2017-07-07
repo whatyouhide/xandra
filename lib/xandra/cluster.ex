@@ -44,9 +44,13 @@ defmodule Xandra.Cluster do
 
   ## Load balancing strategies
 
-  For now, the only load balancing "strategy" implemented is random choice of
-  nodes: when you execute a query against a `Xandra.Cluster` connection, it will
-  choose one of connected nodes at random and execute the query on that node.
+  For now, there are two load balancing "strategies" implemented:
+
+    * `:random` - it will choose one of connected nodes at random and
+      execute a query on that node.
+
+    * `:priority` - it will choose a node to execute a query according
+      to `:nodes` order.
 
   ## Disconnections and reconnections
 
@@ -66,6 +70,8 @@ defmodule Xandra.Cluster do
 
     * `:underlying_pool` - (module) the `DBConnection.Pool` pool used to pool
       connections to each of the specified nodes.
+
+    * `:load_balancing` - (atom) load balancing "strategy".
 
   To pass options to the underlying pool, you can just pass them alongside other
   options to `Xandra.start_link/1`.
