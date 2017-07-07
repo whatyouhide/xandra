@@ -46,11 +46,11 @@ defmodule Xandra.Cluster do
 
   For now, there are two load balancing "strategies" implemented:
 
-    * `:random` - it will choose one of connected nodes at random and
-      execute a query on that node.
+    * `:random` - it will choose one of the connected nodes at random and
+      execute the query on that node.
 
-    * `:priority` - it will choose a node to execute a query according
-      to `:nodes` order.
+    * `:priority` - it will choose a node to execute the query according
+      to the order nodes appear in `:nodes`.
 
   ## Disconnections and reconnections
 
