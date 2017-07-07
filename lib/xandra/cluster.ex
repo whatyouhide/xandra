@@ -71,7 +71,7 @@ defmodule Xandra.Cluster do
     * `:underlying_pool` - (module) the `DBConnection.Pool` pool used to pool
       connections to each of the specified nodes.
 
-    * `:load_balancing` - (atom) load balancing "strategy".
+    * `:load_balancing` - (atom) load balancing "strategy". Defaults to `:random`.
 
   To pass options to the underlying pool, you can just pass them alongside other
   options to `Xandra.start_link/1`.
