@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.0
+
+- Added support for priority load balancing strategy for clustering.
+
 ## v0.7.2
 
 - Fixed a bug in the binary protocol that affected nodes going up/down when using `Xandra.Cluster`.
