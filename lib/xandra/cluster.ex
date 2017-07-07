@@ -183,7 +183,7 @@ defmodule Xandra.Cluster do
 
   defp start_control_connections(nodes, options) do
     cluster = self()
-    Enum.map(nodes, fn({address, port}) ->
+    Enum.map(nodes, fn {address, port} ->
       node_ref = make_ref()
       ControlConnection.start_link(cluster, node_ref, address, port, options)
       {node_ref, nil}
