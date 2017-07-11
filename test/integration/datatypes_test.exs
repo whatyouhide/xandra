@@ -129,7 +129,7 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "blob") == <<0, 0xFF>>
     assert Map.fetch!(row, "boolean") == true
     assert Map.fetch!(row, "date") == 1358013521
-    assert Map.fetch!(row, "decimal") == {1323, -2}
+    assert Decimal.equal? Map.fetch!(row, "decimal"), %Decimal{sign: 1, coef: 1323, exp: -2}
     assert Map.fetch!(row, "double") == 3.1415
     assert Map.fetch!(row, "float") == -1.25
     assert Map.fetch!(row, "inet") == {192, 168, 0, 1}
@@ -215,6 +215,41 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "list_of_int") == nil
     assert Map.fetch!(row, "map_of_int_to_text") == nil
     assert Map.fetch!(row, "set_of_tinyint") == nil
+  end
+
+  test "passing Decimal types and floats to :decimal columns", %{conn: conn}  do
+    statement = """
+    CREATE TABLE decimals
+    (id int PRIMARY KEY,
+     decimal_from_float decimal,
+     decimal_from_decimal decimal,
+     decimal_from_fraction decimal)
+    """
+    Xandra.execute!(conn, statement, [])
+
+    statement = """
+    INSERT INTO decimals
+    (id,
+     decimal_from_float,
+     decimal_from_decimal,
+     decimal_from_fraction)
+    VALUES
+    (#{"?" |> List.duplicate(4) |> Enum.join(", ")})
+    """
+    values = [
+      {"int", 1},
+      {"decimal", 0.123456789},
+      {"decimal", Decimal.new(12.4)},
+      {"decimal", Decimal.div(Decimal.new(100), Decimal.new(3))}
+    ]
+    Xandra.execute!(conn, statement, values)
+
+    page = Xandra.execute!(conn, "SELECT * FROM decimals WHERE id = 1", [])
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 1
+    assert Decimal.equal? Map.fetch!(row, "decimal_from_float"), %Decimal{sign: 1, coef: 123456789, exp: -9}
+    assert Decimal.equal? Map.fetch!(row, "decimal_from_decimal"), %Decimal{sign: 1, coef: 124, exp: -1}
+    assert Decimal.equal? Map.fetch!(row, "decimal_from_fraction"), %Decimal{sign: 1, coef: 3333333333333333333333333333, exp: -26}
   end
 
   test "user-defined types", %{conn: conn} do

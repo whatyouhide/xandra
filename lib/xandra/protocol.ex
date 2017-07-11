@@ -302,12 +302,18 @@ defmodule Xandra.Protocol do
     if boolean, do: [1], else: [0]
   end
 
-  defp encode_value(:date, date) when date in 0..0xFFFFFFFF do
-    <<date::32>>
+  defp encode_value(:decimal, float) when is_float(float) do
+    encode_value(:decimal, Decimal.new(float))
   end
-
+  defp encode_value(:decimal, %Decimal{sign: sign, coef: coef, exp: exp}) do
+    [encode_value(:int, exp), encode_value(:varint, sign * coef)]
+  end
   defp encode_value(:decimal, {value, scale}) do
     [encode_value(:int, scale), encode_value(:varint, value)]
+  end
+
+  defp encode_value(:date, date) when date in 0..0xFFFFFFFF do
+    <<date::32>>
   end
 
   defp encode_value(:double, double) when is_float(double) do
@@ -598,11 +604,14 @@ defmodule Xandra.Protocol do
 
   defp decode_value(<<value::8>>, :boolean), do: Kernel.!=(value, 0)
 
-  defp decode_value(<<value::32>>, :date), do: value
-
   defp decode_value(<<scale::32-signed, rest::bits>>, :decimal) do
-    {decode_value(rest, :varint), scale}
+    coef = decode_value(rest, :varint)
+    sign = if coef < 0, do: -1, else: 1
+    coef = coef * sign
+    %Decimal{sign: sign, coef: coef, exp: scale}
   end
+
+  defp decode_value(<<value::32>>, :date), do: value
 
   defp decode_value(<<value::64-float>>, :double), do: value
 
