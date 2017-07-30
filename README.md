@@ -54,7 +54,7 @@ The documentation is available [on HexDocs][documentation].
 Connections or pool of connections can be started with `Xandra.start_link/1`:
 
 ```elixir
-{:ok, conn} = Xandra.start_link(host: "127.0.0.1", port: 9042)
+{:ok, conn} = Xandra.start_link(nodes: ["127.0.0.1:9042"])
 ```
 
 This connection can be used to perform all operations against the Cassandra server.
