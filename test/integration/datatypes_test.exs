@@ -25,7 +25,7 @@ defmodule DataTypesTest do
      varchar varchar,
      varint varint)
     """
-    Xandra.execute!(conn, statement, [])
+    Xandra.execute!(conn, statement)
 
     statement = """
     INSERT INTO primitives
@@ -76,7 +76,7 @@ defmodule DataTypesTest do
       {"varint", nil},
     ]
     Xandra.execute!(conn, statement, values)
-    page = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 1", [])
+    page = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 1")
     assert [row] = Enum.to_list(page)
     assert Map.fetch!(row, "id") == 1
     assert Map.fetch!(row, "ascii") == nil
@@ -122,7 +122,7 @@ defmodule DataTypesTest do
       {"varint", -6789065678192312391879827349},
     ]
     Xandra.execute!(conn, statement, values)
-    page = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 2", [])
+    page = Xandra.execute!(conn, "SELECT * FROM primitives WHERE id = 2")
     assert [row] = Enum.to_list(page)
     assert Map.fetch!(row, "ascii") == "ascii"
     assert Map.fetch!(row, "bigint") == -1000000000
@@ -154,7 +154,7 @@ defmodule DataTypesTest do
      set_of_tinyint set<tinyint>,
      tuple_of_int_and_text tuple<int, text>)
     """
-    Xandra.execute!(conn, statement, [])
+    Xandra.execute!(conn, statement)
 
     statement = """
     INSERT INTO collections
@@ -175,7 +175,7 @@ defmodule DataTypesTest do
       {"tuple<int, text>", nil},
     ]
     Xandra.execute!(conn, statement, values)
-    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1", [])
+    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 1")
     assert [row] = Enum.to_list(page)
     assert Map.fetch!(row, "id") == 1
     assert Map.fetch!(row, "list_of_int") == nil
@@ -191,7 +191,7 @@ defmodule DataTypesTest do
       {"tuple<int, text>", {24, "42"}},
     ]
     Xandra.execute!(conn, statement, values)
-    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 2", [])
+    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 2")
     assert [row] = Enum.to_list(page)
     assert Map.fetch!(row, "id") == 2
     assert Map.fetch!(row, "list_of_int") == [24, 42]
@@ -209,7 +209,7 @@ defmodule DataTypesTest do
       {"tuple<int, text>", nil},
     ]
     Xandra.execute!(conn, statement, values)
-    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 3", [])
+    page = Xandra.execute!(conn, "SELECT * FROM collections WHERE id = 3")
     assert [row] = Enum.to_list(page)
     assert Map.fetch!(row, "id") == 3
     assert Map.fetch!(row, "list_of_int") == nil

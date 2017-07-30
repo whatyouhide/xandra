@@ -286,63 +286,66 @@ defmodule Xandra.Protocol do
     [<<IO.iodata_length(acc)::32>>, acc]
   end
 
-  defp encode_value(:ascii, ascii) when is_binary(ascii) do
-    ascii
+  defp encode_value(:ascii, value) when is_binary(value) do
+    value
   end
 
-  defp encode_value(:bigint, bigint) when is_integer(bigint) do
-    <<bigint::64>>
+  defp encode_value(:bigint, value) when is_integer(value) do
+    <<value::64>>
   end
 
-  defp encode_value(:blob, blob) when is_binary(blob) do
-    blob
+  defp encode_value(:blob, value) when is_binary(value) do
+    value
   end
 
-  defp encode_value(:boolean, boolean) when is_boolean(boolean) do
-    if boolean, do: [1], else: [0]
+  defp encode_value(:boolean, value) do
+    case value do
+      true -> [1]
+      false -> [0]
+    end
   end
 
   defp encode_value(:counter, value) when is_integer(value) do
     <<value::64>>
   end
 
-  defp encode_value(:date, date) when date in 0..0xFFFFFFFF do
-    <<date::32>>
+  defp encode_value(:date, value) when value in 0..0xFFFFFFFF do
+    <<value::32>>
   end
 
   defp encode_value(:decimal, {value, scale}) do
     [encode_value(:int, scale), encode_value(:varint, value)]
   end
 
-  defp encode_value(:double, double) when is_float(double) do
-    <<double::64-float>>
+  defp encode_value(:double, value) when is_float(value) do
+    <<value::64-float>>
   end
 
-  defp encode_value(:float, float) when is_float(float) do
-    <<float::32-float>>
+  defp encode_value(:float, value) when is_float(value) do
+    <<value::32-float>>
   end
 
-  defp encode_value(:inet, {n1, n2, n3, n4} = _inet) do
+  defp encode_value(:inet, {n1, n2, n3, n4}) do
     <<n1, n2, n3, n4>>
   end
 
-  defp encode_value(:inet, {n1, n2, n3, n4, n5, n6, n7, n8} = _inet) do
+  defp encode_value(:inet, {n1, n2, n3, n4, n5, n6, n7, n8}) do
     <<n1::4-bytes, n2::4-bytes, n3::4-bytes, n4::4-bytes,
       n5::4-bytes, n6::4-bytes, n7::4-bytes, n8::4-bytes>>
   end
 
-  defp encode_value(:int, int) when is_integer(int) do
-    <<int::32>>
+  defp encode_value(:int, value) when is_integer(value) do
+    <<value::32>>
   end
 
-  defp encode_value({:list, [items_type]}, list) when is_list(list) do
-    for item <- list,
-        into: [<<length(list)::32>>],
+  defp encode_value({:list, [items_type]}, collection) when is_list(collection) do
+    for item <- collection,
+        into: [<<length(collection)::32>>],
         do: encode_query_value(items_type, item)
   end
 
-  defp encode_value({:map, [key_type, value_type]}, map) when is_map(map) do
-    for {key, value} <- map, into: [<<map_size(map)::32>>] do
+  defp encode_value({:map, [key_type, value_type]}, collection) when is_map(collection) do
+    for {key, value} <- collection, into: [<<map_size(collection)::32>>] do
       [
         encode_query_value(key_type, key),
         encode_query_value(value_type, value),
@@ -350,28 +353,28 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_value({:set, inner_type}, %MapSet{} = set) do
-    encode_value({:list, inner_type}, MapSet.to_list(set))
+  defp encode_value({:set, inner_type}, %MapSet{} = collection) do
+    encode_value({:list, inner_type}, MapSet.to_list(collection))
   end
 
-  defp encode_value(:smallint, int) when is_integer(int) do
-    <<int::16>>
+  defp encode_value(:smallint, value) when is_integer(value) do
+    <<value::16>>
   end
 
-  defp encode_value(:text, text) when is_binary(text) do
-    text
+  defp encode_value(:text, value) when is_binary(value) do
+    value
   end
 
-  defp encode_value(:time, time) when time in 0..86399999999999 do
-    <<time::64>>
+  defp encode_value(:time, value) when value in 0..86399999999999 do
+    <<value::64>>
   end
 
-  defp encode_value(:timestamp, timestamp) do
-    <<timestamp::64>>
+  defp encode_value(:timestamp, value) do
+    <<value::64>>
   end
 
-  defp encode_value(:tinyint, int) when is_integer(int) do
-    <<int>>
+  defp encode_value(:tinyint, value) when is_integer(value) do
+    <<value>>
   end
 
   defp encode_value({:udt, fields}, value) when is_map(value) do
@@ -380,12 +383,13 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_value(:uuid, uuid) when is_binary(uuid) do
+  defp encode_value(:uuid, value) when is_binary(value) do
     <<part1::8-bytes, ?-,
       part2::4-bytes, ?-,
       part3::4-bytes, ?-,
       part4::4-bytes, ?-,
-      part5::12-bytes>> = uuid
+      part5::12-bytes>> = value
+
     <<decode_base16(part1)::4-bytes,
       decode_base16(part2)::2-bytes,
       decode_base16(part3)::2-bytes,
@@ -393,22 +397,21 @@ defmodule Xandra.Protocol do
       decode_base16(part5)::6-bytes>>
   end
 
-  # Alias of :text
-  defp encode_value(:varchar, varchar) do
-    encode_value(:text, varchar)
+  defp encode_value(:varchar, value) do
+    encode_value(:text, value)
   end
 
-  defp encode_value(:varint, varint) when is_integer(varint) do
-    size = varint_byte_size(varint)
-    <<varint::size(size)-unit(8)>>
+  defp encode_value(:varint, value) when is_integer(value) do
+    size = varint_byte_size(value)
+    <<value::size(size)-unit(8)>>
   end
 
-  defp encode_value(:timeuuid, timeuuid) when is_binary(timeuuid) do
-    encode_value(:uuid, timeuuid)
+  defp encode_value(:timeuuid, value) when is_binary(value) do
+    encode_value(:uuid, value)
   end
 
-  defp encode_value({:tuple, types}, tuple) when length(types) == tuple_size(tuple) do
-    for {type, item} <- Enum.zip(types, Tuple.to_list(tuple)),
+  defp encode_value({:tuple, types}, value) when length(types) == tuple_size(value) do
+    for {type, item} <- Enum.zip(types, Tuple.to_list(value)),
         do: encode_query_value(type, item)
   end
 
