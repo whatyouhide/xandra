@@ -260,4 +260,21 @@ defmodule DataTypesTest do
     assert Map.fetch!(bar, "id") == 2
     assert Map.fetch!(bar, "profile") == %{"nickname" => "bar", "full_name" => %{"first_name" => nil, "last_name" => "Bar"}}
   end
+
+  test "counter type", %{conn: conn}  do
+    statement = """
+    CREATE TABLE views
+    (id int PRIMARY KEY,
+     total counter)
+    """
+    Xandra.execute!(conn, statement)
+
+    statement = "UPDATE views SET total = total + 4 WHERE id = 1"
+    Xandra.execute!(conn, statement)
+
+    page = Xandra.execute!(conn, "SELECT * FROM views WHERE id = 1")
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 1
+    assert Map.fetch!(row, "total") == 4
+  end
 end

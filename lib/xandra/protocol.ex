@@ -302,6 +302,10 @@ defmodule Xandra.Protocol do
     if boolean, do: [1], else: [0]
   end
 
+  defp encode_value(:counter, value) when is_integer(value) do
+    <<value::64>>
+  end
+
   defp encode_value(:date, date) when date in 0..0xFFFFFFFF do
     <<date::32>>
   end
@@ -597,6 +601,8 @@ defmodule Xandra.Protocol do
   defp decode_value(<<value::bits>>, :blob), do: value
 
   defp decode_value(<<value::8>>, :boolean), do: Kernel.!=(value, 0)
+
+  defp decode_value(<<value::64-signed>>, :counter), do: value
 
   defp decode_value(<<value::32>>, :date), do: value
 
