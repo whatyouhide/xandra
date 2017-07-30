@@ -303,7 +303,7 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_value(:counter, value) when is_integer(value) do
-    encode_value(:bigint, value)
+    <<value::64>>
   end
 
   defp encode_value(:date, date) when date in 0..0xFFFFFFFF do
