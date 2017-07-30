@@ -594,21 +594,23 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp decode_value(<<value::bits>>, :ascii), do: value
+  defp decode_value(<<value>>, :boolean), do: (value != 0)
+
+  defp decode_value(<<value::signed>>, :tinyint), do: value
+
+  defp decode_value(<<value::16-signed>>, :smallint), do: value
+
+  defp decode_value(<<value::64>>, :time), do: value
 
   defp decode_value(<<value::64-signed>>, :bigint), do: value
 
-  defp decode_value(<<value::bits>>, :blob), do: value
-
-  defp decode_value(<<value::8>>, :boolean), do: Kernel.!=(value, 0)
-
   defp decode_value(<<value::64-signed>>, :counter), do: value
+
+  defp decode_value(<<value::64-signed>>, :timestamp), do: value
 
   defp decode_value(<<value::32>>, :date), do: value
 
-  defp decode_value(<<scale::32-signed, rest::bits>>, :decimal) do
-    {decode_value(rest, :varint), scale}
-  end
+  defp decode_value(<<value::32-signed>>, :int), do: value
 
   defp decode_value(<<value::64-float>>, :double), do: value
 
@@ -624,7 +626,13 @@ defmodule Xandra.Protocol do
     {n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15, n16}
   end
 
-  defp decode_value(<<value::32-signed>>, :int), do: value
+  defp decode_value(<<value::16-bytes>>, :timeuuid), do: value
+
+  defp decode_value(<<value::16-bytes>>, :uuid), do: value
+
+  defp decode_value(<<scale::32-signed, data::bits>>, :decimal) do
+    {decode_value(data, :varint), scale}
+  end
 
   defp decode_value(<<count::32-signed, data::bits>>, {:list, [type]}) do
     decode_value_list(data, count, type, [])
@@ -640,13 +648,17 @@ defmodule Xandra.Protocol do
     |> MapSet.new()
   end
 
-  defp decode_value(<<value::16-signed>>, :smallint), do: value
+  defp decode_value(<<data::bits>>, {:udt, fields}) do
+    decode_value_udt(data, fields, [])
+  end
+
+  defp decode_value(<<value::bits>>, :ascii), do: value
+
+  defp decode_value(<<value::bits>>, :blob), do: value
 
   defp decode_value(<<data::bits>>, {:tuple, types}) do
     decode_value_tuple(data, types, [])
   end
-
-  defp decode_value(<<value::16-bytes>>, type) when type in [:timeuuid, :uuid], do: value
 
   defp decode_value(<<value::bits>>, :varchar), do: value
 
@@ -655,16 +667,6 @@ defmodule Xandra.Protocol do
     <<value::size(size)-signed>> = data
     value
   end
-
-  defp decode_value(<<value::64>>, :time), do: value
-
-  defp decode_value(<<data::bits>>, {:udt, fields}) do
-    decode_value_udt(data, fields, [])
-  end
-
-  defp decode_value(<<value::64-signed>>, :timestamp), do: value
-
-  defp decode_value(<<value::signed>>, :tinyint), do: value
 
   defp decode_value_udt(<<buffer::bits>>, [{field_name, field_type} | rest], acc) do
     decode_value(value <- buffer, field_type) do
