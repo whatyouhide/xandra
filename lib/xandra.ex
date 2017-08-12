@@ -512,11 +512,11 @@ defmodule Xandra do
       * `:local_serial`
       * `:local_one`
 
-    * `:page_size` - (integer) The size of a page of results. If `query` returns
+    * `:page_size` - (integer) the size of a page of results. If `query` returns
       `Xandra.Page` struct, that struct will contain at most `:page_size` rows
       in it. Defaults to `10_000`.
 
-    * `:cursor` - (`Xandra.Page` struct) the offset where rows should be
+    * `:paging_state` - (binary) the offset where rows should be
       returned from. By default this option is not present and paging starts
       from the beginning. See the "Paging" section below for more information on
       how to page queries.
@@ -588,7 +588,7 @@ defmodule Xandra do
 
   ## Paging
 
-  Since `execute/4` supports the `:cursor` option, it is possible to manually
+  Since `execute/4` supports the `:paging_state` option, it is possible to manually
   implement paging. For example, given the following prepared query:
 
       prepared = Xandra.prepare!(conn, "SELECT first_name FROM users")
@@ -603,29 +603,29 @@ defmodule Xandra do
       Enum.to_list(page)
       #=> [%{"first_name" => "Ross"}, %{"first_name" => "Rachel"}]
 
-  Now, we can pass `page` as the value of the `:cursor` option to let the paging
+  Now, we can pass `page.paging_state` as the value of the `:paging_state` option to let the paging
   start from where we left off:
 
-      {:ok, %Xandra.Page{} = new_page} = Xandra.execute(conn, prepared, [], page_size: 2, cursor: page)
+      {:ok, %Xandra.Page{} = new_page} = Xandra.execute(conn, prepared, [], page_size: 2, paging_state: page.paging_state)
       Enum.to_list(page)
       #=> [%{"first_name" => "Joey"}, %{"first_name" => "Phoebe"}]
 
-  However, using `:cursor` and `:page_size` directly with `execute/4` is not
+  However, using `:paging_state` and `:page_size` directly with `execute/4` is not
   recommended when the intent is to "stream" a query. For that, it's recommended
-  to use `stream_pages!/4`. Also note that if the `Xandra.Page` struct provided
-  as `:cursor` shows there are no more pages to fetch, an `ArgumentError`
-  exception will be raised; be sure to check for this with
-  `Xandra.Page.more_pages_available?/1`.
+  to use `stream_pages!/4`. Also note that if the `:paging_state` option is set to `nil`,
+  meaning there are no more pages to fetch, an `ArgumentError` exception will be raised;
+  be sure to check for this with `page.paging_state != nil`.
   """
   @spec execute(conn, statement | Prepared.t, values, Keyword.t) :: {:ok, result} | {:error, error}
   def execute(conn, query, params, options)
 
   def execute(conn, statement, params, options) when is_binary(statement) do
-    execute_with_retrying(conn, %Simple{statement: statement}, params, put_paging_state(options))
+    query = %Simple{statement: statement}
+    execute_with_retrying(conn, query, params, validate_paging_state(options))
   end
 
   def execute(conn, %Prepared{} = prepared, params, options) do
-    execute_with_retrying(conn, prepared, params, put_paging_state(options))
+    execute_with_retrying(conn, prepared, params, validate_paging_state(options))
   end
 
   @doc """
@@ -710,11 +710,25 @@ defmodule Xandra do
     :ok
   end
 
-  defp put_paging_state(options) do
+  defp validate_paging_state(options) do
+    case Keyword.fetch(options, :paging_state) do
+      {:ok, nil} ->
+        raise ArgumentError, "no more pages are available"
+      {:ok, value} when not is_binary(value) ->
+        raise ArgumentError,
+          "expected a binary as the value of the :paging_state option, " <>
+          "got: #{inspect(value)}"
+      _other ->
+        maybe_put_paging_state(options)
+    end
+  end
+
+  defp maybe_put_paging_state(options) do
     case Keyword.pop(options, :cursor) do
       {%Page{paging_state: nil}, _options} ->
         raise ArgumentError, "no more pages are available"
       {%Page{paging_state: paging_state}, options} ->
+        IO.warn "the :cursor option is deprecated, please use :paging_state instead"
         Keyword.put(options, :paging_state, paging_state)
       {nil, options} ->
         options

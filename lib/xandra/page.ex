@@ -13,6 +13,13 @@ defmodule Xandra.Page do
   emitted when streaming out of a `Xandra.Page` struct is a map of string column
   names to their corresponding value.
 
+  The following fields are public and can be accessed or relied on:
+
+    * `paging_state` - the current paging state. Its value can be used to check
+      whether more pages are available to fetch after the given page.
+      This is useful when implementing manual paging.
+      See also the documentation for `Xandra.execute/4`.
+
   ## Examples
 
       statement = "SELECT name, age FROM users"
@@ -25,17 +32,18 @@ defmodule Xandra.Page do
 
   defstruct [:content, :columns, :paging_state]
 
-  @opaque t :: %__MODULE__{}
+  @type paging_state :: binary | nil
 
-  @doc """
-  Tells whether more pages are available to fetch after the given one.
+  @opaque t :: %__MODULE__{
+    content: list,
+    columns: nonempty_list,
+    paging_state: paging_state,
+  }
 
-  This function can be used to check whether more pages are available to fetch
-  after the given page. This is useful when implementing manual paging. See also
-  the documentation for `Xandra.execute/4`.
-  """
+  @doc false
   @spec more_pages_available?(t) :: boolean
   def more_pages_available?(%__MODULE__{paging_state: paging_state}) do
+    IO.warn "Xandra.Page.more_pages_available?/1 is deprecated, please use \"page.paging_state != nil\" instead"
     paging_state != nil
   end
 
@@ -82,7 +90,7 @@ defmodule Xandra.Page do
     def inspect(page, options) do
       properties = [
         rows: Enum.to_list(page),
-        more_pages_available: @for.more_pages_available?(page),
+        more_pages?: page.paging_state != nil,
       ]
       concat(["#Xandra.Page<", to_doc(properties, options), ">"])
     end

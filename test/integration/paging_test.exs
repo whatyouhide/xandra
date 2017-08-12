@@ -32,21 +32,28 @@ defmodule PagingTest do
   test "manual paging", %{conn: conn} do
     query = Xandra.prepare!(conn, "SELECT letter FROM alphabet", [])
 
-    assert {:ok, %Page{} = page} = Xandra.execute(conn, query, [], [page_size: 3])
+    options = [page_size: 3]
+    assert {:ok, %Page{paging_state: paging_state} = page} = Xandra.execute(conn, query, [], options)
     assert Enum.to_list(page) == [
       %{"letter" => "Aa"}, %{"letter" => "Bb"}, %{"letter" => "Cc"}
     ]
-    assert Page.more_pages_available?(page) == true
+    assert paging_state != nil
 
-    assert {:ok, %Page{} = page} = Xandra.execute(conn, query, [], [page_size: 2, cursor: page])
+    options = [page_size: 2, paging_state: paging_state]
+    assert {:ok, %Page{paging_state: paging_state} = page} = Xandra.execute(conn, query, [], options)
     assert Enum.to_list(page) == [
       %{"letter" => "Dd"}, %{"letter" => "Ee"}
     ]
-    assert Page.more_pages_available?(page) == true
+    assert paging_state != nil
 
-    assert {:ok, %Page{} = page} = Xandra.execute(conn, query, [], [page_size: 6, cursor: page])
+    options = [page_size: 6, paging_state: paging_state]
+    assert {:ok, %Page{paging_state: paging_state} = page} = Xandra.execute(conn, query, [], options)
     assert Enum.count(page) == 5
-    assert Page.more_pages_available?(page) == false
+    assert paging_state == nil
+
+    assert_raise ArgumentError, "no more pages are available", fn ->
+      Xandra.execute(conn, query, [], [paging_state: nil])
+    end
   end
 
   test "streaming pages", %{conn: conn} do

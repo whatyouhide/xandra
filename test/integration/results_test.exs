@@ -38,6 +38,6 @@ defmodule ResultsTest do
     Xandra.execute!(conn, "CREATE TABLE users (name text PRIMARY KEY)")
     Xandra.execute!(conn, "INSERT INTO users (name) VALUES ('Jeff')")
     %Xandra.Page{} = page = Xandra.execute!(conn, "SELECT * FROM users")
-    assert inspect(page) == ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], more_pages_available: false]>)
+    assert inspect(page) == ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], more_pages?: false]>)
   end
 end
