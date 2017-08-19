@@ -717,7 +717,7 @@ defmodule Xandra.Protocol do
     acc |> Enum.reverse |> List.to_tuple
   end
 
-  defp decode_columns(buffer, 0, _table_spec, acc) do
+  defp decode_columns(<<buffer::bits>>, 0, _table_spec, acc) do
     {Enum.reverse(acc), buffer}
   end
 
