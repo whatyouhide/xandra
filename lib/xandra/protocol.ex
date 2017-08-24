@@ -6,6 +6,8 @@ defmodule Xandra.Protocol do
   alias Xandra.{Batch, Error, Frame, Prepared, Page, Simple, TypeParser}
   alias Xandra.Cluster.StatusChange
 
+  @unix_epoch_days 0x80000000
+
   # We need these two macros to make
   # a single match context possible.
 
@@ -309,8 +311,8 @@ defmodule Xandra.Protocol do
     <<value::64>>
   end
 
-  defp encode_value(:date, value) when value in 0..0xFFFFFFFF do
-    <<value::32>>
+  defp encode_value(:date, value) when value in -@unix_epoch_days..(@unix_epoch_days - 1) do
+    <<(value + @unix_epoch_days)::32>>
   end
 
   defp encode_value(:decimal, {value, scale}) do
@@ -611,7 +613,7 @@ defmodule Xandra.Protocol do
 
   defp decode_value(<<value::64-signed>>, :timestamp), do: value
 
-  defp decode_value(<<value::32>>, :date), do: value
+  defp decode_value(<<value::32>>, :date), do: (value - @unix_epoch_days)
 
   defp decode_value(<<value::32-signed>>, :int), do: value
 
