@@ -9,7 +9,6 @@ defmodule DataTypesTest do
      bigint bigint,
      blob blob,
      boolean boolean,
-     date date,
      decimal decimal,
      double double,
      float float,
@@ -34,7 +33,6 @@ defmodule DataTypesTest do
      bigint,
      blob,
      boolean,
-     date,
      decimal,
      double,
      float,
@@ -42,15 +40,13 @@ defmodule DataTypesTest do
      int,
      smallint,
      text,
-     time,
-     timestamp,
      timeuuid,
      tinyint,
      uuid,
      varchar,
      varint)
     VALUES
-    (#{"?" |> List.duplicate(20) |> Enum.join(", ")})
+    (#{"?" |> List.duplicate(17) |> Enum.join(", ")})
     """
 
     values = [
@@ -59,7 +55,6 @@ defmodule DataTypesTest do
       {"bigint", nil},
       {"blob", nil},
       {"boolean", nil},
-      {"date", nil},
       {"decimal", nil},
       {"double", nil},
       {"float", nil},
@@ -67,8 +62,6 @@ defmodule DataTypesTest do
       {"int", nil},
       {"smallint", nil},
       {"text", nil},
-      {"time", nil},
-      {"timestamp", nil},
       {"timeuuid", nil},
       {"tinyint", nil},
       {"uuid", nil},
@@ -83,7 +76,6 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "bigint") == nil
     assert Map.fetch!(row, "blob") == nil
     assert Map.fetch!(row, "boolean") == nil
-    assert Map.fetch!(row, "date") == nil
     assert Map.fetch!(row, "decimal") == nil
     assert Map.fetch!(row, "double") == nil
     assert Map.fetch!(row, "float") == nil
@@ -91,8 +83,6 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "int") == nil
     assert Map.fetch!(row, "smallint") == nil
     assert Map.fetch!(row, "text") == nil
-    assert Map.fetch!(row, "time") == nil
-    assert Map.fetch!(row, "timestamp") == nil
     assert Map.fetch!(row, "timeuuid") == nil
     assert Map.fetch!(row, "tinyint") == nil
     assert Map.fetch!(row, "uuid") == nil
@@ -105,7 +95,6 @@ defmodule DataTypesTest do
       {"bigint", -1000000000},
       {"blob", <<0x00FF::16>>},
       {"boolean", true},
-      {"date", 1358013521},
       {"decimal", {1323, -2}},
       {"double", 3.1415},
       {"float", -1.25},
@@ -113,8 +102,6 @@ defmodule DataTypesTest do
       {"int", -42},
       {"smallint", -33},
       {"text", "эликсир"},
-      {"time", 1358013521},
-      {"timestamp", -2167219200},
       {"timeuuid", "fe2b4360-28c6-11e2-81c1-0800200c9a66"},
       {"tinyint", -21},
       {"uuid", "00b69180-d0e1-11e2-8b8b-0800200c9a66"},
@@ -128,7 +115,6 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "bigint") == -1000000000
     assert Map.fetch!(row, "blob") == <<0, 0xFF>>
     assert Map.fetch!(row, "boolean") == true
-    assert Map.fetch!(row, "date") == 1358013521
     assert Map.fetch!(row, "decimal") == {1323, -2}
     assert Map.fetch!(row, "double") == 3.1415
     assert Map.fetch!(row, "float") == -1.25
@@ -136,13 +122,80 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "int") == -42
     assert Map.fetch!(row, "smallint") == -33
     assert Map.fetch!(row, "text") == "эликсир"
-    assert Map.fetch!(row, "time") == 1358013521
-    assert Map.fetch!(row, "timestamp") == -2167219200
     assert Map.fetch!(row, "timeuuid") == <<254, 43, 67, 96, 40, 198, 17, 226, 129, 193, 8, 0, 32, 12, 154, 102>>
     assert Map.fetch!(row, "tinyint") == -21
     assert Map.fetch!(row, "uuid") == <<0, 182, 145, 128, 208, 225, 17, 226, 139, 139, 8, 0, 32, 12, 154, 102>>
     assert Map.fetch!(row, "varchar") == "тоже эликсир"
     assert Map.fetch!(row, "varint") == -6789065678192312391879827349
+  end
+
+  test "calendar types", %{conn: conn} do
+    statement = """
+    CREATE TABLE festivities
+    (id int PRIMARY KEY,
+     date date,
+     time time,
+     timestamp timestamp)
+    """
+    Xandra.execute!(conn, statement)
+
+    statement = """
+    INSERT INTO festivities
+    (id,
+     date,
+     time,
+     timestamp)
+    VALUES
+    (#{"?" |> List.duplicate(4) |> Enum.join(", ")})
+    """
+
+    values = [
+      {"int", 1},
+      {"date", nil},
+      {"time", nil},
+      {"timestamp", nil},
+    ]
+    Xandra.execute!(conn, statement, values)
+    page = Xandra.execute!(conn, "SELECT * FROM festivities WHERE id = 1")
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 1
+    assert Map.fetch!(row, "date") == nil
+    assert Map.fetch!(row, "time") == nil
+    assert Map.fetch!(row, "timestamp") == nil
+
+    datetime = DateTime.from_naive!(~N[2016-05-24 13:26:08.003], "Etc/UTC")
+    values = [
+      {"int", 2},
+      {"date", ~D[2017-09-11]},
+      {"time", ~T[20:13:50.000004]},
+      {"timestamp", datetime},
+    ]
+    Xandra.execute!(conn, statement, values)
+    page = Xandra.execute!(conn, "SELECT * FROM festivities WHERE id = 2")
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 2
+    assert Map.fetch!(row, "date") == ~D[2017-09-11]
+    assert Map.fetch!(row, "time") == ~T[20:13:50.000004]
+    assert Map.fetch!(row, "timestamp") == datetime
+
+    values = [
+      {"int", 3},
+      {"date", 1358013521},
+      {"time", 1358013521},
+      {"timestamp", -2167219200},
+    ]
+    Xandra.execute!(conn, statement, values)
+    options = [
+      date_format: :integer,
+      time_format: :integer,
+      timestamp_format: :integer,
+    ]
+    page = Xandra.execute!(conn, "SELECT * FROM festivities WHERE id = 3", [], options)
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 3
+    assert Map.fetch!(row, "date") == 1358013521
+    assert Map.fetch!(row, "time") == 1358013521
+    assert Map.fetch!(row, "timestamp") == -2167219200
   end
 
   test "collection datatypes", %{conn: conn} do

@@ -539,6 +539,21 @@ defmodule Xandra do
       section in the module documentation. By default, this option is not
       present.
 
+    * `:date_format` - (`:date` or `:integer`) controls the format in which
+      dates are returned. When set to `:integer` the returned value is
+      a number of days from the Unix epoch, a date struct otherwise.
+      Defaults to `:date`.
+
+    * `:time_format` - (`:time` or `:integer`) controls the format in which
+      times are returned. When set to `:integer` the returned value is
+      a number of nanoseconds from midnight, a time struct otherwise.
+      Defaults to `:time`.
+
+    * `:timestamp_format` - (`:datetime` or `:integer`) controls the format in which
+      timestamps are returned. When set to `:integer` the returned value is
+      a number of milliseconds from the Unix epoch, a datetime struct otherwise.
+      Defaults to `:datetime`.
+
   ## Parameters
 
   The `params` argument specifies parameters to use when executing the query; it
