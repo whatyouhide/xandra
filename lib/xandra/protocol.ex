@@ -391,7 +391,7 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_value(:timestamp, %DateTime{} = value) do
-    <<DateTime.to_unix(value, :millisecond)::64>>
+    <<DateTime.to_unix(value, :milliseconds)::64>>
   end
 
   defp encode_value(:timestamp, value) when is_integer(value) do
@@ -665,7 +665,7 @@ defmodule Xandra.Protocol do
 
   defp decode_value(<<value::64-signed>>, {:timestamp, [format]}) do
     case format do
-      :datetime -> DateTime.from_unix!(value, :millisecond)
+      :datetime -> DateTime.from_unix!(value, :milliseconds)
       :integer -> value
     end
   end

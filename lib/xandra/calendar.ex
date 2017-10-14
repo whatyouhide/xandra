@@ -35,7 +35,7 @@ defmodule Xandra.Calendar do
   else
     def time_from_nanoseconds(nanoseconds) do
       nanoseconds
-      |> DateTime.from_unix!(:nanosecond)
+      |> DateTime.from_unix!(:nanoseconds)
       |> DateTime.to_time()
     end
   end
@@ -74,7 +74,7 @@ defmodule Xandra.Calendar do
       %{hour: hour, minute: minute, second: second, microsecond: microsecond} = time
       {parts, ppd} = time_to_day_fraction(hour, minute, second, microsecond)
       microseconds = div(parts * @parts_per_day, ppd)
-      System.convert_time_unit(microseconds, :microsecond, :nanosecond)
+      System.convert_time_unit(microseconds, :microseconds, :nanoseconds)
     end
 
     def date_from_unix_days(days) do
