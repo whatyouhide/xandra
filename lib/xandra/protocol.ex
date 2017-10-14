@@ -3,7 +3,16 @@ defmodule Xandra.Protocol do
 
   use Bitwise
 
-  alias Xandra.{Batch, Error, Frame, Prepared, Page, Simple, TypeParser}
+  alias Xandra.{
+    Batch,
+    Calendar,
+    Error,
+    Frame,
+    Page,
+    Prepared,
+    Simple,
+    TypeParser
+  }
   alias Xandra.Cluster.StatusChange
 
   @unix_epoch_days 0x80000000
@@ -312,7 +321,7 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_value(:date, %Date{} = value) do
-    value = Date.diff(value, ~D[1970-01-01])
+    value = Calendar.date_to_unix_days(value)
     <<(value + @unix_epoch_days)::32>>
   end
 
@@ -373,7 +382,7 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_value(:time, %Time{} = time) do
-    value = Time.diff(time, ~T[00:00:00.000000], :nanosecond)
+    value = Calendar.time_to_nanoseconds(time)
     <<value::64>>
   end
 
@@ -645,12 +654,8 @@ defmodule Xandra.Protocol do
 
   defp decode_value(<<value::64>>, {:time, [format]}) do
     case format do
-      :time ->
-        value
-        |> DateTime.from_unix!(:nanosecond)
-        |> DateTime.to_time()
-      :integer ->
-        value
+      :time -> Calendar.time_from_nanoseconds(value)
+      :integer -> value
     end
   end
 
@@ -668,7 +673,7 @@ defmodule Xandra.Protocol do
   defp decode_value(<<value::32>>, {:date, [format]}) do
     unix_days = value - @unix_epoch_days
     case format do
-      :date -> Date.add(~D[1970-01-01], unix_days)
+      :date -> Calendar.date_from_unix_days(unix_days)
       :integer -> unix_days
     end
   end
