@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9.0
+
+* Added native support for `Date`, `Time`, and `DateTime`.
+* Added support for the counter data type.
+* Made more optimizations to page content decoding.
+
+__Breaking changes:__
+
+* Started decoding by default the date, time, and timestamp data types to `Date`, `Time`, and `DateTime` respectively.
+
 ## v0.8.0
 
 * Added support for priority load balancing strategy for clustering.
@@ -22,7 +32,7 @@
 
 ## v0.6.0
 
-* Added support for user-defined types.
+* Added support for user-defined data types.
 
 ## v0.5.1
 
@@ -30,7 +40,7 @@
 
 ## v0.5.0
 
-* Added support for date, time, smallint, and tinyint types.
+* Added support for date, time, smallint, and tinyint data types.
 
 ## v0.4.3
 
