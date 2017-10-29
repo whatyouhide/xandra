@@ -45,8 +45,8 @@ defmodule Xandra.Prepared do
       |> Frame.encode(options[:compressor])
     end
 
-    def decode(prepared, %Frame{} = frame, _options) do
-      Protocol.decode_response(frame, prepared)
+    def decode(prepared, %Frame{} = frame, options) do
+      Protocol.decode_response(frame, prepared, options)
     end
 
     def describe(prepared, _options) do

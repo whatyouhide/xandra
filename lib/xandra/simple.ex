@@ -21,8 +21,8 @@ defmodule Xandra.Simple do
       |> Frame.encode(options[:compressor])
     end
 
-    def decode(query, %Frame{} = frame, _options) do
-      Protocol.decode_response(frame, query)
+    def decode(query, %Frame{} = frame, options) do
+      Protocol.decode_response(frame, query, options)
     end
 
     def describe(query, _options) do

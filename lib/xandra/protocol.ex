@@ -3,8 +3,19 @@ defmodule Xandra.Protocol do
 
   use Bitwise
 
-  alias Xandra.{Batch, Error, Frame, Prepared, Page, Simple, TypeParser}
+  alias Xandra.{
+    Batch,
+    Calendar,
+    Error,
+    Frame,
+    Page,
+    Prepared,
+    Simple,
+    TypeParser
+  }
   alias Xandra.Cluster.StatusChange
+
+  @unix_epoch_days 0x80000000
 
   # We need these two macros to make
   # a single match context possible.
@@ -309,8 +320,13 @@ defmodule Xandra.Protocol do
     <<value::64>>
   end
 
-  defp encode_value(:date, value) when value in 0..0xFFFFFFFF do
-    <<value::32>>
+  defp encode_value(:date, %Date{} = value) do
+    value = Calendar.date_to_unix_days(value)
+    <<(value + @unix_epoch_days)::32>>
+  end
+
+  defp encode_value(:date, value) when value in -@unix_epoch_days..(@unix_epoch_days - 1) do
+    <<(value + @unix_epoch_days)::32>>
   end
 
   defp encode_value(:decimal, {value, scale}) do
@@ -365,11 +381,20 @@ defmodule Xandra.Protocol do
     value
   end
 
+  defp encode_value(:time, %Time{} = time) do
+    value = Calendar.time_to_nanoseconds(time)
+    <<value::64>>
+  end
+
   defp encode_value(:time, value) when value in 0..86399999999999 do
     <<value::64>>
   end
 
-  defp encode_value(:timestamp, value) do
+  defp encode_value(:timestamp, %DateTime{} = value) do
+    <<DateTime.to_unix(value, :milliseconds)::64>>
+  end
+
+  defp encode_value(:timestamp, value) when is_integer(value) do
     <<value::64>>
   end
 
@@ -378,7 +403,7 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_value({:udt, fields}, value) when is_map(value) do
-    for {field_name, field_type} <- fields do
+    for {field_name, [field_type]} <- fields do
       encode_query_value(field_type, Map.get(value, field_name))
     end
   end
@@ -460,23 +485,23 @@ defmodule Xandra.Protocol do
   @spec decode_response(Frame.t(:ready), nil) :: :ok
   @spec decode_response(Frame.t(:supported), nil) :: %{optional(String.t) => [String.t]}
   @spec decode_response(Frame.t(:result), Simple.t | Prepared.t | Batch.t) :: Xandra.result | Prepared.t
-  def decode_response(frame, query \\ nil)
+  def decode_response(frame, query \\ nil, options \\ [])
 
-  def decode_response(%Frame{kind: :error, body: body} , _query) do
+  def decode_response(%Frame{kind: :error, body: body} , _query, _options) do
     {reason, buffer} = decode_error_reason(body)
     Error.new(reason, decode_error_message(reason, buffer))
   end
 
-  def decode_response(%Frame{kind: :ready, body: <<>>}, nil) do
+  def decode_response(%Frame{kind: :ready, body: <<>>}, nil, _options) do
     :ok
   end
 
-  def decode_response(%Frame{kind: :supported, body: body}, nil) do
+  def decode_response(%Frame{kind: :supported, body: body}, nil, _options) do
     {value, <<>>} = decode_string_multimap(body)
     value
   end
 
-  def decode_response(%Frame{kind: :event, body: body}, nil) do
+  def decode_response(%Frame{kind: :event, body: body}, nil, _options) do
     decode_string(event <- body)
     "STATUS_CHANGE" = event
     decode_string(effect <- body)
@@ -484,9 +509,9 @@ defmodule Xandra.Protocol do
     %StatusChange{effect: effect, address: address, port: port}
   end
 
-  def decode_response(%Frame{kind: :result, body: body}, %kind{} = query)
+  def decode_response(%Frame{kind: :result, body: body}, %kind{} = query, options)
       when kind in [Simple, Prepared, Batch] do
-    decode_result_response(body, query)
+    decode_result_response(body, query, options)
   end
 
   defp decode_inet(<<size, data::size(size)-bytes, buffer::bits>>) do
@@ -496,27 +521,27 @@ defmodule Xandra.Protocol do
   end
 
   # Void
-  defp decode_result_response(<<0x0001::32-signed>>, _query) do
+  defp decode_result_response(<<0x0001::32-signed>>, _query, _options) do
     %Xandra.Void{}
   end
 
   # Page
-  defp decode_result_response(<<0x0002::32-signed, buffer::bits>>, query) do
+  defp decode_result_response(<<0x0002::32-signed, buffer::bits>>, query, options) do
     page = new_page(query)
     {page, buffer} = decode_metadata(buffer, page)
-    content = decode_page_content(buffer, page.columns)
-    %{page | content: content}
+    columns = rewrite_column_types(page.columns, options)
+    %{page | content: decode_page_content(buffer, columns)}
   end
 
   # SetKeyspace
-  defp decode_result_response(<<0x0003::32-signed, buffer::bits>>, _query) do
+  defp decode_result_response(<<0x0003::32-signed, buffer::bits>>, _query, _options) do
     decode_string(keyspace <- buffer)
     <<>> = buffer
     %Xandra.SetKeyspace{keyspace: keyspace}
   end
 
   # Prepared
-  defp decode_result_response(<<0x0004::32-signed, buffer::bits>>, %Prepared{} = prepared) do
+  defp decode_result_response(<<0x0004::32-signed, buffer::bits>>, %Prepared{} = prepared, _options) do
     decode_string(id <- buffer)
     {%{columns: bound_columns}, buffer} = decode_metadata(buffer, %Page{})
     {%{columns: result_columns}, <<>>} = decode_metadata(buffer, %Page{})
@@ -524,7 +549,7 @@ defmodule Xandra.Protocol do
   end
 
   # SchemaChange
-  defp decode_result_response(<<0x0005::32-signed, buffer::bits>>, _query) do
+  defp decode_result_response(<<0x0005::32-signed, buffer::bits>>, _query, _options) do
     decode_string(effect <- buffer)
     decode_string(target <- buffer)
     options = decode_change_options(buffer, target)
@@ -537,6 +562,30 @@ defmodule Xandra.Protocol do
     do: %Page{}
   defp new_page(%Prepared{result_columns: result_columns}),
     do: %Page{columns: result_columns}
+
+  defp rewrite_column_types(columns, options) do
+    Enum.map(columns, fn {_, _, _, type} = column ->
+      put_elem(column, 3, rewrite_type(type, options))
+    end)
+  end
+
+  defp rewrite_type({parent_type, types}, options) do
+    {parent_type, Enum.map(types, &rewrite_type(&1, options))}
+  end
+
+  defp rewrite_type(:date, options) do
+    {:date, [Keyword.get(options, :date_format, :date)]}
+  end
+
+  defp rewrite_type(:time, options) do
+    {:time, [Keyword.get(options, :time_format, :time)]}
+  end
+
+  defp rewrite_type(:timestamp, options) do
+    {:timestamp, [Keyword.get(options, :timestamp_format, :datetime)]}
+  end
+
+  defp rewrite_type(type, _options), do: type
 
   defp decode_change_options(<<buffer::bits>>, "KEYSPACE") do
     decode_string(keyspace <- buffer)
@@ -603,15 +652,31 @@ defmodule Xandra.Protocol do
 
   defp decode_value(<<value::16-signed>>, :smallint), do: value
 
-  defp decode_value(<<value::64>>, :time), do: value
+  defp decode_value(<<value::64>>, {:time, [format]}) do
+    case format do
+      :time -> Calendar.time_from_nanoseconds(value)
+      :integer -> value
+    end
+  end
 
   defp decode_value(<<value::64-signed>>, :bigint), do: value
 
   defp decode_value(<<value::64-signed>>, :counter), do: value
 
-  defp decode_value(<<value::64-signed>>, :timestamp), do: value
+  defp decode_value(<<value::64-signed>>, {:timestamp, [format]}) do
+    case format do
+      :datetime -> DateTime.from_unix!(value, :milliseconds)
+      :integer -> value
+    end
+  end
 
-  defp decode_value(<<value::32>>, :date), do: value
+  defp decode_value(<<value::32>>, {:date, [format]}) do
+    unix_days = value - @unix_epoch_days
+    case format do
+      :date -> Calendar.date_from_unix_days(unix_days)
+      :integer -> unix_days
+    end
+  end
 
   defp decode_value(<<value::32-signed>>, :int), do: value
 
@@ -671,7 +736,7 @@ defmodule Xandra.Protocol do
     value
   end
 
-  defp decode_value_udt(<<buffer::bits>>, [{field_name, field_type} | rest], acc) do
+  defp decode_value_udt(<<buffer::bits>>, [{field_name, [field_type]} | rest], acc) do
     decode_value(value <- buffer, field_type) do
       decode_value_udt(buffer, rest, [{field_name, value} | acc])
     end
@@ -853,7 +918,7 @@ defmodule Xandra.Protocol do
   defp decode_type_udt(<<buffer::bits>>, count, acc) do
     decode_string(field_name <- buffer)
     {field_type, buffer} = decode_type(buffer)
-    decode_type_udt(buffer, count - 1, [{field_name, field_type} | acc])
+    decode_type_udt(buffer, count - 1, [{field_name, [field_type]} | acc])
   end
 
   defp decode_type_tuple(<<buffer::bits>>, 0, acc) do
