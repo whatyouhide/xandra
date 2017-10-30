@@ -5,6 +5,7 @@
 * Added native support for `Date`, `Time`, and `DateTime`.
 * Added support for the counter data type.
 * Made more optimizations to page content decoding.
+* Replaced the `:cursor` option used for manaul result paging with the more explicit `:paging_state` option.
 
 __Breaking changes:__
 
