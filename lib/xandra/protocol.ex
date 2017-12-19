@@ -646,6 +646,12 @@ defmodule Xandra.Protocol do
     end
   end
 
+  # For legacy compatibility reasons, note that most non-string types support
+  # "empty" values (i.e. a value with zero length).  An empty value is distinct
+  # from NULL, which is encoded with a negative length.
+  # https://github.com/apache/cassandra/blob/8764ef/doc/native_protocol_v4.spec#L830-L832
+  defp decode_value(<<>>, type) when not type in [:ascii, :blob, :varchar], do: nil
+
   defp decode_value(<<value>>, :boolean), do: (value != 0)
 
   defp decode_value(<<value::signed>>, :tinyint), do: value

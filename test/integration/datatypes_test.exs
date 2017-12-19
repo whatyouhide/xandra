@@ -129,6 +129,45 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "varint") == -6789065678192312391879827349
   end
 
+  test "string with zero bytes as empty string", %{conn: conn} do
+    statement = """
+    CREATE TABLE string_with_zero_bytes
+    (id int PRIMARY KEY,
+     ascii ascii,
+     blob blob,
+     text text,
+     varchar varchar)
+    """
+    Xandra.execute!(conn, statement)
+
+    statement = """
+    INSERT INTO string_with_zero_bytes
+    (id,
+     ascii,
+     blob,
+     text,
+     varchar)
+    VALUES
+    (#{"?" |> List.duplicate(5) |> Enum.join(", ")})
+    """
+
+    values = [
+      {"int", 1},
+      {"ascii", ""},
+      {"blob", ""},
+      {"text", ""},
+      {"varchar", ""},
+    ]
+    Xandra.execute!(conn, statement, values)
+    page = Xandra.execute!(conn, "SELECT * FROM string_with_zero_bytes WHERE id = 1")
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 1
+    assert Map.fetch!(row, "ascii") == ""
+    assert Map.fetch!(row, "blob") == ""
+    assert Map.fetch!(row, "text") == ""
+    assert Map.fetch!(row, "varchar") == ""
+  end
+
   test "calendar types", %{conn: conn} do
     statement = """
     CREATE TABLE festivities
