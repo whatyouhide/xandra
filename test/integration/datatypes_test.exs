@@ -129,7 +129,7 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "varint") == -6789065678192312391879827349
   end
 
-  test "string with zero bytes as empty string", %{conn: conn} do
+  test "zero-byte value for string types", %{conn: conn} do
     statement = """
     CREATE TABLE string_with_zero_bytes
     (id int PRIMARY KEY,
