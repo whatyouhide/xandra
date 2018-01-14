@@ -408,7 +408,11 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_value(:uuid, value) when is_binary(value) do
+  defp encode_value(:uuid, value) when is_binary(value) and byte_size(value) == 16 do
+    value
+  end
+
+  defp encode_value(:uuid, value) when is_binary(value) and byte_size(value) == 36 do
     <<part1::8-bytes, ?-,
       part2::4-bytes, ?-,
       part3::4-bytes, ?-,
