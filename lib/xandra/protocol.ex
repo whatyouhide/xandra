@@ -646,12 +646,6 @@ defmodule Xandra.Protocol do
     end
   end
 
-  # For legacy compatibility reasons, note that most non-string types support
-  # "empty" values (i.e. a value with zero length).  An empty value is distinct
-  # from NULL, which is encoded with a negative length.
-  # https://github.com/apache/cassandra/blob/8764ef/doc/native_protocol_v4.spec#L830-L832
-  defp decode_value(<<>>, type) when not type in [:ascii, :blob, :varchar], do: nil
-
   defp decode_value(<<value>>, :boolean), do: (value != 0)
 
   defp decode_value(<<value::signed>>, :tinyint), do: value
@@ -722,19 +716,24 @@ defmodule Xandra.Protocol do
     |> MapSet.new()
   end
 
-  defp decode_value(<<data::bits>>, {:udt, fields}) do
-    decode_value_udt(data, fields, [])
-  end
-
   defp decode_value(<<value::bits>>, :ascii), do: value
 
   defp decode_value(<<value::bits>>, :blob), do: value
 
+  defp decode_value(<<value::bits>>, :varchar), do: value
+
+  # For legacy compatibility reasons, most non-string types support
+  # "empty" values (that is a value with zero length).
+  # An empty value is distinct from NULL, which is encoded with a negative length.
+  defp decode_value(<<>>, _type), do: nil
+
+  defp decode_value(<<data::bits>>, {:udt, fields}) do
+    decode_value_udt(data, fields, [])
+  end
+
   defp decode_value(<<data::bits>>, {:tuple, types}) do
     decode_value_tuple(data, types, [])
   end
-
-  defp decode_value(<<value::bits>>, :varchar), do: value
 
   defp decode_value(<<data::bits>>, :varint) do
     size = bit_size(data)
