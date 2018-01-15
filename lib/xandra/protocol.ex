@@ -377,10 +377,6 @@ defmodule Xandra.Protocol do
     <<value::16>>
   end
 
-  defp encode_value(:text, value) when is_binary(value) do
-    value
-  end
-
   defp encode_value(:time, %Time{} = time) do
     value = Calendar.time_to_nanoseconds(time)
     <<value::64>>
@@ -408,35 +404,36 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_value(:uuid, value) when is_binary(value) and byte_size(value) == 16 do
+  defp encode_value(type, value) when type in [:uuid, :timeuuid] and is_binary(value) do
+    case byte_size(value) do
+      16 ->
+        value
+      36 ->
+        <<
+          part1::8-bytes, ?-,
+          part2::4-bytes, ?-,
+          part3::4-bytes, ?-,
+          part4::4-bytes, ?-,
+          part5::12-bytes
+        >> = value
+
+        <<
+          decode_base16(part1)::4-bytes,
+          decode_base16(part2)::2-bytes,
+          decode_base16(part3)::2-bytes,
+          decode_base16(part4)::2-bytes,
+          decode_base16(part5)::6-bytes
+        >>
+    end
+  end
+
+  defp encode_value(type, value) when type in [:varchar, :text] and is_binary(value) do
     value
-  end
-
-  defp encode_value(:uuid, value) when is_binary(value) and byte_size(value) == 36 do
-    <<part1::8-bytes, ?-,
-      part2::4-bytes, ?-,
-      part3::4-bytes, ?-,
-      part4::4-bytes, ?-,
-      part5::12-bytes>> = value
-
-    <<decode_base16(part1)::4-bytes,
-      decode_base16(part2)::2-bytes,
-      decode_base16(part3)::2-bytes,
-      decode_base16(part4)::2-bytes,
-      decode_base16(part5)::6-bytes>>
-  end
-
-  defp encode_value(:varchar, value) do
-    encode_value(:text, value)
   end
 
   defp encode_value(:varint, value) when is_integer(value) do
     size = varint_byte_size(value)
     <<value::size(size)-unit(8)>>
-  end
-
-  defp encode_value(:timeuuid, value) when is_binary(value) do
-    encode_value(:uuid, value)
   end
 
   defp encode_value({:tuple, types}, value) when length(types) == tuple_size(value) do
