@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.1
+
+* Started accepting UUIDs in binary representation.
+* Added handling of legacy empty values for non-string types.
+
 ## v0.9.0
 
 * Added native support for `Date`, `Time`, and `DateTime`.
