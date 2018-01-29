@@ -12,7 +12,7 @@ This driver works exclusively with the Cassandra Query Language v3 (CQL3) and th
 
 ## Features
 
-This library is in its early stages when it comes to features, but we're already [successfully using it in production at Football Addicts][production-use]. Currently, the supported features are:
+This library is in its early stages when it comes to features, but we're already [successfully using it in production at Forza Football][production-use]. Currently, the supported features are:
 
   * performing queries (including parameterized queries) on the Cassandra database
   * connection pooling
@@ -97,4 +97,4 @@ Xandra is released under the ISC license, see the [LICENSE](LICENSE) file.
 
 [documentation]: https://hexdocs.pm/xandra
 [cassandra]: http://cassandra.apache.org
-[production-use]: http://tech.footballaddicts.com/blog/the-pursuit-of-instant-pushes
+[production-use]: http://tech.forzafootball.com/blog/the-pursuit-of-instant-pushes
