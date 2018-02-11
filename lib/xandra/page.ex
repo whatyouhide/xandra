@@ -52,6 +52,12 @@ defmodule Xandra.Page do
       reduce(content, columns, acc, fun)
     end
 
+    def member?(_page, _value), do: {:error, __MODULE__}
+
+    def count(_page), do: {:error, __MODULE__}
+
+    def slice(_page), do: {:error, __MODULE__}
+
     defp reduce(_content, _columns, {:halt, acc}, _fun) do
       {:halted, acc}
     end
@@ -73,14 +79,6 @@ defmodule Xandra.Page do
 
     defp zip([value | values], [{_, _, name, _} | columns], acc) do
       zip(values, columns, [{name, value} | acc])
-    end
-
-    def member?(_page, _term) do
-      {:error, __MODULE__}
-    end
-
-    def count(_page) do
-      {:error, __MODULE__}
     end
   end
 

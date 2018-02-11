@@ -10,13 +10,11 @@ defmodule Xandra.PageStream do
       Stream.resource(fn() -> start(page_stream) end, &next/1, &close/1).(acc, fun)
     end
 
-    def member?(_page_stream, _term) do
-      {:error, __MODULE__}
-    end
+    def member?(_page_stream, _value), do: {:error, __MODULE__}
 
-    def count(_page_stream) do
-      {:error, __MODULE__}
-    end
+    def count(_page_stream), do: {:error, __MODULE__}
+
+    def slice(_page_stream), do: {:error, __MODULE__}
 
     defp start(%{state: :new} = page_stream) do
       %{page_stream | state: :run}
