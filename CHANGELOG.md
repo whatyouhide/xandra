@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.2
+
+* Fixed Elixir v1.6 warnings.
+
 ## v0.9.1
 
 * Started accepting UUIDs in binary representation.
