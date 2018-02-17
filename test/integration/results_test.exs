@@ -1,5 +1,5 @@
 defmodule ResultsTest do
-  use XandraTest.IntegrationCase, async: true
+  use XandraTest.IntegrationCase, async: false
 
   alias Xandra.{SchemaChange, SetKeyspace, Void}
 
@@ -39,5 +39,50 @@ defmodule ResultsTest do
     Xandra.execute!(conn, "INSERT INTO users (name) VALUES ('Jeff')")
     %Xandra.Page{} = page = Xandra.execute!(conn, "SELECT * FROM users")
     assert inspect(page) == ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], more_pages?: false]>)
+  end
+end
+
+defmodule ResultsAtomTest do
+  use XandraTest.IntegrationCase, async: false
+
+  alias Xandra.{SchemaChange, SetKeyspace, Void}
+  setup do
+    Application.put_env(:xandra, :metadata_format, :atom)
+    on_exit fn ->
+      Application.delete_env(:xandra, :metadata_format)
+    end
+
+    :ok
+  end
+
+  test "each possible result", %{conn: conn, keyspace: keyspace} do
+    assert {:ok, result} = Xandra.execute(conn, "USE #{keyspace}", [])
+    assert result == %SetKeyspace{keyspace: String.downcase(keyspace)}
+
+    statement = "CREATE TABLE numbers_atoms (figure int PRIMARY KEY)"
+    assert {:ok, result} = Xandra.execute(conn, statement, [])
+    assert result == %SchemaChange{
+      effect: "CREATED",
+      options: %{
+        keyspace: keyspace |> String.downcase() |> String.to_atom(),
+        subject: :numbers_atoms,
+      },
+      target: "TABLE",
+    }
+
+    statement = "INSERT INTO numbers_atoms (figure) VALUES (123)"
+    assert {:ok, result} = Xandra.execute(conn, statement, [])
+    assert result == %Void{}
+
+    statement = "SELECT * FROM numbers_atoms WHERE figure = ?"
+    assert {:ok, result} = Xandra.execute(conn, statement, [{"int", 123}])
+    assert Enum.to_list(result) == [%{figure: 123}]
+
+    assert {:ok, result} = Xandra.execute(conn, statement, [{"int", 321}])
+    assert Enum.to_list(result) == []
+
+    statement = "SELECT * FROM numbers_atoms WHERE figure = :figure"
+    assert {:ok, result} = Xandra.execute(conn, statement, %{"figure" => {"int", 123}})
+    assert Enum.to_list(result) == [%{figure: 123}]
   end
 end

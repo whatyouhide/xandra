@@ -26,6 +26,20 @@ defmodule Xandra.Protocol do
     end
   end
 
+  defmacrop decode_metadata({:<-, _, [value, buffer]}) do
+    quote do
+      {unquote(value), unquote(buffer)} =
+        case Application.get_env(:xandra, :metadata_format, :string) do
+          :atom ->
+            <<size::16, str_val::size(size)-bytes, rest::bits>> = unquote(buffer)
+            {String.to_atom(str_val), rest}
+          _ ->
+            <<size::16, str_val::size(size)-bytes, rest::bits>> = unquote(buffer)
+            {str_val, rest}
+      end
+    end
+  end
+
   defmacrop decode_value({:<-, _, [value, buffer]}, type, do: block) do
     quote do
       <<size::32-signed, unquote(buffer)::bits>> = unquote(buffer)
@@ -505,7 +519,7 @@ defmodule Xandra.Protocol do
   def decode_response(%Frame{kind: :event, body: body}, nil, _options) do
     decode_string(event <- body)
     "STATUS_CHANGE" = event
-    decode_string(effect <- body)
+    decode_metadata(effect <- body)
     {address, port, <<>>} = decode_inet(body)
     %StatusChange{effect: effect, address: address, port: port}
   end
@@ -595,8 +609,8 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_change_options(<<buffer::bits>>, target) when target in ["TABLE", "TYPE"] do
-    decode_string(keyspace <- buffer)
-    decode_string(subject <- buffer)
+    decode_metadata(keyspace <- buffer)
+    decode_metadata(subject <- buffer)
     <<>> = buffer
     %{keyspace: keyspace, subject: subject}
   end
@@ -609,8 +623,10 @@ defmodule Xandra.Protocol do
       no_metadata == 1 ->
         {page, buffer}
       global_table_spec == 1 ->
-        decode_string(keyspace <- buffer)
-        decode_string(table <- buffer)
+
+        decode_metadata(keyspace <- buffer)
+        decode_metadata(table <- buffer)
+
         {columns, buffer} = decode_columns(buffer, column_count, {keyspace, table}, [])
         {%{page | columns: columns}, buffer}
       true ->
@@ -793,9 +809,9 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_columns(<<buffer::bits>>, column_count, nil, acc) do
-    decode_string(keyspace <- buffer)
-    decode_string(table <- buffer)
-    decode_string(name <- buffer)
+    decode_metadata(keyspace <- buffer)
+    decode_metadata(table <- buffer)
+    decode_metadata(name <- buffer)
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
     decode_columns(buffer, column_count - 1, nil, [entry | acc])
@@ -803,7 +819,7 @@ defmodule Xandra.Protocol do
 
   defp decode_columns(<<buffer::bits>>, column_count, table_spec, acc) do
     {keyspace, table} = table_spec
-    decode_string(name <- buffer)
+    decode_metadata(name <- buffer)
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
     decode_columns(buffer, column_count - 1, table_spec, [entry | acc])
