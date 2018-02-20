@@ -87,7 +87,7 @@ defmodule Xandra.Cluster.ControlConnection do
   defp startup_connection(socket, supported_options, options) do
     %{"CQL_VERSION" => [cql_version | _]} = supported_options
     requested_options = %{"CQL_VERSION" => cql_version}
-    Utils.startup_connection(socket, requested_options, nil, options)
+    Utils.startup_connection(socket, requested_options, nil, false, options)
   end
 
   defp register_to_events(socket) do
