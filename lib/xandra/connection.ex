@@ -16,7 +16,7 @@ defmodule Xandra.Connection do
     port = Keyword.fetch!(options, :port)
     prepared_cache = Keyword.fetch!(options, :prepared_cache)
     compressor = Keyword.get(options, :compressor)
-    atom_keys? = Keyword.get(options, :atom_keys?, false)
+    atom_keys? = Keyword.get(options, :atom_keys, false)
 
     case :gen_tcp.connect(address, port, @default_socket_options, @default_timeout) do
       {:ok, socket} ->

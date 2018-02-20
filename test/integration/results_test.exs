@@ -43,10 +43,9 @@ defmodule ResultsTest do
 end
 
 defmodule ResultsAtomTest do
-  use XandraTest.IntegrationCase, async: true, start_options: [atom_keys?: true]
+  use XandraTest.IntegrationCase, async: true, start_options: [atom_keys: true]
 
   alias Xandra.{SchemaChange, SetKeyspace, Void}
-
 
   test "each possible result", %{conn: conn, keyspace: keyspace} do
     assert {:ok, result} = Xandra.execute(conn, "USE #{keyspace}", [])

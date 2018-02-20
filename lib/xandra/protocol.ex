@@ -29,13 +29,13 @@ defmodule Xandra.Protocol do
   defmacrop decode_string_or_atom({:<-, _, [value, buffer]}, atom_keys?) do
     quote do
       {unquote(value), unquote(buffer)} =
-      if unquote(atom_keys?) do
-        <<size::16, str_val::size(size)-bytes, rest::bits>> = unquote(buffer)
-        {String.to_atom(str_val), rest}
-      else
-        <<size::16, str_val::size(size)-bytes, rest::bits>> = unquote(buffer)
-        {str_val, rest}
-      end
+        if unquote(atom_keys?) do
+          <<size::16, str_val::size(size)-bytes, rest::bits>> = unquote(buffer)
+          {String.to_atom(str_val), rest}
+        else
+          <<size::16, str_val::size(size)-bytes, rest::bits>> = unquote(buffer)
+          {str_val, rest}
+        end
     end
   end
 
@@ -525,7 +525,7 @@ defmodule Xandra.Protocol do
 
   def decode_response(%Frame{kind: :result, body: body, atom_keys?: atom_keys?}, %kind{} = query, options)
       when kind in [Simple, Prepared, Batch] do
-    options = Keyword.merge([atom_keys?: atom_keys?], options)
+    options = Keyword.put_new(options, :atom_keys, atom_keys?)
     decode_result_response(body, query, options)
   end
 
@@ -603,14 +603,14 @@ defmodule Xandra.Protocol do
   defp rewrite_type(type, _options), do: type
 
   defp decode_change_options(<<buffer::bits>>, "KEYSPACE", options) do
-    atom_keys? = Keyword.get(options, :atom_keys?, false)
+    atom_keys? = Keyword.get(options, :atom_keys, false)
     decode_string_or_atom(keyspace <- buffer, atom_keys?)
     <<>> = buffer
     %{keyspace: keyspace}
   end
 
   defp decode_change_options(<<buffer::bits>>, target, options) when target in ["TABLE", "TYPE"] do
-    atom_keys? = Keyword.get(options, :atom_keys?, false)
+    atom_keys? = Keyword.get(options, :atom_keys, false)
     decode_string_or_atom(keyspace <- buffer, atom_keys?)
     decode_string_or_atom(subject <- buffer, atom_keys?)
     <<>> = buffer
@@ -624,7 +624,7 @@ defmodule Xandra.Protocol do
       no_metadata == 1 ->
         {page, buffer}
       global_table_spec == 1 ->
-        atom_keys? = Keyword.get(options, :atom_keys?, false)
+        atom_keys? = Keyword.get(options, :atom_keys, false)
         decode_string_or_atom(keyspace <- buffer, atom_keys?)
         decode_string_or_atom(table <- buffer, atom_keys?)
 
@@ -810,7 +810,7 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_columns(<<buffer::bits>>, column_count, nil, options, acc) do
-    atom_keys? = Keyword.get(options, :atom_keys?, false)
+    atom_keys? = Keyword.get(options, :atom_keys, false)
     decode_string_or_atom(keyspace <- buffer, atom_keys?)
     decode_string_or_atom(table <- buffer, atom_keys?)
     decode_string_or_atom(name <- buffer, atom_keys?)
@@ -820,7 +820,7 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_columns(<<buffer::bits>>, column_count, table_spec, options, acc) do
-    atom_keys? = Keyword.get(options, :atom_keys?, false)
+    atom_keys? = Keyword.get(options, :atom_keys, false)
     {keyspace, table} = table_spec
     decode_string_or_atom(name <- buffer, atom_keys?)
     {type, buffer} = decode_type(buffer)

@@ -5,7 +5,9 @@ defmodule Xandra.Connection.Utils do
 
   @spec recv_frame(:gen_tcp.socket, nil | module, boolean) ::
         {:ok, Frame.t} | {:error, :closed | :inet.posix}
-  def recv_frame(socket, compressor \\ nil, atom_keys? \\ false) when is_atom(compressor) do
+  def recv_frame(socket, compressor \\ nil, atom_keys? \\ false)
+    when is_atom(compressor) and is_boolean(atom_keys?) do
+
     length = Frame.header_length()
     with {:ok, header} <- :gen_tcp.recv(socket, length) do
       case Frame.body_length(header) do
@@ -71,10 +73,10 @@ defmodule Xandra.Connection.Utils do
       |> Frame.encode()
 
     with :ok <- :gen_tcp.send(socket, payload),
-         {:ok, frame} <- recv_frame(socket, compressor) do
+         {:ok, frame} <- recv_frame(socket, compressor, atom_keys?) do
       case frame do
         %Frame{kind: :auth_success} -> :ok
-        %Frame{kind: :error} -> {:error, Protocol.decode_response(frame)}
+        %Frame{kind: :error} -> {:error, Protocol.decode_response(frame, nil, atom_keys?)}
         _ -> raise "protocol violation, got unexpected frame: #{inspect(frame)}"
       end
     else
