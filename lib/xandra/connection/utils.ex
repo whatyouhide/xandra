@@ -19,15 +19,15 @@ defmodule Xandra.Connection.Utils do
     end
   end
 
-  @spec request_options(:gen_tcp.socket) :: {:ok, term} | {:error, ConnectionError.t}
-  def request_options(socket) do
+  @spec request_options(:gen_tcp.socket, nil | module) :: {:ok, term} | {:error, ConnectionError.t}
+  def request_options(socket, compressor \\ nil) do
     payload =
       Frame.new(:options)
       |> Protocol.encode_request(nil)
       |> Frame.encode()
 
     with :ok <- :gen_tcp.send(socket, payload),
-         {:ok, %Frame{} = frame} <- recv_frame(socket) do
+         {:ok, %Frame{} = frame} <- recv_frame(socket, compressor) do
       {:ok, Protocol.decode_response(frame)}
     else
       {:error, reason} ->
