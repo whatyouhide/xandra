@@ -88,8 +88,8 @@ defmodule Xandra.Connection do
     :ok = :gen_tcp.close(socket)
   end
 
-  def ping(%__MODULE__{socket: socket} = state) do
-    case Utils.request_options(socket) do
+  def ping(%__MODULE__{socket: socket, compressor: compressor} = state) do
+    case Utils.request_options(socket, compressor) do
       {:ok, _options} ->
         {:ok, state}
       {:error, %ConnectionError{reason: reason}} ->
