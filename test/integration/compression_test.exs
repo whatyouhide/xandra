@@ -24,7 +24,7 @@ defmodule CompressionTest do
   end
 
   test "compression with the snappy algorithm", %{keyspace: keyspace} do
-    assert {:ok, compressed_conn} = Xandra.start_link(compressor: Snappy)
+    assert {:ok, compressed_conn} = Xandra.start_link(compressor: Snappy, idle_timeout: 200)
 
     statement = "SELECT * FROM #{keyspace}.users WHERE code = ?"
     options = [compressor: Snappy]
@@ -42,6 +42,10 @@ defmodule CompressionTest do
     assert {:ok, prepared} = Xandra.prepare(compressed_conn, statement, options)
     assert {:ok, %Xandra.Page{} = page} = Xandra.execute(compressed_conn, prepared, [1], options)
     assert Enum.to_list(page) == [%{"code" => 1, "name" => "Homer"}]
+
+    # This sleep is needed to test pings with compression,
+    # and its value must be bigger than :idle_timeout.
+    Process.sleep(250)
 
     # Compressing batch queries.
     batch =
