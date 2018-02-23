@@ -56,8 +56,8 @@ defmodule ResultsAtomTest do
     assert result == %SchemaChange{
       effect: "CREATED",
       options: %{
-        keyspace: keyspace |> String.downcase() |> String.to_atom(),
-        subject: :numbers_atoms,
+        keyspace: keyspace |> String.downcase(),
+        subject: "numbers_atoms",
       },
       target: "TABLE",
     }

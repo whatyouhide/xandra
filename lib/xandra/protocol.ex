@@ -515,10 +515,10 @@ defmodule Xandra.Protocol do
     value
   end
 
-  def decode_response(%Frame{kind: :event, body: body, atom_keys?: atom_keys?}, nil, _options) do
+  def decode_response(%Frame{kind: :event, body: body}, nil, _options) do
     decode_string(event <- body)
     "STATUS_CHANGE" = event
-    decode_string_or_atom(effect <- body, atom_keys?)
+    decode_string(effect <- body)
     {address, port, <<>>} = decode_inet(body)
     %StatusChange{effect: effect, address: address, port: port}
   end
@@ -563,10 +563,10 @@ defmodule Xandra.Protocol do
   end
 
   # SchemaChange
-  defp decode_result_response(<<0x0005::32-signed, buffer::bits>>, _query, atom_keys?, options) do
+  defp decode_result_response(<<0x0005::32-signed, buffer::bits>>, _query, _atom_keys?, options) do
     decode_string(effect <- buffer)
     decode_string(target <- buffer)
-    options = decode_change_options(buffer, target, atom_keys?, options)
+    options = decode_change_options(buffer, target, options)
     %Xandra.SchemaChange{effect: effect, target: target, options: options}
   end
 
@@ -601,15 +601,15 @@ defmodule Xandra.Protocol do
 
   defp rewrite_type(type, _options), do: type
 
-  defp decode_change_options(<<buffer::bits>>, "KEYSPACE", atom_keys?, _options) do
-    decode_string_or_atom(keyspace <- buffer, atom_keys?)
+  defp decode_change_options(<<buffer::bits>>, "KEYSPACE", _options) do
+    decode_string(keyspace <- buffer)
     <<>> = buffer
     %{keyspace: keyspace}
   end
 
-  defp decode_change_options(<<buffer::bits>>, target, atom_keys?, _options) when target in ["TABLE", "TYPE"] do
-    decode_string_or_atom(keyspace <- buffer, atom_keys?)
-    decode_string_or_atom(subject <- buffer, atom_keys?)
+  defp decode_change_options(<<buffer::bits>>, target, _options) when target in ["TABLE", "TYPE"] do
+    decode_string(keyspace <- buffer)
+    decode_string(subject <- buffer)
     <<>> = buffer
     %{keyspace: keyspace, subject: subject}
   end
@@ -621,8 +621,8 @@ defmodule Xandra.Protocol do
       no_metadata == 1 ->
         {page, buffer}
       global_table_spec == 1 ->
-        decode_string_or_atom(keyspace <- buffer, atom_keys?)
-        decode_string_or_atom(table <- buffer, atom_keys?)
+        decode_string(keyspace <- buffer)
+        decode_string(table <- buffer)
 
         {columns, buffer} = decode_columns(buffer, column_count, {keyspace, table}, atom_keys?, options, [])
         {%{page | columns: columns}, buffer}
@@ -806,8 +806,8 @@ defmodule Xandra.Protocol do
   end
 
   defp decode_columns(<<buffer::bits>>, column_count, nil, atom_keys?, options, acc) do
-    decode_string_or_atom(keyspace <- buffer, atom_keys?)
-    decode_string_or_atom(table <- buffer, atom_keys?)
+    decode_string(keyspace <- buffer)
+    decode_string(table <- buffer)
     decode_string_or_atom(name <- buffer, atom_keys?)
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
