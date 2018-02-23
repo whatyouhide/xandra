@@ -26,19 +26,6 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defmacrop decode_string_or_atom({:<-, _, [value, buffer]}, atom_keys?) do
-    quote do
-      {unquote(value), unquote(buffer)} =
-        if unquote(atom_keys?) do
-          <<size::16, str_val::size(size)-bytes, rest::bits>> = unquote(buffer)
-          {String.to_atom(str_val), rest}
-        else
-          <<size::16, str_val::size(size)-bytes, rest::bits>> = unquote(buffer)
-          {str_val, rest}
-        end
-    end
-  end
-
   defmacrop decode_value({:<-, _, [value, buffer]}, type, do: block) do
     quote do
       <<size::32-signed, unquote(buffer)::bits>> = unquote(buffer)
@@ -808,7 +795,12 @@ defmodule Xandra.Protocol do
   defp decode_columns(<<buffer::bits>>, column_count, nil, atom_keys?, options, acc) do
     decode_string(keyspace <- buffer)
     decode_string(table <- buffer)
-    decode_string_or_atom(name <- buffer, atom_keys?)
+    decode_string(name <- buffer)
+    name = if atom_keys? do
+      String.to_atom(name)
+    else
+      name
+    end
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
     decode_columns(buffer, column_count - 1, nil, atom_keys?, options, [entry | acc])
@@ -816,7 +808,13 @@ defmodule Xandra.Protocol do
 
   defp decode_columns(<<buffer::bits>>, column_count, table_spec, atom_keys?, options, acc) do
     {keyspace, table} = table_spec
-    decode_string_or_atom(name <- buffer, atom_keys?)
+    decode_string(name <- buffer)
+    name = if atom_keys? do
+      String.to_atom(name)
+    else
+      name
+    end
+
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
     decode_columns(buffer, column_count - 1, table_spec, atom_keys?, options, [entry | acc])
