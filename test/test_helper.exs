@@ -1,7 +1,8 @@
+exclude = if System.get_env("USE_SCYLLA") == "true", do: [:cassandra_spacific], else: []
 if System.get_env("AUTHENTICATION") == "true" do
-  ExUnit.start(exclude: [:test], include: [:authentication])
+  ExUnit.start(exclude: [:test] ++ exclude, include: [:authentication])
 else
-  ExUnit.start()
+  ExUnit.start(exclude: exclude)
 end
 
 defmodule XandraTest.IntegrationCase do
