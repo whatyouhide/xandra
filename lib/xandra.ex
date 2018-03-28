@@ -154,7 +154,7 @@ defmodule Xandra do
   passed, the outgoing data will not be compressed.
   """
 
-  alias __MODULE__.{Batch, Connection, Error, Prepared, Page, PageStream, Simple}
+  alias __MODULE__.{Batch, Connection, ConnectionError, Error, Prepared, Page, PageStream, Simple}
 
   @type statement :: String.t
   @type values :: list | map
