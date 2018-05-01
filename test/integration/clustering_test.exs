@@ -21,16 +21,19 @@ defmodule ClusteringTest do
     call_options = [pool: Xandra.Cluster]
     statement = "USE #{keyspace}"
 
-    log = capture_log(fn ->
-      start_options = [
-        nodes: ["127.0.0.1", "127.0.0.1", "127.0.0.2"],
-        name: TestCluster,
-        load_balancing: :random,
-      ]
-      {:ok, cluster} = Xandra.start_link(call_options ++ start_options)
+    log =
+      capture_log(fn ->
+        start_options = [
+          nodes: ["127.0.0.1", "127.0.0.1", "127.0.0.2"],
+          name: TestCluster,
+          load_balancing: :random
+        ]
 
-      assert await_connected(cluster, call_options, &Xandra.execute!(&1, statement))
-    end)
+        {:ok, cluster} = Xandra.start_link(call_options ++ start_options)
+
+        assert await_connected(cluster, call_options, &Xandra.execute!(&1, statement))
+      end)
+
     assert log =~ "received request to start another connection pool to the same address"
 
     assert Xandra.execute!(TestCluster, statement, [], call_options)

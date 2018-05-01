@@ -9,6 +9,6 @@ defmodule Xandra.SetKeyspace do
   defstruct [:keyspace]
 
   @type t :: %__MODULE__{
-    keyspace: String.t,
-  }
+          keyspace: String.t()
+        }
 end

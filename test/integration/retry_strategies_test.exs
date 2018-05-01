@@ -45,7 +45,8 @@ defmodule Xandra.RetryStrategiesTest do
 
     message =
       "invalid return value :invalid_value from " <>
-      "retry strategy Xandra.RetryStrategiesTest.InvalidStrategy with state %{}"
+        "retry strategy Xandra.RetryStrategiesTest.InvalidStrategy with state %{}"
+
     assert_raise ArgumentError, message, fn ->
       Xandra.execute(conn, "USE nonexistend_keyspace", [], retry_strategy: InvalidStrategy)
     end

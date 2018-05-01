@@ -17,7 +17,7 @@ defmodule Xandra.Cluster.ControlConnection do
     :socket,
     :options,
     new: true,
-    buffer: <<>>,
+    buffer: <<>>
   ]
 
   def start_link(cluster, node_ref, address, port, options) do
@@ -26,8 +26,9 @@ defmodule Xandra.Cluster.ControlConnection do
       node_ref: node_ref,
       address: address,
       port: port,
-      options: options,
+      options: options
     }
+
     Connection.start_link(__MODULE__, state)
   end
 
@@ -39,6 +40,7 @@ defmodule Xandra.Cluster.ControlConnection do
     case :gen_tcp.connect(address, port, @socket_options, @default_timeout) do
       {:ok, socket} ->
         state = %{state | socket: socket}
+
         with {:ok, supported_options} <- Utils.request_options(socket),
              :ok <- startup_connection(socket, supported_options, options),
              :ok <- register_to_events(socket),
@@ -50,6 +52,7 @@ defmodule Xandra.Cluster.ControlConnection do
             {:connect, :reconnect, state} = disconnect(error, state)
             {:backoff, @default_backoff, state}
         end
+
       {:error, _reason} ->
         {:backoff, @default_backoff, state}
     end
@@ -112,6 +115,7 @@ defmodule Xandra.Cluster.ControlConnection do
         Logger.debug("Received STATUS_CHANGE event: #{inspect(status_change)}")
         Xandra.Cluster.update(cluster, status_change)
         report_event(%{state | buffer: rest})
+
       :error ->
         state
     end
@@ -119,15 +123,19 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defp decode_frame(buffer) do
     header_length = Frame.header_length()
+
     case buffer do
       <<header::size(header_length)-bytes, rest::binary>> ->
         body_length = Frame.body_length(header)
+
         case rest do
           <<body::size(body_length)-bytes, rest::binary>> ->
             {Frame.decode(header, body), rest}
+
           _ ->
             :error
         end
+
       _ ->
         :error
     end

@@ -29,11 +29,11 @@ defmodule Xandra.ConnectionError do
   defexception [:action, :reason]
 
   @type t :: %__MODULE__{
-    action: String.t,
-    reason: term,
-  }
+          action: String.t(),
+          reason: term
+        }
 
-  @spec new(String.t, term) :: t
+  @spec new(String.t(), term) :: t
   def new(action, reason) when is_binary(action) do
     %__MODULE__{action: action, reason: reason}
   end

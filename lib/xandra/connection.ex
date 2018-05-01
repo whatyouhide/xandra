@@ -20,7 +20,12 @@ defmodule Xandra.Connection do
 
     case :gen_tcp.connect(address, port, @default_socket_options, @default_timeout) do
       {:ok, socket} ->
-        state = %__MODULE__{socket: socket, prepared_cache: prepared_cache, compressor: compressor, atom_keys?: atom_keys?}
+        state = %__MODULE__{
+          socket: socket,
+          prepared_cache: prepared_cache,
+          compressor: compressor,
+          atom_keys?: atom_keys?
+        }
 
         with {:ok, supported_options} <- Utils.request_options(socket),
              :ok <- startup_connection(socket, supported_options, compressor, options) do
@@ -30,6 +35,7 @@ defmodule Xandra.Connection do
             disconnect(reason, state)
             error
         end
+
       {:error, reason} ->
         {:error, ConnectionError.new("TCP connect", reason)}
     end
@@ -50,6 +56,7 @@ defmodule Xandra.Connection do
     case prepared_cache_lookup(state, prepared, force?) do
       {:ok, prepared} ->
         {:ok, prepared, state}
+
       :error ->
         payload =
           Frame.new(:prepare)
@@ -65,6 +72,7 @@ defmodule Xandra.Connection do
         else
           {:error, reason} ->
             {:disconnect, ConnectionError.new("prepare", reason), state}
+
           %Xandra.Error{} = reason ->
             {:error, reason, state}
         end
@@ -74,6 +82,7 @@ defmodule Xandra.Connection do
   def handle_execute(_query, payload, options, %__MODULE__{} = state) do
     %{socket: socket, compressor: compressor, atom_keys?: atom_keys?} = state
     assert_valid_compressor(compressor, options[:compressor])
+
     with :ok <- :gen_tcp.send(socket, payload),
          {:ok, %Frame{} = frame} <- Utils.recv_frame(socket, compressor) do
       {:ok, %{frame | atom_keys?: atom_keys?}, state}
@@ -95,6 +104,7 @@ defmodule Xandra.Connection do
     case Utils.request_options(socket, compressor) do
       {:ok, _options} ->
         {:ok, state}
+
       {:error, %ConnectionError{reason: reason}} ->
         {:disconnect, ConnectionError.new("ping", reason), state}
     end
@@ -110,18 +120,25 @@ defmodule Xandra.Connection do
   end
 
   defp startup_connection(socket, supported_options, compressor, options) do
-    %{"CQL_VERSION" => [cql_version | _],
-      "COMPRESSION" => supported_compression_algorithms} = supported_options
+    %{
+      "CQL_VERSION" => [cql_version | _],
+      "COMPRESSION" => supported_compression_algorithms
+    } = supported_options
 
     requested_options = %{"CQL_VERSION" => cql_version}
 
     if compressor do
       compression_algorithm = Atom.to_string(compressor.algorithm())
+
       if compression_algorithm in supported_compression_algorithms do
         requested_options = Map.put(requested_options, "COMPRESSION", compression_algorithm)
         Utils.startup_connection(socket, requested_options, compressor, options)
       else
-        {:error, ConnectionError.new("startup connection", {:unsupported_compression, compressor.algorithm()})}
+        {:error,
+         ConnectionError.new(
+           "startup connection",
+           {:unsupported_compression, compressor.algorithm()}
+         )}
       end
     else
       Utils.startup_connection(socket, requested_options, compressor, options)
@@ -138,8 +155,8 @@ defmodule Xandra.Connection do
   # provides a compressor module, we blow up because it is a semantic error.
   defp assert_valid_compressor(_initial = nil, provided) do
     raise ArgumentError,
-      "a query was compressed with the #{inspect(provided)} compressor module " <>
-      "but the connection was started without specifying any compression"
+          "a query was compressed with the #{inspect(provided)} compressor module " <>
+            "but the connection was started without specifying any compression"
   end
 
   # If the user provided a compressor module both for this prepare/execute as
@@ -155,10 +172,10 @@ defmodule Xandra.Connection do
       provided
     else
       raise ArgumentError,
-        "a query was compressed with the #{inspect(provided)} compressor module " <>
-        "(which uses the #{inspect(provided_algorithm)} algorithm) but the " <>
-        "connection was initialized with the #{inspect(initial)} compressor " <>
-        "module (which uses the #{inspect(initial_algorithm)}"
+            "a query was compressed with the #{inspect(provided)} compressor module " <>
+              "(which uses the #{inspect(provided_algorithm)} algorithm) but the " <>
+              "connection was initialized with the #{inspect(initial)} compressor " <>
+              "module (which uses the #{inspect(initial_algorithm)}"
     end
   end
 end

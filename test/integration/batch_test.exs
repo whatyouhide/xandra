@@ -32,10 +32,11 @@ defmodule BatchTest do
     assert {:ok, %Void{}} = Xandra.execute(conn, batch)
 
     {:ok, result} = Xandra.execute(conn, "SELECT name FROM users")
+
     assert Enum.to_list(result) == [
-      %{"name" => "Marge"},
-      %{"name" => "Homer"},
-    ]
+             %{"name" => "Marge"},
+             %{"name" => "Homer"}
+           ]
   end
 
   test "batch of type \"unlogged\"", %{conn: conn} do
@@ -43,17 +44,20 @@ defmodule BatchTest do
       Batch.new(:unlogged)
       |> Batch.add("INSERT INTO users (id, name) VALUES (1, 'Rick')")
       |> Batch.add("INSERT INTO users (id, name) VALUES (2, 'Morty')")
+
     assert {:ok, %Void{}} = Xandra.execute(conn, batch)
 
     result = Xandra.execute!(conn, "SELECT name FROM users")
+
     assert Enum.to_list(result) == [
-      %{"name" => "Rick"},
-      %{"name" => "Morty"},
-    ]
+             %{"name" => "Rick"},
+             %{"name" => "Morty"}
+           ]
   end
 
   test "using a default timestamp for the batch", %{conn: conn} do
     timestamp = System.system_time(:seconds) - (_10_minutes = 600)
+
     batch =
       Batch.new()
       |> Batch.add("INSERT INTO users (id, name) VALUES (1, 'Abed')")
@@ -62,10 +66,11 @@ defmodule BatchTest do
     assert {:ok, %Void{}} = Xandra.execute(conn, batch, timestamp: timestamp)
 
     result = Xandra.execute!(conn, "SELECT name, WRITETIME(name) FROM users")
+
     assert Enum.to_list(result) == [
-      %{"name" => "Abed", "writetime(name)" => timestamp},
-      %{"name" => "Troy", "writetime(name)" => timestamp},
-    ]
+             %{"name" => "Abed", "writetime(name)" => timestamp},
+             %{"name" => "Troy", "writetime(name)" => timestamp}
+           ]
   end
 
   test "errors when there are bad queries in the batch", %{conn: conn} do
@@ -74,7 +79,9 @@ defmodule BatchTest do
     assert {:error, %Error{reason: :invalid}} = Xandra.execute(conn, invalid_batch)
   end
 
-  test "named params are supported in prepared queries even if they aren't in the protocol", %{conn: conn} do
+  test "named params are supported in prepared queries even if they aren't in the protocol", %{
+    conn: conn
+  } do
     statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
     prepared_insert = Xandra.prepare!(conn, statement)
 
@@ -83,13 +90,15 @@ defmodule BatchTest do
     assert {:ok, %Void{}} = Xandra.execute(conn, batch)
 
     result = Xandra.execute!(conn, "SELECT name FROM users WHERE id = 1")
+
     assert Enum.to_list(result) == [
-      %{"name" => "Beth"},
-    ]
+             %{"name" => "Beth"}
+           ]
   end
 
   test "an error is raised if named parameters are used with simple queries" do
     message = ~r/non-prepared statements inside batch queries only support positional/
+
     assert_raise ArgumentError, message, fn ->
       statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
       Batch.add(Batch.new(), statement, %{"id" => 1, "name" => "Summer"})
@@ -98,6 +107,7 @@ defmodule BatchTest do
 
   test "an error is raised if a named parameter is missing for prepared queries", %{conn: conn} do
     message = "missing named parameter \"name\" for prepared query, got: %{\"id\" => 1}"
+
     assert_raise ArgumentError, message, fn ->
       statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
       prepared_insert = Xandra.prepare!(conn, statement)
@@ -120,8 +130,9 @@ defmodule BatchTest do
 
     expected =
       ~s/#Xandra.Batch<[type: :logged, / <>
-      ~s/queries: [{"INSERT INTO users (id, name) VALUES (1, 'Marge')", []}, / <>
-      ~s/{#Xandra.Prepared<"DELETE FROM users WHERE id = ?">, [2]}]]>/
+        ~s/queries: [{"INSERT INTO users (id, name) VALUES (1, 'Marge')", []}, / <>
+        ~s/{#Xandra.Prepared<"DELETE FROM users WHERE id = ?">, [2]}]]>/
+
     assert inspect(batch) == expected
   end
 end

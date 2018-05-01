@@ -8,22 +8,22 @@ defmodule Xandra.Mixfile do
   @version "0.9.2"
 
   def project() do
-    [app: :xandra,
-     version: @version,
-     elixir: "~> 1.3",
-     build_embedded: Mix.env == :prod,
-     start_permanent: Mix.env == :prod,
-     deps: deps(),
+    [
+      app: :xandra,
+      version: @version,
+      elixir: "~> 1.3",
+      build_embedded: Mix.env() == :prod,
+      start_permanent: Mix.env() == :prod,
+      deps: deps(),
 
-     # Hex
-     package: package(),
-     description: @description,
+      # Hex
+      package: package(),
+      description: @description,
 
-     # Docs
-     name: "Xandra",
-     docs: [main: "Xandra",
-            source_ref: "v#{@version}",
-            source_url: @repo_url]]
+      # Docs
+      name: "Xandra",
+      docs: [main: "Xandra", source_ref: "v#{@version}", source_url: @repo_url]
+    ]
   end
 
   def application() do
@@ -31,14 +31,18 @@ defmodule Xandra.Mixfile do
   end
 
   defp package() do
-    [maintainers: ["Aleksei Magusev", "Andrea Leopardi"],
-     licenses: ["ISC"],
-     links: %{"GitHub" => @repo_url}]
+    [
+      maintainers: ["Aleksei Magusev", "Andrea Leopardi"],
+      licenses: ["ISC"],
+      links: %{"GitHub" => @repo_url}
+    ]
   end
 
   defp deps() do
-    [{:db_connection, "~> 1.0"},
-     {:snappy, github: "skunkwerks/snappy-erlang-nif", only: [:dev, :test]},
-     {:ex_doc, "~> 0.14", only: :dev}]
+    [
+      {:db_connection, "~> 1.0"},
+      {:snappy, github: "skunkwerks/snappy-erlang-nif", only: [:dev, :test]},
+      {:ex_doc, "~> 0.14", only: :dev}
+    ]
   end
 end

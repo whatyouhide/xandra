@@ -1,7 +1,7 @@
 defmodule AuthenticationTest do
-  start_options = [
-    authentication: {Xandra.Authenticator.Password, [username: "cassandra", password: "cassandra"]},
-  ]
+  auth_options = [username: "cassandra", password: "cassandra"]
+  start_options = [authentication: {Xandra.Authenticator.Password, auth_options}]
+
   use XandraTest.IntegrationCase, start_options: start_options
 
   @moduletag :authentication
@@ -11,6 +11,10 @@ defmodule AuthenticationTest do
 
     {:ok, cluster} = Xandra.start_link(call_options ++ start_options)
 
-    assert ClusteringTest.await_connected(cluster, call_options, &Xandra.execute!(&1, "USE #{keyspace}"))
+    assert ClusteringTest.await_connected(
+             cluster,
+             call_options,
+             &Xandra.execute!(&1, "USE #{keyspace}")
+           )
   end
 end

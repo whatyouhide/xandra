@@ -82,7 +82,7 @@ defmodule Xandra.RetryStrategy do
   @doc """
   Initializes the state of a retry strategy based on the given `options`.
   """
-  @callback new(options :: Keyword.t) :: state
+  @callback new(options :: Keyword.t()) :: state
 
   @doc """
   Determines whether to retry the failed query or return the error.
@@ -111,6 +111,6 @@ defmodule Xandra.RetryStrategy do
   `Xandra.Cluster` as the pool, since it will mean that there's a chance the
   retried query will be executed on a different node altogether.
   """
-  @callback retry(error :: term, options :: Keyword.t, state) ::
-            :error | {:retry, new_options :: Keyword.t, new_state :: state}
+  @callback retry(error :: term, options :: Keyword.t(), state) ::
+              :error | {:retry, new_options :: Keyword.t(), new_state :: state}
 end

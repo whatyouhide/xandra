@@ -35,7 +35,9 @@ defmodule CompressionTest do
     assert Enum.to_list(page) == [%{"code" => 1, "name" => "Homer"}]
 
     # Compressing simple queries.
-    assert {:ok, %Xandra.Page{} = page} = Xandra.execute(compressed_conn, statement, [{"int", 1}], options)
+    assert {:ok, %Xandra.Page{} = page} =
+             Xandra.execute(compressed_conn, statement, [{"int", 1}], options)
+
     assert Enum.to_list(page) == [%{"code" => 1, "name" => "Homer"}]
 
     # Compressing preparing queries and executing prepared queries.
@@ -52,6 +54,7 @@ defmodule CompressionTest do
       Xandra.Batch.new()
       |> Xandra.Batch.add("INSERT INTO #{keyspace}.users (code, name) VALUES (2, 'Marge')")
       |> Xandra.Batch.add("DELETE FROM #{keyspace}.users WHERE code = ?", [{"int", 1}])
+
     assert {:ok, %Xandra.Void{}} = Xandra.execute(compressed_conn, batch, options)
   end
 end

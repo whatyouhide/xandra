@@ -23,5 +23,5 @@ defmodule Xandra.Authenticator do
   @doc """
   Returns an iodata that's used as the response body to Cassandra's auth challenge.
   """
-  @callback response_body(options :: Keyword.t) :: iodata
+  @callback response_body(options :: Keyword.t()) :: iodata
 end

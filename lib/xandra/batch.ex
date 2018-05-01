@@ -15,9 +15,9 @@ defmodule Xandra.Batch do
   @type type :: :logged | :unlogged | :counter
 
   @opaque t(type) :: %__MODULE__{
-    type: type,
-    queries: [Simple.t | Prepared.t],
-  }
+            type: type,
+            queries: [Simple.t() | Prepared.t()]
+          }
 
   @type t() :: t(type)
 
@@ -62,7 +62,7 @@ defmodule Xandra.Batch do
       Xandra.execute!(conn, batch)
 
   """
-  @spec add(t, Xandra.statement | Prepared.t, [term]) :: t
+  @spec add(t, Xandra.statement() | Prepared.t(), [term]) :: t
   def add(batch, query, values \\ [])
 
   def add(%__MODULE__{} = batch, statement, values)
@@ -80,8 +80,8 @@ defmodule Xandra.Batch do
 
   def add(%__MODULE__{}, _query, values) when is_map(values) do
     raise ArgumentError,
-      "non-prepared statements inside batch queries only support positional " <>
-      "parameters (this is a current Cassandra limitation), got: #{inspect(values)}"
+          "non-prepared statements inside batch queries only support positional " <>
+            "parameters (this is a current Cassandra limitation), got: #{inspect(values)}"
   end
 
   defp add_query(batch, query, values) do
@@ -119,8 +119,9 @@ defmodule Xandra.Batch do
     def inspect(batch, options) do
       properties = [
         type: batch.type,
-        queries: format_queries(Enum.reverse(batch.queries)),
+        queries: format_queries(Enum.reverse(batch.queries))
       ]
+
       concat(["#Xandra.Batch<", to_doc(properties, options), ">"])
     end
 
@@ -128,6 +129,7 @@ defmodule Xandra.Batch do
       Enum.map(queries, fn
         %Simple{statement: statement, values: values} ->
           {statement, values}
+
         %Prepared{values: values} = prepared ->
           {prepared, values}
       end)

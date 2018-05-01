@@ -19,6 +19,7 @@ defmodule PreparedTest do
     INSERT INTO users (code, name) VALUES (4, 'Bob');
     APPLY BATCH
     """
+
     Xandra.execute!(conn, statement)
 
     :ok
@@ -31,14 +32,18 @@ defmodule PreparedTest do
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement)
 
     assert {:ok, page} = Xandra.execute(conn, prepared, [1])
+
     assert Enum.to_list(page) == [
-      %{"name" => "Homer"}, %{"name" => "Lisa"}, %{"name" => "Marge"}
-    ]
+             %{"name" => "Homer"},
+             %{"name" => "Lisa"},
+             %{"name" => "Marge"}
+           ]
 
     assert {:ok, page} = Xandra.execute(conn, prepared, %{"code" => 2})
+
     assert Enum.to_list(page) == [
-      %{"name" => "Moe"}
-    ]
+             %{"name" => "Moe"}
+           ]
 
     assert {:ok, page} = Xandra.execute(conn, prepared, %{"code" => 5})
     assert Enum.to_list(page) == []
@@ -62,6 +67,7 @@ defmodule PreparedTest do
 
   test "missing named params raise an error", %{conn: conn} do
     message = "missing named parameter \"name\" for prepared query, got: %{\"code\" => 1}"
+
     assert_raise ArgumentError, message, fn ->
       statement = "INSERT INTO users (code, name) VALUES (:code, :name)"
       prepared_insert = Xandra.prepare!(conn, statement)
