@@ -529,7 +529,7 @@ defmodule Xandra.Protocol do
   # Page
   defp decode_result_response(<<0x0002::32-signed, buffer::bits>>, query, atom_keys?, options) do
     page = new_page(query)
-    {page, buffer} = decode_metadata(buffer, page, atom_keys?, options)
+    {page, buffer} = decode_metadata(buffer, page, atom_keys?)
     columns = rewrite_column_types(page.columns, options)
     %{page | content: decode_page_content(buffer, columns)}
   end
@@ -542,10 +542,10 @@ defmodule Xandra.Protocol do
   end
 
   # Prepared
-  defp decode_result_response(<<0x0004::32-signed, buffer::bits>>, %Prepared{} = prepared, atom_keys?, options) do
+  defp decode_result_response(<<0x0004::32-signed, buffer::bits>>, %Prepared{} = prepared, atom_keys?, _options) do
     decode_string(id <- buffer)
-    {%{columns: bound_columns}, buffer} = decode_metadata(buffer, %Page{}, atom_keys?, options)
-    {%{columns: result_columns}, <<>>} = decode_metadata(buffer, %Page{}, atom_keys?, options)
+    {%{columns: bound_columns}, buffer} = decode_metadata(buffer, %Page{}, atom_keys?)
+    {%{columns: result_columns}, <<>>} = decode_metadata(buffer, %Page{}, atom_keys?)
     %{prepared | id: id, bound_columns: bound_columns, result_columns: result_columns}
   end
 
@@ -601,7 +601,7 @@ defmodule Xandra.Protocol do
     %{keyspace: keyspace, subject: subject}
   end
 
-  defp decode_metadata(<<flags::4-bytes, column_count::32-signed, buffer::bits>>, page, atom_keys?, options) do
+  defp decode_metadata(<<flags::4-bytes, column_count::32-signed, buffer::bits>>, page, atom_keys?) do
     <<_::29, no_metadata::1, has_more_pages::1, global_table_spec::1>> = flags
     {page, buffer} = decode_paging_state(buffer, page, has_more_pages)
     cond do
@@ -611,10 +611,10 @@ defmodule Xandra.Protocol do
         decode_string(keyspace <- buffer)
         decode_string(table <- buffer)
 
-        {columns, buffer} = decode_columns(buffer, column_count, {keyspace, table}, atom_keys?, options, [])
+        {columns, buffer} = decode_columns(buffer, column_count, {keyspace, table}, atom_keys?, [])
         {%{page | columns: columns}, buffer}
       true ->
-        {columns, buffer} = decode_columns(buffer, column_count, nil, atom_keys?, options, [])
+        {columns, buffer} = decode_columns(buffer, column_count, nil, atom_keys?, [])
         {%{page | columns: columns}, buffer}
     end
   end
@@ -788,11 +788,11 @@ defmodule Xandra.Protocol do
     acc |> Enum.reverse |> List.to_tuple
   end
 
-  defp decode_columns(<<buffer::bits>>, 0, _table_spec, _atom_keys?, _options, acc) do
+  defp decode_columns(<<buffer::bits>>, 0, _table_spec, _atom_keys?, acc) do
     {Enum.reverse(acc), buffer}
   end
 
-  defp decode_columns(<<buffer::bits>>, column_count, nil, atom_keys?, options, acc) do
+  defp decode_columns(<<buffer::bits>>, column_count, nil, atom_keys?, acc) do
     decode_string(keyspace <- buffer)
     decode_string(table <- buffer)
     decode_string(name <- buffer)
@@ -803,10 +803,10 @@ defmodule Xandra.Protocol do
     end
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
-    decode_columns(buffer, column_count - 1, nil, atom_keys?, options, [entry | acc])
+    decode_columns(buffer, column_count - 1, nil, atom_keys?, [entry | acc])
   end
 
-  defp decode_columns(<<buffer::bits>>, column_count, table_spec, atom_keys?, options, acc) do
+  defp decode_columns(<<buffer::bits>>, column_count, table_spec, atom_keys?, acc) do
     {keyspace, table} = table_spec
     decode_string(name <- buffer)
     name = if atom_keys? do
@@ -817,7 +817,7 @@ defmodule Xandra.Protocol do
 
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
-    decode_columns(buffer, column_count - 1, table_spec, atom_keys?, options, [entry | acc])
+    decode_columns(buffer, column_count - 1, table_spec, atom_keys?, [entry | acc])
   end
 
   defp decode_type(<<0x0000::16, buffer::bits>>) do
