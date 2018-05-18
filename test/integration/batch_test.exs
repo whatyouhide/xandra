@@ -31,7 +31,7 @@ defmodule BatchTest do
 
     assert {:ok, %Void{}} = Xandra.execute(conn, batch)
 
-    {:ok, result} = Xandra.execute(conn, "SELECT name FROM users", [])
+    {:ok, result} = Xandra.execute(conn, "SELECT name FROM users")
     assert Enum.to_list(result) == [
       %{"name" => "Marge"},
       %{"name" => "Homer"},

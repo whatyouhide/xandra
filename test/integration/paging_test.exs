@@ -5,10 +5,10 @@ defmodule PagingTest do
 
   setup_all %{keyspace: keyspace} do
     {:ok, conn} = Xandra.start_link()
-    Xandra.execute!(conn, "USE #{keyspace}", [])
+    Xandra.execute!(conn, "USE #{keyspace}")
 
     statement = "CREATE TABLE alphabet (lang text, letter text, PRIMARY KEY (lang, letter))"
-    Xandra.execute!(conn, statement, [])
+    Xandra.execute!(conn, statement)
 
     statement = """
     BEGIN BATCH
@@ -24,13 +24,13 @@ defmodule PagingTest do
     INSERT INTO alphabet (lang, letter) VALUES ('en', 'Jj');
     APPLY BATCH
     """
-    Xandra.execute!(conn, statement, [])
+    Xandra.execute!(conn, statement)
 
     :ok
   end
 
   test "manual paging", %{conn: conn} do
-    query = Xandra.prepare!(conn, "SELECT letter FROM alphabet", [])
+    query = Xandra.prepare!(conn, "SELECT letter FROM alphabet")
 
     options = [page_size: 3]
     assert {:ok, %Page{paging_state: paging_state} = page} = Xandra.execute(conn, query, [], options)
@@ -57,7 +57,7 @@ defmodule PagingTest do
   end
 
   test "streaming pages", %{conn: conn} do
-    query = Xandra.prepare!(conn, "SELECT letter FROM alphabet", [])
+    query = Xandra.prepare!(conn, "SELECT letter FROM alphabet")
 
     assert %PageStream{} = stream = Xandra.stream_pages!(conn, query, [], [page_size: 2])
     assert [page1, page2, page3, page4] = Enum.take(stream, 4)

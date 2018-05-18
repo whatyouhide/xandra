@@ -27,22 +27,22 @@ defmodule XandraTest.IntegrationCase do
 
   setup %{keyspace: keyspace, start_options: start_options} do
     {:ok, conn} = Xandra.start_link(start_options)
-    Xandra.execute!(conn, "USE #{keyspace}", [])
+    Xandra.execute!(conn, "USE #{keyspace}")
     %{conn: conn}
   end
 
   def setup_keyspace(keyspace, start_options) do
     {:ok, conn} = Xandra.start_link(start_options)
-    Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}", [])
+    Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}")
     statement = """
     CREATE KEYSPACE #{keyspace}
     WITH replication = {'class' : 'SimpleStrategy', 'replication_factor' : 1}
     """
-    Xandra.execute!(conn, statement, [])
+    Xandra.execute!(conn, statement)
   end
 
   def drop_keyspace(keyspace, start_options) do
     {:ok, conn} = Xandra.start_link(start_options)
-    Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}", [])
+    Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}")
   end
 end

@@ -3,10 +3,10 @@ defmodule PreparedTest do
 
   setup_all %{keyspace: keyspace} do
     {:ok, conn} = Xandra.start_link()
-    Xandra.execute!(conn, "USE #{keyspace}", [])
+    Xandra.execute!(conn, "USE #{keyspace}")
 
     statement = "CREATE TABLE users (code int, name text, PRIMARY KEY (code, name))"
-    Xandra.execute!(conn, statement, [])
+    Xandra.execute!(conn, statement)
 
     statement = """
     BEGIN BATCH
@@ -19,7 +19,7 @@ defmodule PreparedTest do
     INSERT INTO users (code, name) VALUES (4, 'Bob');
     APPLY BATCH
     """
-    Xandra.execute!(conn, statement, [])
+    Xandra.execute!(conn, statement)
 
     :ok
   end
