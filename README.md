@@ -87,6 +87,10 @@ page_stream
 |> Enum.each(fn(page) -> IO.puts "Got a bunch of rows: #{inspect(Enum.to_list(page))}" end)
 ```
 
+## Support for ScyllaDB
+
+For now test are done on ScyllaDB version 2.1. 
+
 ## Contributing
 
 To run tests, you need Cassandra running on your machine on port `9042`. You can:
