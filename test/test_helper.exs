@@ -1,4 +1,4 @@
-exclude = if System.get_env("USE_SCYLLA") == "true", do: [:cassandra_spacific], else: []
+exclude = if System.get_env("USE_SCYLLA") == "true", do: [:cassandra_specific], else: []
 if System.get_env("AUTHENTICATION") == "true" do
   ExUnit.start(exclude: [:test] ++ exclude, include: [:authentication])
 else

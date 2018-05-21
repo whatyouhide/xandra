@@ -102,7 +102,7 @@ To run tests, you need Cassandra running on your machine on port `9042`. You can
 
 Once you have Cassandra running (one way or the other), run `$ mix test` to run tests.
 
-NOTE: If you are trying to test repositoy on [ScyllaDB](https://www.scylladb.com/), you also need to add to your enviroment `$ export USE_SCYLLA=true`, or the test that are spacific to Cassandra will fail.
+NOTE: If you are trying to test repositoy on [ScyllaDB](https://www.scylladb.com/), you also need to add to your enviroment `$ export USE_SCYLLA=true`, or the test that are specific to Cassandra will fail.
 
 ## License
 
