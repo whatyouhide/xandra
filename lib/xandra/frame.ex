@@ -62,13 +62,13 @@ defmodule Xandra.Frame do
     ]
   end
 
-  @spec decode(binary, binary, nil | module, boolean) :: t(kind)
-  def decode(header, body \\ <<>>, compressor \\ nil, atom_keys? \\ false)
+  @spec decode(binary, binary, nil | module) :: t(kind)
+  def decode(header, body \\ <<>>, compressor \\ nil)
       when is_binary(body) and is_atom(compressor) do
     <<@response_version, flags, _stream_id::16, opcode, _::32>> = header
     kind = Map.fetch!(@response_opcodes, opcode)
     body = maybe_decompress_body(flag_set?(flags, _compression = 0x01), compressor, body)
-    %__MODULE__{kind: kind, body: body, atom_keys?: atom_keys?}
+    %__MODULE__{kind: kind, body: body}
   end
 
   defp encode_flags(_compressor = nil, _tracing? = false), do: 0x00

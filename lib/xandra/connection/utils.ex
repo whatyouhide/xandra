@@ -3,10 +3,9 @@ defmodule Xandra.Connection.Utils do
 
   alias Xandra.{ConnectionError, Frame, Protocol}
 
-  @spec recv_frame(:gen_tcp.socket, nil | module, boolean) ::
+  @spec recv_frame(:gen_tcp.socket, nil | module) ::
         {:ok, Frame.t} | {:error, :closed | :inet.posix}
-  def recv_frame(socket, compressor \\ nil, atom_keys? \\ false)
-    when is_atom(compressor) and is_boolean(atom_keys?) do
+  def recv_frame(socket, compressor \\ nil) when is_atom(compressor) do
 
     length = Frame.header_length()
     with {:ok, header} <- :gen_tcp.recv(socket, length) do
@@ -15,13 +14,13 @@ defmodule Xandra.Connection.Utils do
           {:ok, Frame.decode(header)}
         body_length ->
           with {:ok, body} <- :gen_tcp.recv(socket, body_length),
-               do: {:ok, Frame.decode(header, body, compressor, atom_keys?)}
+               do: {:ok, Frame.decode(header, body, compressor)}
       end
     end
   end
 
-  @spec request_options(:gen_tcp.socket, nil | module, nil | boolean) :: {:ok, term} | {:error, ConnectionError.t}
-  def request_options(socket, compressor \\ nil, atom_keys? \\ false) do
+  @spec request_options(:gen_tcp.socket, nil | module) :: {:ok, term} | {:error, ConnectionError.t}
+  def request_options(socket, compressor \\ nil) do
     payload =
       Frame.new(:options)
       |> Protocol.encode_request(nil)
@@ -29,7 +28,7 @@ defmodule Xandra.Connection.Utils do
 
 
     with :ok <- :gen_tcp.send(socket, payload),
-         {:ok, %Frame{} = frame} <- recv_frame(socket, compressor, atom_keys?) do
+         {:ok, %Frame{} = frame} <- recv_frame(socket, compressor) do
       {:ok, Protocol.decode_response(frame)}
     else
       {:error, reason} ->
@@ -38,7 +37,7 @@ defmodule Xandra.Connection.Utils do
   end
 
   @spec startup_connection(:gen_tcp.socket, map, nil | module) :: :ok | {:error, ConnectionError.t}
-  def startup_connection(socket, requested_options, compressor \\ nil, atom_keys? \\ false,  options \\ [])
+  def startup_connection(socket, requested_options, compressor \\ nil,  options \\ [])
       when is_map(requested_options) and is_atom(compressor) do
     # We have to encode the STARTUP frame without compression as in this frame
     # we tell the server which compression algorithm we want to use.
@@ -51,12 +50,12 @@ defmodule Xandra.Connection.Utils do
     # receive the response to this frame because if we said we want to use
     # compression, this response is already compressed.
     with :ok <- :gen_tcp.send(socket, payload),
-         {:ok, frame} <- recv_frame(socket, compressor, atom_keys?) do
+         {:ok, frame} <- recv_frame(socket, compressor) do
       case frame do
         %Frame{body: <<>>} ->
           :ok
         %Frame{kind: :authenticate} ->
-          authenticate_connection(socket, requested_options, compressor, atom_keys?, options)
+          authenticate_connection(socket, requested_options, compressor, options)
         _ ->
           raise "protocol violation, got unexpected frame: #{inspect(frame)}"
       end
@@ -66,17 +65,17 @@ defmodule Xandra.Connection.Utils do
     end
   end
 
-  defp authenticate_connection(socket, requested_options, compressor, atom_keys?, options) do
+  defp authenticate_connection(socket, requested_options, compressor, options) do
     payload =
       Frame.new(:auth_response)
       |> Protocol.encode_request(requested_options, options)
       |> Frame.encode()
 
     with :ok <- :gen_tcp.send(socket, payload),
-         {:ok, frame} <- recv_frame(socket, compressor, atom_keys?) do
+         {:ok, frame} <- recv_frame(socket, compressor) do
       case frame do
         %Frame{kind: :auth_success} -> :ok
-        %Frame{kind: :error} -> {:error, Protocol.decode_response(frame, nil, atom_keys?)}
+        %Frame{kind: :error} -> {:error, Protocol.decode_response(frame, nil)}
         _ -> raise "protocol violation, got unexpected frame: #{inspect(frame)}"
       end
     else
