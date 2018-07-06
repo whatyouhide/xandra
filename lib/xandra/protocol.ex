@@ -551,10 +551,10 @@ defmodule Xandra.Protocol do
   end
 
   # SchemaChange
-  defp decode_result_response(<<0x0005::32-signed, buffer::bits>>, _query, options) do
+  defp decode_result_response(<<0x0005::32-signed, buffer::bits>>, _query, _options) do
     decode_string(effect <- buffer)
     decode_string(target <- buffer)
-    options = decode_change_options(buffer, target, options)
+    options = decode_change_options(buffer, target)
     %Xandra.SchemaChange{effect: effect, target: target, options: options}
   end
 
@@ -589,13 +589,13 @@ defmodule Xandra.Protocol do
 
   defp rewrite_type(type, _options), do: type
 
-  defp decode_change_options(<<buffer::bits>>, "KEYSPACE", _options) do
+  defp decode_change_options(<<buffer::bits>>, "KEYSPACE") do
     decode_string(keyspace <- buffer)
     <<>> = buffer
     %{keyspace: keyspace}
   end
 
-  defp decode_change_options(<<buffer::bits>>, target, _options) when target in ["TABLE", "TYPE"] do
+  defp decode_change_options(<<buffer::bits>>, target) when target in ["TABLE", "TYPE"] do
     decode_string(keyspace <- buffer)
     decode_string(subject <- buffer)
     <<>> = buffer
@@ -815,7 +815,6 @@ defmodule Xandra.Protocol do
     else
       name
     end
-
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
     decode_columns(buffer, column_count - 1, table_spec, atom_keys?, [entry | acc])
