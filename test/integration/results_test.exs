@@ -42,7 +42,7 @@ defmodule ResultsTest do
   end
 end
 
-defmodule ResultsAtomTest do
+defmodule ResultsTest.AtomKeys do
   use XandraTest.IntegrationCase, async: true, start_options: [atom_keys: true]
 
   alias Xandra.{SchemaChange, SetKeyspace, Void}
