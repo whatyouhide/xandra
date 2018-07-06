@@ -76,5 +76,9 @@ defmodule ResultsTest.AtomKeys do
     statement = "SELECT * FROM numbers_atoms WHERE figure = :figure"
     assert {:ok, result} = Xandra.execute(conn, statement, %{"figure" => {"int", 123}})
     assert Enum.to_list(result) == [%{figure: 123}]
+
+    prepared = Xandra.prepare!(conn, statement)
+    result = Xandra.execute!(conn, prepared, %{figure: 123})
+    assert Enum.to_list(result) == [%{figure: 123}]
   end
 end
