@@ -22,10 +22,9 @@ defmodule Xandra.Connection do
       {:ok, socket} ->
         state = %__MODULE__{socket: socket, prepared_cache: prepared_cache, compressor: compressor, atom_keys?: atom_keys?}
 
-        with {:ok, supported_options} <- Utils.request_options(socket, nil),
+        with {:ok, supported_options} <- Utils.request_options(socket),
              :ok <- startup_connection(socket, supported_options, compressor, options) do
           {:ok, state}
-
         else
           {:error, reason} = error ->
             disconnect(reason, state)

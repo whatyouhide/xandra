@@ -522,7 +522,7 @@ defmodule Xandra.Protocol do
   end
 
   # Void
-  defp decode_result_response(<<0x0001::32-signed>>, _query,  _options) do
+  defp decode_result_response(<<0x0001::32-signed>>, _query, _options) do
     %Xandra.Void{}
   end
 
@@ -605,13 +605,13 @@ defmodule Xandra.Protocol do
   defp decode_metadata(<<flags::4-bytes, column_count::32-signed, buffer::bits>>, page, atom_keys?) do
     <<_::29, no_metadata::1, has_more_pages::1, global_table_spec::1>> = flags
     {page, buffer} = decode_paging_state(buffer, page, has_more_pages)
+
     cond do
       no_metadata == 1 ->
         {page, buffer}
       global_table_spec == 1 ->
         decode_string(keyspace <- buffer)
         decode_string(table <- buffer)
-
         {columns, buffer} = decode_columns(buffer, column_count, {keyspace, table}, atom_keys?, [])
         {%{page | columns: columns}, buffer}
       true ->
