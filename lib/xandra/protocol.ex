@@ -797,11 +797,7 @@ defmodule Xandra.Protocol do
     decode_string(keyspace <- buffer)
     decode_string(table <- buffer)
     decode_string(name <- buffer)
-    name = if atom_keys? do
-      String.to_atom(name)
-    else
-      name
-    end
+    name = if atom_keys?, do: String.to_atom(name), else: name
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
     decode_columns(buffer, column_count - 1, nil, atom_keys?, [entry | acc])
@@ -810,11 +806,7 @@ defmodule Xandra.Protocol do
   defp decode_columns(<<buffer::bits>>, column_count, table_spec, atom_keys?, acc) do
     {keyspace, table} = table_spec
     decode_string(name <- buffer)
-    name = if atom_keys? do
-      String.to_atom(name)
-    else
-      name
-    end
+    name = if atom_keys?, do: String.to_atom(name), else: name
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
     decode_columns(buffer, column_count - 1, table_spec, atom_keys?, [entry | acc])
