@@ -195,6 +195,10 @@ defmodule Xandra do
       module to use for authentication and its supported options. See the
       "Authentication" section in the module documentation.
 
+    * `:atom_keys` - (boolean, default false) whether or not results of `Xandra.execute`
+      will have atoms as keys. If true, the result maps will have column names returned
+      as atoms rather than as strings.
+
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of connections to Cassandra, the `:pool` option can
   be used:
@@ -249,7 +253,17 @@ defmodule Xandra do
   See the documentation for `DBConnection.start_link/2` for more information
   about this option.
   """
-  @spec start_link(Keyword.t) :: GenServer.on_start
+  @type xandra_auth :: {module, Keyword.t}
+  @type xandra_start_opt :: {:nodes, [String.t]}
+  | {:compressor, module}
+  | {:authentication, xandra_auth}
+  | {:atom_keys, boolean}
+
+  @type db_connection_start_opt :: {atom(), any}
+  @type start_opt :: xandra_start_opt | db_connection_start_opt
+  @type start_opts :: [start_opt]
+
+  @spec start_link(start_opts) :: GenServer.on_start
   def start_link(options \\ []) when is_list(options) do
     options =
       @default_start_options
