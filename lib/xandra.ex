@@ -592,7 +592,6 @@ defmodule Xandra do
         "last_name" => {"text", "Bing"},
       })
 
-
   Executing a simple query when `atom_keys: true` has been specified in `Xandra.start_link/1`:
 
       statement = "INSERT INTO users (first_name, last_name) VALUES (:first_name, :last_name)"
@@ -600,7 +599,6 @@ defmodule Xandra do
         first_name: {"text", "Chandler"},
         last_name: {"text", "Bing"}
       })
-
 
   Executing a prepared query:
 
