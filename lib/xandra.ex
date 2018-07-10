@@ -205,10 +205,10 @@ defmodule Xandra do
       module to use for authentication and its supported options. See the
       "Authentication" section in the module documentation.
 
-    * `:atom_keys` - (boolean, default false) whether or not results of and
-      parameters to `Xandra.execute` will have atoms as keys. If true, the
-      result maps will have column names returned as atoms rather than as strings.
-      Additionally, maps that represent named parameters will need atoms as keys.
+    * `:atom_keys` - (boolean) whether or not results of and parameters to
+      `execute/4` will have atom keys. If `true`, the result maps will have
+      column names returned as atoms rather than as strings. Additionally,
+      maps that represent named parameters will need atom keys. Default to `false.
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of connections to Cassandra, the `:pool` option can
@@ -591,10 +591,9 @@ defmodule Xandra do
         "last_name" => {"text", "Bing"},
       })
 
-  Executing a simple query when `atom_keys: true` has been specified in `Xandra.start_link/1`:
+  Executing the query when `atom_keys: true` has been specified in `Xandra.start_link/1`:
 
-      statement = "INSERT INTO users (first_name, last_name) VALUES (:first_name, :last_name)"
-      {:ok, %Xandra.Voic{}} = Xandra.execute(conn, statement, %{
+      Xandra.execute(conn, statement, %{
         first_name: {"text", "Chandler"},
         last_name: {"text", "Bing"}
       })
@@ -607,15 +606,15 @@ defmodule Xandra do
   Performing a `SELECT` query and using `Enum.to_list/1` to convert the
   `Xandra.Page` result to a list of rows:
 
-      {:ok, %Xandra.Page{} = page} = Xandra.execute(conn, "SELECT * FROM users", _params = [])
+      statement = "SELECT * FROM users"
+      {:ok, %Xandra.Page{} = page} = Xandra.execute(conn, statement, _params = [])
       Enum.to_list(page)
       #=> [%{"first_name" => "Chandler", "last_name" => "Bing"},
       #=>  %{"first_name" => "Monica", "last_name" => "Geller"}]
 
-  Performing a `SELECT` query and using `Enum.to_list/1` to convert the
-  `Xandra.Page` result to a list of rows when `atom_keys: true` has been specified in `Xandra.start_link/1`:
+  Performing the query when `atom_keys: true` has been specified in `Xandra.start_link/1`:
 
-      {:ok, %Xandra.Page{} = page} = Xandra.execute(conn, "SELECT * FROM users", _params = [])
+      {:ok, page} = Xandra.execute(conn, statement, _params = [])
       Enum.to_list(page)
       #=> [%{first_name:  "Chandler", last_name: "Bing"},
       #=>  %{first_name: "Monica", last_name: "Geller"}]
