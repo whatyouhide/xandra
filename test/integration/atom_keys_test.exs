@@ -12,14 +12,14 @@ defmodule AtomKeysTest do
     assert result == %SchemaChange{
       effect: "CREATED",
       options: %{
-        keyspace: keyspace |> String.downcase(),
+        keyspace: String.downcase(keyspace),
         subject: "numbers_atom_keys",
       },
       target: "TABLE",
     }
 
-    statement = "INSERT INTO numbers_atom_keys (figure) VALUES (123)"
-    result = Xandra.execute!(conn, statement)
+    statement = "INSERT INTO numbers_atom_keys (figure) VALUES (?)"
+    result = Xandra.execute!(conn, statement, %{figure: {"int", 123}})
     assert result == %Void{}
 
     statement = "SELECT * FROM numbers_atom_keys WHERE figure = ?"
