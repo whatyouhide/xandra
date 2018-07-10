@@ -195,9 +195,10 @@ defmodule Xandra do
       module to use for authentication and its supported options. See the
       "Authentication" section in the module documentation.
 
-    * `:atom_keys` - (boolean, default false) whether or not results of `Xandra.execute`
-      will have atoms as keys. If true, the result maps will have column names returned
-      as atoms rather than as strings.
+    * `:atom_keys` - (boolean, default false) whether or not results of and
+      parameters to `Xandra.execute` will have atoms as keys. If true, the
+      result maps will have column names returned as atoms rather than as strings.
+      Additionally, maps that represent named parameters will need atoms as keys.
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of connections to Cassandra, the `:pool` option can
@@ -254,10 +255,11 @@ defmodule Xandra do
   about this option.
   """
   @type xandra_auth :: {module, Keyword.t}
-  @type xandra_start_opt :: {:nodes, [String.t]}
-  | {:compressor, module}
-  | {:authentication, xandra_auth}
-  | {:atom_keys, boolean}
+  @type xandra_start_opt ::
+          {:nodes, [String.t]}
+          | {:compressor, module}
+          | {:authentication, xandra_auth}
+          | {:atom_keys, boolean}
 
   @type db_connection_start_opt :: {atom(), any}
   @type start_opt :: xandra_start_opt | db_connection_start_opt
@@ -590,6 +592,14 @@ defmodule Xandra do
         "last_name" => {"text", "Bing"},
       })
 
+  Executing a simple query when `atom_keys: true` has been specified in `Xandra.start_link/1`:
+
+     statement = "INSERT INTO users (first_name, last_name) VALUES (:first_name, :last_name)"
+     {:ok, %Xandra.Voic{}} = Xandra.execute(conn, statement, %{
+       first_name: {"text", "Chandler"},
+       last_name: {"text", "Bing"}
+     })
+
   Executing a prepared query:
 
       prepared = Xandra.prepare!(conn, "INSERT INTO users (first_name, last_name) VALUES (?, ?)")
@@ -602,6 +612,14 @@ defmodule Xandra do
       Enum.to_list(page)
       #=> [%{"first_name" => "Chandler", "last_name" => "Bing"},
       #=>  %{"first_name" => "Monica", "last_name" => "Geller"}]
+
+  Performing a `SELECT` query and using `Enum.to_list/1` to convert the
+  `Xandra.Page` result to a list of rows when `atom_keys: true` has been specified in `Xandra.start_link/1`:
+
+      {:ok, %Xandra.Page{} = page} = Xandra.execute(conn, "SELECT * FROM users", _params = [])
+      Enum.to_list(page)
+      #=> [%{first_name:  "Chandler", last_name: "Bing"},
+      #=>  %{first_name: "Monica", last_name: "Geller"}]
 
   Ensuring the write is written to the commit log and memtable of at least three replica nodes:
 
