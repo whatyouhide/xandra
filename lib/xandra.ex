@@ -162,6 +162,16 @@ defmodule Xandra do
   @type result :: Xandra.Void.t | Page.t | Xandra.SetKeyspace.t | Xandra.SchemaChange.t
   @type conn :: DBConnection.conn
 
+  @type xandra_start_option ::
+          {:nodes, [String.t]}
+          | {:compressor, module}
+          | {:authentication, {module, Keyword.t}}
+          | {:atom_keys, boolean}
+
+  @type db_connection_start_option :: {atom(), any}
+  @type start_option :: xandra_start_option | db_connection_start_option
+  @type start_options :: [start_option]
+
   @default_port 9042
   @default_start_options [
     nodes: ["127.0.0.1"],
@@ -254,18 +264,7 @@ defmodule Xandra do
   See the documentation for `DBConnection.start_link/2` for more information
   about this option.
   """
-  @type xandra_auth :: {module, Keyword.t}
-  @type xandra_start_opt ::
-          {:nodes, [String.t]}
-          | {:compressor, module}
-          | {:authentication, xandra_auth}
-          | {:atom_keys, boolean}
-
-  @type db_connection_start_opt :: {atom(), any}
-  @type start_opt :: xandra_start_opt | db_connection_start_opt
-  @type start_opts :: [start_opt]
-
-  @spec start_link(start_opts) :: GenServer.on_start
+  @spec start_link(start_options) :: GenServer.on_start
   def start_link(options \\ []) when is_list(options) do
     options =
       @default_start_options
