@@ -1,9 +1,21 @@
-exclude = if System.get_env("USE_SCYLLA") == "true", do: [:cassandra_specific], else: []
-if System.get_env("AUTHENTICATION") == "true" do
-  ExUnit.start(exclude: [:test] ++ exclude, include: [:authentication])
-else
-  ExUnit.start(exclude: exclude)
-end
+excludes = []
+includes = []
+
+excludes =
+  if System.get_env("USE_SCYLLA") == "true" do
+    [:cassandra_specific] ++ excludes
+  else
+    excludes
+  end
+
+{excludes, includes} =
+  if System.get_env("AUTHENTICATION") == "true" do
+    {[:test] ++ excludes, [:authentication] ++ includes}
+  else
+    {excludes, includes}
+  end
+
+ExUnit.start(exclude: excludes, include: includes)
 
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
