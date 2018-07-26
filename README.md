@@ -89,7 +89,7 @@ page_stream
 
 ## Support for ScyllaDB
 
-For now test are done on ScyllaDB version 2.1. 
+For now test are done on ScyllaDB version 2.1.
 
 ## Contributing
 
@@ -106,7 +106,7 @@ To run tests, you need Cassandra running on your machine on port `9042`. You can
 
 Once you have Cassandra running (one way or the other), run `$ mix test` to run tests.
 
-NOTE: If you are trying to test repositoy on [ScyllaDB](https://www.scylladb.com/), you also need to add to your enviroment `$ export USE_SCYLLA=true`, or the test that are specific to Cassandra will fail.
+If you are trying to test this repository on [ScyllaDB][scylladb], you also need to add `$ export USE_SCYLLA=true` to your enviroment, otherwise the tests that are specific to Cassandra will fail.
 
 ## License
 
