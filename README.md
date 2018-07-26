@@ -89,7 +89,7 @@ page_stream
 
 ## Support for ScyllaDB
 
-For now test are done on ScyllaDB version 2.0. 
+For now test are done on ScyllaDB version 2.1. 
 
 ## Contributing
 
