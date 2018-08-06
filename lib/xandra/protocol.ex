@@ -742,6 +742,10 @@ defmodule Xandra.Protocol do
     value
   end
 
+  defp decode_value_udt(<<>>, [{field_name, [_field_type]} | rest], acc) do
+    decode_value_udt(<<>>, rest, [{field_name, nil} | acc])
+  end
+
   defp decode_value_udt(<<buffer::bits>>, [{field_name, [field_type]} | rest], acc) do
     decode_value(value <- buffer, field_type) do
       decode_value_udt(buffer, rest, [{field_name, value} | acc])
