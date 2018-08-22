@@ -365,6 +365,47 @@ defmodule DataTypesTest do
     assert Map.fetch!(foo, "profile") == foo_profile
     assert Map.fetch!(bar, "id") == 2
     assert Map.fetch!(bar, "profile") == %{"nickname" => "bar", "full_name" => %{"first_name" => nil, "last_name" => "Bar"}}
+
+    statement = """
+    ALTER TYPE profile ADD email text
+    """
+    Xandra.execute!(conn, statement)
+
+    statement = """
+    ALTER TYPE profile ADD age int
+    """
+    Xandra.execute!(conn, statement)
+
+    statement = "INSERT INTO users (id, profile) VALUES (?, ?)"
+    baz_profile = %{
+      "nickname" => "baz",
+      "full_name" => %{"first_name" => "See", "last_name" => "Baz"},
+      "email" => "baz@example.com"
+    }
+    prepared = Xandra.prepare!(conn, statement)
+    Xandra.execute!(conn, prepared, [3, baz_profile])
+
+    statement = "SELECT id, profile FROM users"
+    page = Xandra.execute!(conn, statement)
+
+    assert [foo, bar, baz] = Enum.to_list(page)
+    assert Map.fetch!(foo, "id") == 1
+
+    assert Map.fetch!(foo, "profile") ==
+             foo_profile
+             |> Map.put("email", nil)
+             |> Map.put("age", nil)
+
+    assert Map.fetch!(bar, "id") == 2
+
+    assert Map.fetch!(bar, "profile") ==
+             bar_profile
+             |> Map.put("email", nil)
+             |> Map.put("age", nil)
+             |> Map.update!("full_name", &Map.put(&1, "first_name", nil))
+
+    assert Map.fetch!(baz, "id") == 3
+    assert Map.fetch!(baz, "profile") == Map.put(baz_profile, "age", nil)
   end
 
   test "counter type", %{conn: conn}  do
