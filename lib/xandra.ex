@@ -208,7 +208,7 @@ defmodule Xandra do
     * `:atom_keys` - (boolean) whether or not results of and parameters to
       `execute/4` will have atom keys. If `true`, the result maps will have
       column names returned as atoms rather than as strings. Additionally,
-      maps that represent named parameters will need atom keys. Defaults to `false.
+      maps that represent named parameters will need atom keys. Defaults to `false`.
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of connections to Cassandra, the `:pool` option can
