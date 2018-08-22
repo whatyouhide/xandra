@@ -392,18 +392,18 @@ defmodule DataTypesTest do
     assert Map.fetch!(foo, "id") == 1
     assert Map.fetch!(foo, "profile") ==
       foo_profile
-      |> put_in(["email"], nil)
-      |> put_in(["age"], nil)
+      |> Map.put("email", nil)
+      |> Map.put("age", nil)
 
     assert Map.fetch!(bar, "id") == 2
     assert Map.fetch!(bar, "profile") ==
       bar_profile
-      |> put_in(["email"], nil)
-      |> put_in(["age"], nil)
-      |> put_in(["full_name", "first_name"], nil)
+      |> Map.put("email", nil)
+      |> Map.put("age", nil)
+      |> Map.update!("full_name", &Map.put(&1, "first_name", nil))
 
     assert Map.fetch!(baz, "id") == 3
-    assert Map.fetch!(baz, "profile") == put_in(baz_profile, ["age"], nil)
+    assert Map.fetch!(baz, "profile") == Map.put(baz_profile, "age", nil)
   end
 
   test "counter type", %{conn: conn}  do
