@@ -390,17 +390,19 @@ defmodule DataTypesTest do
 
     assert [foo, bar, baz] = Enum.to_list(page)
     assert Map.fetch!(foo, "id") == 1
+
     assert Map.fetch!(foo, "profile") ==
-      foo_profile
-      |> Map.put("email", nil)
-      |> Map.put("age", nil)
+             foo_profile
+             |> Map.put("email", nil)
+             |> Map.put("age", nil)
 
     assert Map.fetch!(bar, "id") == 2
+
     assert Map.fetch!(bar, "profile") ==
-      bar_profile
-      |> Map.put("email", nil)
-      |> Map.put("age", nil)
-      |> Map.update!("full_name", &Map.put(&1, "first_name", nil))
+             bar_profile
+             |> Map.put("email", nil)
+             |> Map.put("age", nil)
+             |> Map.update!("full_name", &Map.put(&1, "first_name", nil))
 
     assert Map.fetch!(baz, "id") == 3
     assert Map.fetch!(baz, "profile") == Map.put(baz_profile, "age", nil)
