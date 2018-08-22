@@ -510,9 +510,9 @@ defmodule Xandra.Protocol do
     %StatusChange{effect: effect, address: address, port: port}
   end
 
-  def decode_response(%Frame{kind: :result, body: body}, %kind{} = query, options)
+  def decode_response(%Frame{kind: :result, body: body, atom_keys?: atom_keys?}, %kind{} = query, options)
       when kind in [Simple, Prepared, Batch] do
-    decode_result_response(body, query, options)
+    decode_result_response(body, query, Keyword.put(options, :atom_keys?, atom_keys?))
   end
 
   defp decode_inet(<<size, data::size(size)-bytes, buffer::bits>>) do
@@ -529,7 +529,7 @@ defmodule Xandra.Protocol do
   # Page
   defp decode_result_response(<<0x0002::32-signed, buffer::bits>>, query, options) do
     page = new_page(query)
-    {page, buffer} = decode_metadata(buffer, page)
+    {page, buffer} = decode_metadata(buffer, page, Keyword.fetch!(options, :atom_keys?))
     columns = rewrite_column_types(page.columns, options)
     %{page | content: decode_page_content(buffer, columns)}
   end
@@ -542,10 +542,11 @@ defmodule Xandra.Protocol do
   end
 
   # Prepared
-  defp decode_result_response(<<0x0004::32-signed, buffer::bits>>, %Prepared{} = prepared, _options) do
+  defp decode_result_response(<<0x0004::32-signed, buffer::bits>>, %Prepared{} = prepared, options) do
+    atom_keys? = Keyword.fetch!(options, :atom_keys?)
     decode_string(id <- buffer)
-    {%{columns: bound_columns}, buffer} = decode_metadata(buffer, %Page{})
-    {%{columns: result_columns}, <<>>} = decode_metadata(buffer, %Page{})
+    {%{columns: bound_columns}, buffer} = decode_metadata(buffer, %Page{}, atom_keys?)
+    {%{columns: result_columns}, <<>>} = decode_metadata(buffer, %Page{}, atom_keys?)
     %{prepared | id: id, bound_columns: bound_columns, result_columns: result_columns}
   end
 
@@ -601,7 +602,7 @@ defmodule Xandra.Protocol do
     %{keyspace: keyspace, subject: subject}
   end
 
-  defp decode_metadata(<<flags::4-bytes, column_count::32-signed, buffer::bits>>, page) do
+  defp decode_metadata(<<flags::4-bytes, column_count::32-signed, buffer::bits>>, page, atom_keys?) do
     <<_::29, no_metadata::1, has_more_pages::1, global_table_spec::1>> = flags
     {page, buffer} = decode_paging_state(buffer, page, has_more_pages)
 
@@ -611,10 +612,10 @@ defmodule Xandra.Protocol do
       global_table_spec == 1 ->
         decode_string(keyspace <- buffer)
         decode_string(table <- buffer)
-        {columns, buffer} = decode_columns(buffer, column_count, {keyspace, table}, [])
+        {columns, buffer} = decode_columns(buffer, column_count, {keyspace, table}, atom_keys?, [])
         {%{page | columns: columns}, buffer}
       true ->
-        {columns, buffer} = decode_columns(buffer, column_count, nil, [])
+        {columns, buffer} = decode_columns(buffer, column_count, nil, atom_keys?, [])
         {%{page | columns: columns}, buffer}
     end
   end
@@ -788,25 +789,27 @@ defmodule Xandra.Protocol do
     acc |> Enum.reverse |> List.to_tuple
   end
 
-  defp decode_columns(<<buffer::bits>>, 0, _table_spec, acc) do
+  defp decode_columns(<<buffer::bits>>, 0, _table_spec, _atom_keys?, acc) do
     {Enum.reverse(acc), buffer}
   end
 
-  defp decode_columns(<<buffer::bits>>, column_count, nil, acc) do
+  defp decode_columns(<<buffer::bits>>, column_count, nil, atom_keys?, acc) do
     decode_string(keyspace <- buffer)
     decode_string(table <- buffer)
     decode_string(name <- buffer)
+    name = if atom_keys?, do: String.to_atom(name), else: name
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
-    decode_columns(buffer, column_count - 1, nil, [entry | acc])
+    decode_columns(buffer, column_count - 1, nil, atom_keys?, [entry | acc])
   end
 
-  defp decode_columns(<<buffer::bits>>, column_count, table_spec, acc) do
+  defp decode_columns(<<buffer::bits>>, column_count, table_spec, atom_keys?, acc) do
     {keyspace, table} = table_spec
     decode_string(name <- buffer)
+    name = if atom_keys?, do: String.to_atom(name), else: name
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
-    decode_columns(buffer, column_count - 1, table_spec, [entry | acc])
+    decode_columns(buffer, column_count - 1, table_spec, atom_keys?, [entry | acc])
   end
 
   defp decode_type(<<0x0000::16, buffer::bits>>) do

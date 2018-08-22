@@ -9,17 +9,19 @@ defmodule Xandra.Connection do
   @default_timeout 5_000
   @default_socket_options [packet: :raw, mode: :binary, active: false]
 
-  defstruct [:socket, :prepared_cache, :compressor]
+  defstruct [:socket, :prepared_cache, :compressor, :atom_keys?]
 
   def connect(options) do
     address = Keyword.fetch!(options, :address)
     port = Keyword.fetch!(options, :port)
     prepared_cache = Keyword.fetch!(options, :prepared_cache)
     compressor = Keyword.get(options, :compressor)
+    atom_keys? = Keyword.get(options, :atom_keys, false)
 
     case :gen_tcp.connect(address, port, @default_socket_options, @default_timeout) do
       {:ok, socket} ->
-        state = %__MODULE__{socket: socket, prepared_cache: prepared_cache, compressor: compressor}
+        state = %__MODULE__{socket: socket, prepared_cache: prepared_cache, compressor: compressor, atom_keys?: atom_keys?}
+
         with {:ok, supported_options} <- Utils.request_options(socket),
              :ok <- startup_connection(socket, supported_options, compressor, options) do
           {:ok, state}
@@ -56,6 +58,7 @@ defmodule Xandra.Connection do
 
         with :ok <- :gen_tcp.send(socket, payload),
              {:ok, %Frame{} = frame} <- Utils.recv_frame(socket, state.compressor),
+             frame = %{frame | atom_keys?: state.atom_keys?},
              %Prepared{} = prepared <- Protocol.decode_response(frame, prepared) do
           Prepared.Cache.insert(state.prepared_cache, prepared)
           {:ok, prepared, state}
@@ -69,11 +72,11 @@ defmodule Xandra.Connection do
   end
 
   def handle_execute(_query, payload, options, %__MODULE__{} = state) do
-    %{socket: socket, compressor: compressor} = state
+    %{socket: socket, compressor: compressor, atom_keys?: atom_keys?} = state
     assert_valid_compressor(compressor, options[:compressor])
     with :ok <- :gen_tcp.send(socket, payload),
-        {:ok, %Frame{} = frame} <- Utils.recv_frame(socket, compressor) do
-      {:ok, frame, state}
+         {:ok, %Frame{} = frame} <- Utils.recv_frame(socket, compressor) do
+      {:ok, %{frame | atom_keys?: atom_keys?}, state}
     else
       {:error, reason} ->
         {:disconnect, ConnectionError.new("execute", reason), state}

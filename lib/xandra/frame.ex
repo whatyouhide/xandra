@@ -1,7 +1,7 @@
 defmodule Xandra.Frame do
   @moduledoc false
 
-  defstruct [:kind, :body, stream_id: 0, tracing: false]
+  defstruct [:kind, :body, stream_id: 0, tracing: false, atom_keys?: false]
 
   use Bitwise
 
