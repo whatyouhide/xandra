@@ -379,7 +379,7 @@ defmodule DataTypesTest do
     statement = "INSERT INTO users (id, profile) VALUES (?, ?)"
     baz_profile = %{
       "nickname" => "baz",
-      "full_name" => %{"first_name" => "Kung", "last_name" => "Foo"},
+      "full_name" => %{"first_name" => "See", "last_name" => "Baz"},
       "email" => "baz@example.com"
     }
     prepared = Xandra.prepare!(conn, statement)
