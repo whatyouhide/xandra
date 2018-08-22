@@ -162,6 +162,16 @@ defmodule Xandra do
   @type result :: Xandra.Void.t | Page.t | Xandra.SetKeyspace.t | Xandra.SchemaChange.t
   @type conn :: DBConnection.conn
 
+  @type xandra_start_option ::
+          {:nodes, [String.t]}
+          | {:compressor, module}
+          | {:authentication, {module, Keyword.t}}
+          | {:atom_keys, boolean}
+
+  @type db_connection_start_option :: {atom(), any}
+  @type start_option :: xandra_start_option | db_connection_start_option
+  @type start_options :: [start_option]
+
   @default_port 9042
   @default_start_options [
     nodes: ["127.0.0.1"],
@@ -194,6 +204,11 @@ defmodule Xandra do
     * `:authentication` - (tuple) a two-element tuple: the authenticator
       module to use for authentication and its supported options. See the
       "Authentication" section in the module documentation.
+
+    * `:atom_keys` - (boolean) whether or not results of and parameters to
+      `execute/4` will have atom keys. If `true`, the result maps will have
+      column names returned as atoms rather than as strings. Additionally,
+      maps that represent named parameters will need atom keys. Defaults to `false`.
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of connections to Cassandra, the `:pool` option can
@@ -249,7 +264,7 @@ defmodule Xandra do
   See the documentation for `DBConnection.start_link/2` for more information
   about this option.
   """
-  @spec start_link(Keyword.t) :: GenServer.on_start
+  @spec start_link(start_options) :: GenServer.on_start
   def start_link(options \\ []) when is_list(options) do
     options =
       @default_start_options
@@ -576,6 +591,13 @@ defmodule Xandra do
         "last_name" => {"text", "Bing"},
       })
 
+  Executing the query when `atom_keys: true` has been specified in `Xandra.start_link/1`:
+
+      Xandra.execute(conn, statement, %{
+        first_name: {"text", "Chandler"},
+        last_name: {"text", "Bing"}
+      })
+
   Executing a prepared query:
 
       prepared = Xandra.prepare!(conn, "INSERT INTO users (first_name, last_name) VALUES (?, ?)")
@@ -584,10 +606,18 @@ defmodule Xandra do
   Performing a `SELECT` query and using `Enum.to_list/1` to convert the
   `Xandra.Page` result to a list of rows:
 
-      {:ok, %Xandra.Page{} = page} = Xandra.execute(conn, "SELECT * FROM users", _params = [])
+      statement = "SELECT * FROM users"
+      {:ok, %Xandra.Page{} = page} = Xandra.execute(conn, statement, _params = [])
       Enum.to_list(page)
       #=> [%{"first_name" => "Chandler", "last_name" => "Bing"},
       #=>  %{"first_name" => "Monica", "last_name" => "Geller"}]
+
+  Performing the query when `atom_keys: true` has been specified in `Xandra.start_link/1`:
+
+      {:ok, page} = Xandra.execute(conn, statement, _params = [])
+      Enum.to_list(page)
+      #=> [%{first_name:  "Chandler", last_name: "Bing"},
+      #=>  %{first_name: "Monica", last_name: "Geller"}]
 
   Ensuring the write is written to the commit log and memtable of at least three replica nodes:
 
