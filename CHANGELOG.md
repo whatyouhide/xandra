@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.0
+
+* Added the `:atom_keys` option to return and accept column names as atoms.
+* Fixed decoding of user-defined data types when new fields added afterwards.
+* Fixed connection ping failures when compression is used.
+
 ## v0.9.2
 
 * Fixed Elixir v1.6 warnings.

@@ -34,7 +34,7 @@ Add the `:xandra` dependency to your `mix.exs` file:
 
 ```elixir
 def deps() do
-  [{:xandra, "~> 0.9"}]
+  [{:xandra, "~> 0.10"}]
 end
 ```
 
