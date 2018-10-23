@@ -38,7 +38,7 @@ defmodule Xandra.RetryStrategy do
         @behaviour Xandra.RetryStrategy
 
         def new(options) do
-          Keyword.fetch!(options, :retries_count)
+          Keyword.fetch!(options, :retry_count)
         end
 
         def retry(_error, _options, _retries_left = 0) do
