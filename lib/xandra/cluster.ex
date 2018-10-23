@@ -95,7 +95,7 @@ defmodule Xandra.Cluster do
     :load_balancing,
     :pool_supervisor,
     :pool_module,
-    pools: %{},
+    pools: %{}
   ]
 
   def ensure_all_started(options, type) do
@@ -116,8 +116,9 @@ defmodule Xandra.Cluster do
     state = %__MODULE__{
       options: Keyword.delete(options, :pool),
       load_balancing: load_balancing,
-      pool_module: pool_module,
+      pool_module: pool_module
     }
+
     GenServer.start_link(__MODULE__, {state, nodes}, name: name)
   end
 
@@ -133,6 +134,7 @@ defmodule Xandra.Cluster do
         with {:ok, pool_ref, module, state} <- pool_module.checkout(pool, options) do
           {:ok, {pool_module, pool_ref}, module, state}
         end
+
       {:error, :empty} ->
         action = "checkout from cluster #{inspect(name())}"
         {:error, ConnectionError.new(action, {:cluster, :not_connected})}
@@ -160,10 +162,12 @@ defmodule Xandra.Cluster do
   end
 
   def handle_call(:checkout, _from, %__MODULE__{} = state) do
-    %{node_refs: node_refs,
+    %{
+      node_refs: node_refs,
       load_balancing: load_balancing,
       pool_module: pool_module,
-      pools: pools} = state
+      pools: pools
+    } = state
 
     if Enum.empty?(pools) do
       {:reply, {:error, :empty}, state}
@@ -183,6 +187,7 @@ defmodule Xandra.Cluster do
 
   defp start_control_connections(nodes, options) do
     cluster = self()
+
     Enum.map(nodes, fn {address, port} ->
       node_ref = make_ref()
       ControlConnection.start_link(cluster, node_ref, address, port, options)
@@ -191,24 +196,29 @@ defmodule Xandra.Cluster do
   end
 
   defp start_pool(state, node_ref, address, port) do
-    %{options: options,
+    %{
+      options: options,
       node_refs: node_refs,
       pool_module: pool_module,
       pool_supervisor: pool_supervisor,
-      pools: pools} = state
+      pools: pools
+    } = state
 
     options = [address: address, port: port] ++ options
     child_spec = pool_module.child_spec(Xandra.Connection, options, id: address)
+
     case Supervisor.start_child(pool_supervisor, child_spec) do
       {:ok, pool} ->
         node_refs = List.keystore(node_refs, node_ref, 0, {node_ref, address})
         %{state | node_refs: node_refs, pools: Map.put(pools, address, pool)}
+
       {:error, {:already_started, _pool}} ->
         Logger.warn(fn ->
           "Xandra cluster #{inspect(name())} " <>
             "received request to start another connection pool " <>
             "to the same address: #{inspect(address)}"
         end)
+
         state
     end
   end
@@ -226,6 +236,7 @@ defmodule Xandra.Cluster do
     case Supervisor.restart_child(pool_supervisor, address) do
       {:error, reason} when reason in [:not_found, :running, :restarting] ->
         state
+
       {:ok, pool} ->
         %{state | pools: Map.put(pools, address, pool)}
     end

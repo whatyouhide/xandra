@@ -156,16 +156,16 @@ defmodule Xandra do
 
   alias __MODULE__.{Batch, Connection, ConnectionError, Error, Prepared, Page, PageStream, Simple}
 
-  @type statement :: String.t
+  @type statement :: String.t()
   @type values :: list | map
-  @type error :: Error.t | ConnectionError.t
-  @type result :: Xandra.Void.t | Page.t | Xandra.SetKeyspace.t | Xandra.SchemaChange.t
-  @type conn :: DBConnection.conn
+  @type error :: Error.t() | ConnectionError.t()
+  @type result :: Xandra.Void.t() | Page.t() | Xandra.SetKeyspace.t() | Xandra.SchemaChange.t()
+  @type conn :: DBConnection.conn()
 
   @type xandra_start_option ::
-          {:nodes, [String.t]}
+          {:nodes, [String.t()]}
           | {:compressor, module}
-          | {:authentication, {module, Keyword.t}}
+          | {:authentication, {module, Keyword.t()}}
           | {:atom_keys, boolean}
 
   @type db_connection_start_option :: {atom(), any}
@@ -175,7 +175,7 @@ defmodule Xandra do
   @default_port 9042
   @default_start_options [
     nodes: ["127.0.0.1"],
-    idle_timeout: 30_000,
+    idle_timeout: 30_000
   ]
 
   @doc """
@@ -264,13 +264,14 @@ defmodule Xandra do
   See the documentation for `DBConnection.start_link/2` for more information
   about this option.
   """
-  @spec start_link(start_options) :: GenServer.on_start
+  @spec start_link(start_options) :: GenServer.on_start()
   def start_link(options \\ []) when is_list(options) do
     options =
       @default_start_options
       |> Keyword.merge(options)
       |> parse_start_options()
-      |> Keyword.put(:prepared_cache, Prepared.Cache.new)
+      |> Keyword.put(:prepared_cache, Prepared.Cache.new())
+
     DBConnection.start_link(Connection, options)
   end
 
@@ -310,7 +311,7 @@ defmodule Xandra do
       [%Xandra.Page{} = _page1, %Xandra.Page{} = _page2] = Enum.take(users_stream, 2)
 
   """
-  @spec stream_pages!(conn, statement | Prepared.t, values, Keyword.t) :: Enumerable.t
+  @spec stream_pages!(conn, statement | Prepared.t(), values, Keyword.t()) :: Enumerable.t()
   def stream_pages!(conn, query, params, options \\ [])
 
   def stream_pages!(conn, statement, params, options) when is_binary(statement) do
@@ -375,7 +376,7 @@ defmodule Xandra do
       Xandra.prepare!(conn, "SELECT * FROM users WHERE ID = ?", force: true)
 
   """
-  @spec prepare(conn, statement, Keyword.t) :: {:ok, Prepared.t} | {:error, error}
+  @spec prepare(conn, statement, Keyword.t()) :: {:ok, Prepared.t()} | {:error, error}
   def prepare(conn, statement, options \\ []) when is_binary(statement) do
     DBConnection.prepare(conn, %Prepared{statement: statement}, options)
   end
@@ -392,7 +393,7 @@ defmodule Xandra do
       {:ok, _page} = Xandra.execute(conn, prepared, [_id = 1])
 
   """
-  @spec prepare!(conn, statement, Keyword.t) :: Prepared.t | no_return
+  @spec prepare!(conn, statement, Keyword.t()) :: Prepared.t() | no_return
   def prepare!(conn, statement, options \\ []) do
     case prepare(conn, statement, options) do
       {:ok, result} -> result
@@ -468,8 +469,8 @@ defmodule Xandra do
       #=> {:ok, %Xandra.Void{}}
 
   """
-  @spec execute(conn, statement | Prepared.t, values) :: {:ok, result} | {:error, error}
-  @spec execute(conn, Batch.t, Keyword.t) :: {:ok, Xandra.Void.t} | {:error, error}
+  @spec execute(conn, statement | Prepared.t(), values) :: {:ok, result} | {:error, error}
+  @spec execute(conn, Batch.t(), Keyword.t()) :: {:ok, Xandra.Void.t()} | {:error, error}
   def execute(conn, query, params_or_options \\ [])
 
   def execute(conn, statement, params) when is_binary(statement) do
@@ -661,7 +662,8 @@ defmodule Xandra do
   meaning there are no more pages to fetch, an `ArgumentError` exception will be raised;
   be sure to check for this with `page.paging_state != nil`.
   """
-  @spec execute(conn, statement | Prepared.t, values, Keyword.t) :: {:ok, result} | {:error, error}
+  @spec execute(conn, statement | Prepared.t(), values, Keyword.t()) ::
+          {:ok, result} | {:error, error}
   def execute(conn, query, params, options)
 
   def execute(conn, statement, params, options) when is_binary(statement) do
@@ -686,8 +688,8 @@ defmodule Xandra do
       #=> %Xandra.Void{}
 
   """
-  @spec execute!(conn, statement | Prepared.t, values) :: result | no_return
-  @spec execute!(conn, Batch.t, Keyword.t) :: Xandra.Void.t | no_return
+  @spec execute!(conn, statement | Prepared.t(), values) :: result | no_return
+  @spec execute!(conn, Batch.t(), Keyword.t()) :: Xandra.Void.t() | no_return
   def execute!(conn, query, params_or_options \\ []) do
     case execute(conn, query, params_or_options) do
       {:ok, result} -> result
@@ -709,7 +711,7 @@ defmodule Xandra do
       #=> %Xandra.Void{}
 
   """
-  @spec execute!(conn, statement | Prepared.t, values, Keyword.t) :: result | no_return
+  @spec execute!(conn, statement | Prepared.t(), values, Keyword.t()) :: result | no_return
   def execute!(conn, query, params, options) do
     case execute(conn, query, params, options) do
       {:ok, result} -> result
@@ -736,7 +738,7 @@ defmodule Xandra do
       end)
 
   """
-  @spec run(conn, Keyword.t, (conn -> result)) :: result when result: var
+  @spec run(conn, Keyword.t(), (conn -> result)) :: result when result: var
   def run(conn, options \\ [], fun) when is_function(fun, 1) do
     DBConnection.run(conn, fun, options)
   end
@@ -759,10 +761,12 @@ defmodule Xandra do
     case Keyword.fetch(options, :paging_state) do
       {:ok, nil} ->
         raise ArgumentError, "no more pages are available"
+
       {:ok, value} when not is_binary(value) ->
         raise ArgumentError,
-          "expected a binary as the value of the :paging_state option, " <>
-          "got: #{inspect(value)}"
+              "expected a binary as the value of the :paging_state option, " <>
+                "got: #{inspect(value)}"
+
       _other ->
         maybe_put_paging_state(options)
     end
@@ -772,15 +776,18 @@ defmodule Xandra do
     case Keyword.pop(options, :cursor) do
       {%Page{paging_state: nil}, _options} ->
         raise ArgumentError, "no more pages are available"
+
       {%Page{paging_state: paging_state}, options} ->
-        IO.warn "the :cursor option is deprecated, please use :paging_state instead"
+        IO.warn("the :cursor option is deprecated, please use :paging_state instead")
         Keyword.put(options, :paging_state, paging_state)
+
       {nil, options} ->
         options
+
       {other, _options} ->
         raise ArgumentError,
-          "expected a Xandra.Page struct as the value of the :cursor option, " <>
-          "got: #{inspect(other)}"
+              "expected a Xandra.Page struct as the value of the :cursor option, " <>
+                "got: #{inspect(other)}"
     end
   end
 
@@ -788,6 +795,7 @@ defmodule Xandra do
     case Keyword.pop(options, :retry_strategy) do
       {nil, options} ->
         execute_without_retrying(conn, query, params, options)
+
       {retry_strategy, options} ->
         execute_with_retrying(conn, query, params, options, retry_strategy)
     end
@@ -795,20 +803,24 @@ defmodule Xandra do
 
   defp execute_with_retrying(conn, query, params, options, retry_strategy) do
     with {:error, reason} <- execute_without_retrying(conn, query, params, options) do
-      {retry_state, options} = Keyword.pop_lazy(options, :retrying_state, fn ->
-        retry_strategy.new(options)
-      end)
+      {retry_state, options} =
+        Keyword.pop_lazy(options, :retrying_state, fn ->
+          retry_strategy.new(options)
+        end)
 
       case retry_strategy.retry(reason, options, retry_state) do
         :error ->
           {:error, reason}
+
         {:retry, new_options, new_retry_state} ->
           new_options = Keyword.put(new_options, :retrying_state, new_retry_state)
           execute_with_retrying(conn, query, params, new_options, retry_strategy)
+
         other ->
           raise ArgumentError,
-            "invalid return value #{inspect(other)} from retry strategy #{inspect(retry_strategy)} " <>
-            "with state #{inspect(retry_state)}"
+                "invalid return value #{inspect(other)} from " <>
+                  "retry strategy #{inspect(retry_strategy)} " <>
+                  "with state #{inspect(retry_state)}"
       end
     end
   end
@@ -820,8 +832,10 @@ defmodule Xandra do
           with :ok <- reprepare_queries(conn, batch.queries, options) do
             execute(conn, batch, options)
           end
+
         {:ok, %Error{} = error} ->
           {:error, error}
+
         other ->
           other
       end
@@ -840,16 +854,25 @@ defmodule Xandra do
         {:ok, %Error{reason: :unprepared}} ->
           # We can ignore the newly returned prepared query since it will have the
           # same id of the query we are repreparing.
-          case DBConnection.prepare_execute(conn, prepared, params, Keyword.put(options, :force, true)) do
+          case DBConnection.prepare_execute(
+                 conn,
+                 prepared,
+                 params,
+                 Keyword.put(options, :force, true)
+               ) do
             {:ok, _prepared, %Error{} = error} ->
               {:error, error}
+
             {:ok, _prepared, result} ->
               {:ok, result}
+
             {:error, _reason} = error ->
               error
           end
+
         {:ok, %Error{} = error} ->
           {:error, error}
+
         other ->
           other
       end
@@ -858,14 +881,19 @@ defmodule Xandra do
 
   defp parse_start_options(options) do
     cluster? = options[:pool] == Xandra.Cluster
+
     Enum.flat_map(options, fn
       {:nodes, nodes} when cluster? ->
         [nodes: Enum.map(nodes, &parse_node/1)]
+
       {:nodes, [string]} ->
         {address, port} = parse_node(string)
         [address: address, port: port]
+
       {:nodes, _nodes} ->
-        raise ArgumentError, "multi-node use requires the :pool option to be set to Xandra.Cluster"
+        raise ArgumentError,
+              "multi-node use requires the :pool option to be set to Xandra.Cluster"
+
       {_key, _value} = option ->
         [option]
     end)
@@ -877,9 +905,11 @@ defmodule Xandra do
         case Integer.parse(port) do
           {port, ""} ->
             {String.to_charlist(address), port}
+
           _ ->
             raise ArgumentError, "invalid item #{inspect(string)} in the :nodes option"
         end
+
       [address] ->
         {String.to_charlist(address), @default_port}
     end

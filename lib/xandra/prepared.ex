@@ -6,12 +6,12 @@ defmodule Xandra.Prepared do
   defstruct [:statement, :values, :id, :bound_columns, :result_columns]
 
   @opaque t :: %__MODULE__{
-    statement: Xandra.statement,
-    values: Xandra.values | nil,
-    id: binary | nil,
-    bound_columns: list | nil,
-    result_columns: list | nil,
-  }
+            statement: Xandra.statement(),
+            values: Xandra.values() | nil,
+            id: binary | nil,
+            bound_columns: list | nil,
+            result_columns: list | nil
+          }
 
   @doc false
   def rewrite_named_params_to_positional(%__MODULE__{} = prepared, params)
@@ -20,10 +20,11 @@ defmodule Xandra.Prepared do
       case Map.fetch(params, name) do
         {:ok, value} ->
           value
+
         :error ->
           raise ArgumentError,
-            "missing named parameter #{inspect(name)} for prepared query, " <>
-            "got: #{inspect(params)}"
+                "missing named parameter #{inspect(name)} for prepared query, " <>
+                  "got: #{inspect(params)}"
       end
     end)
   end

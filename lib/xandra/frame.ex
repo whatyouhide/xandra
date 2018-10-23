@@ -20,7 +20,7 @@ defmodule Xandra.Frame do
     :execute => 0x0A,
     :register => 0x0B,
     :batch => 0x0D,
-    :auth_response => 0x0F,
+    :auth_response => 0x0F
   }
 
   @response_version 0x83
@@ -32,7 +32,7 @@ defmodule Xandra.Frame do
     0x06 => :supported,
     0x08 => :result,
     0x0C => :event,
-    0x10 => :auth_success,
+    0x10 => :auth_success
   }
 
   @spec new(kind) :: t(kind) when kind: var
@@ -52,13 +52,14 @@ defmodule Xandra.Frame do
   def encode(%__MODULE__{} = frame, compressor \\ nil) when is_atom(compressor) do
     %{tracing: tracing?, kind: kind, stream_id: stream_id, body: body} = frame
     body = maybe_compress_body(compressor, body)
+
     [
       @request_version,
       encode_flags(compressor, tracing?),
       <<stream_id::16>>,
       Map.fetch!(@request_opcodes, kind),
       <<IO.iodata_length(body)::32>>,
-      body,
+      body
     ]
   end
 
@@ -80,10 +81,8 @@ defmodule Xandra.Frame do
     (flags &&& flag) == flag
   end
 
-  defp maybe_compress_body(_compressor = nil, body),
-    do: body
-  defp maybe_compress_body(compressor, body),
-    do: compressor.compress(body)
+  defp maybe_compress_body(_compressor = nil, body), do: body
+  defp maybe_compress_body(compressor, body), do: compressor.compress(body)
 
   defp maybe_decompress_body(_compression? = true, _compressor = nil, _body) do
     raise("received frame was flagged as compressed, but there's no module to decompress")

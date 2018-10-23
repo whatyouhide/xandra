@@ -9,14 +9,15 @@ defmodule AtomKeysTest do
 
     statement = "CREATE TABLE numbers_atom_keys (figure int PRIMARY KEY)"
     result = Xandra.execute!(conn, statement)
+
     assert result == %SchemaChange{
-      effect: "CREATED",
-      options: %{
-        keyspace: String.downcase(keyspace),
-        subject: "numbers_atom_keys",
-      },
-      target: "TABLE",
-    }
+             effect: "CREATED",
+             options: %{
+               keyspace: String.downcase(keyspace),
+               subject: "numbers_atom_keys"
+             },
+             target: "TABLE"
+           }
 
     statement = "INSERT INTO numbers_atom_keys (figure) VALUES (?)"
     result = Xandra.execute!(conn, statement, %{figure: {"int", 123}})

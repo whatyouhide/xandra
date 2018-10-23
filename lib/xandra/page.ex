@@ -35,15 +35,19 @@ defmodule Xandra.Page do
   @type paging_state :: binary | nil
 
   @opaque t :: %__MODULE__{
-    content: list,
-    columns: nonempty_list,
-    paging_state: paging_state,
-  }
+            content: list,
+            columns: nonempty_list,
+            paging_state: paging_state
+          }
 
   @doc false
   @spec more_pages_available?(t) :: boolean
   def more_pages_available?(%__MODULE__{paging_state: paging_state}) do
-    IO.warn "Xandra.Page.more_pages_available?/1 is deprecated, please use \"page.paging_state != nil\" instead"
+    IO.warn(
+      "Xandra.Page.more_pages_available?/1 is deprecated, " <>
+        "please use \"page.paging_state != nil\" instead"
+    )
+
     paging_state != nil
   end
 
@@ -67,7 +71,7 @@ defmodule Xandra.Page do
     end
 
     defp reduce([values | rest], columns, {:cont, acc}, fun) do
-      row = zip(values, columns, []) |> :maps.from_list
+      row = zip(values, columns, []) |> :maps.from_list()
       reduce(rest, columns, fun.(row, acc), fun)
     end
 
@@ -88,8 +92,9 @@ defmodule Xandra.Page do
     def inspect(page, options) do
       properties = [
         rows: Enum.to_list(page),
-        more_pages?: page.paging_state != nil,
+        more_pages?: page.paging_state != nil
       ]
+
       concat(["#Xandra.Page<", to_doc(properties, options), ">"])
     end
   end

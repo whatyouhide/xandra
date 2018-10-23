@@ -9,12 +9,16 @@ defmodule Xandra.TypeParserTest do
     assert parse("list<int>") == {:list, [:int]}
     assert parse("map<int, text>") == {:map, [:int, :text]}
     assert parse("set<map<int, list<text>>>") == {:set, [{:map, [:int, {:list, [:text]}]}]}
-    assert parse("map<list<int>, map<int, int>>") == {:map, [{:list, [:int]}, {:map, [:int, :int]}]}
+
+    assert parse("map<list<int>, map<int, int>>") ==
+             {:map, [{:list, [:int]}, {:map, [:int, :int]}]}
 
     # Spaces here and there
     assert parse("map<int,text>") == {:map, [:int, :text]}
     assert parse("map<list<int>,map<int,int>>") == {:map, [{:list, [:int]}, {:map, [:int, :int]}]}
-    assert parse(" map < int,   set < map < int, int  > > > ") == {:map, [:int, {:set, [{:map, [:int, :int]}]}]}
+
+    assert parse(" map < int,   set < map < int, int  > > > ") ==
+             {:map, [:int, {:set, [{:map, [:int, :int]}]}]}
 
     # Deviant case
     assert parse("TEXT") == :text

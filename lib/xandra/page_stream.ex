@@ -7,7 +7,7 @@ defmodule Xandra.PageStream do
     alias Xandra.Page
 
     def reduce(page_stream, acc, fun) do
-      Stream.resource(fn() -> start(page_stream) end, &next/1, &close/1).(acc, fun)
+      Stream.resource(fn -> start(page_stream) end, &next/1, &close/1).(acc, fun)
     end
 
     def member?(_page_stream, _value), do: {:error, __MODULE__}
@@ -30,6 +30,7 @@ defmodule Xandra.PageStream do
       case Xandra.execute!(conn, query, params, options) do
         %Page{paging_state: nil} = page ->
           {[page], %{page_stream | state: :done}}
+
         %Page{paging_state: paging_state} = page ->
           options = Keyword.put(options, :paging_state, paging_state)
           {[page], %{page_stream | options: options}}
@@ -48,8 +49,9 @@ defmodule Xandra.PageStream do
       properties = [
         query: page_stream.query,
         params: page_stream.params,
-        options: page_stream.options,
+        options: page_stream.options
       ]
+
       concat(["#Xandra.PageStream<", to_doc(properties, options), ">"])
     end
   end

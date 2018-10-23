@@ -41,11 +41,9 @@ defmodule Xandra.Calendar do
   end
 
   # NOTE: Time.diff/3, Date.add/2, and Date.diff/2 were introduced in Elixir v1.5.
-  if Code.ensure_loaded?(Time) and
-     function_exported?(Time, :diff, 3) and
-     Code.ensure_loaded?(Date) and
-     function_exported?(Date, :add, 2) and
-     function_exported?(Date, :diff, 2) do
+  if Code.ensure_loaded?(Time) and function_exported?(Time, :diff, 3) and
+       Code.ensure_loaded?(Date) and function_exported?(Date, :add, 2) and
+       function_exported?(Date, :diff, 2) do
     def time_to_nanoseconds(time) do
       Time.diff(time, ~T[00:00:00.000000], :nanosecond)
     end
@@ -58,7 +56,7 @@ defmodule Xandra.Calendar do
       Date.diff(date, ~D[1970-01-01])
     end
   else
-    @unix_epoch_days 719528
+    @unix_epoch_days 719_528
 
     @seconds_per_minute 60
     @seconds_per_hour 60 * 60
@@ -94,7 +92,9 @@ defmodule Xandra.Calendar do
 
     defp date_to_iso_days(year, month, day) when year in 0..9999 do
       true = day <= days_in_month(year, month)
-      days_in_previous_years(year) + days_before_month(month) + leap_day_offset(year, month) + day - 1
+
+      days_in_previous_years(year) + days_before_month(month) + leap_day_offset(year, month) + day -
+        1
     end
 
     defp days_in_month(year, 2) do
@@ -118,6 +118,7 @@ defmodule Xandra.Calendar do
     defp days_before_month(12), do: 334
 
     defp leap_day_offset(_year, month) when month < 3, do: 0
+
     defp leap_day_offset(year, _month) do
       if Calendar.ISO.leap_year?(year), do: 1, else: 0
     end
@@ -148,9 +149,7 @@ defmodule Xandra.Calendar do
     defp days_in_previous_years(year) do
       previous_year = year - 1
 
-      floor_div(previous_year, 4) -
-        floor_div(previous_year, 100) +
-        floor_div(previous_year, 400) +
+      floor_div(previous_year, 4) - floor_div(previous_year, 100) + floor_div(previous_year, 400) +
         previous_year * @days_per_nonleap_year + @days_per_leap_year
     end
 
@@ -159,43 +158,43 @@ defmodule Xandra.Calendar do
       {1, day_of_year}
     end
 
-    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < (59 + extra_day) do
+    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < 59 + extra_day do
       {2, day_of_year - 31}
     end
 
-    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < (90 + extra_day) do
+    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < 90 + extra_day do
       {3, day_of_year - (59 + extra_day)}
     end
 
-    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < (120 + extra_day) do
+    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < 120 + extra_day do
       {4, day_of_year - (90 + extra_day)}
     end
 
-    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < (151 + extra_day) do
+    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < 151 + extra_day do
       {5, day_of_year - (120 + extra_day)}
     end
 
-    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < (181 + extra_day) do
+    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < 181 + extra_day do
       {6, day_of_year - (151 + extra_day)}
     end
 
-    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < (212 + extra_day) do
+    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < 212 + extra_day do
       {7, day_of_year - (181 + extra_day)}
     end
 
-    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < (243 + extra_day) do
+    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < 243 + extra_day do
       {8, day_of_year - (212 + extra_day)}
     end
 
-    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < (273 + extra_day) do
+    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < 273 + extra_day do
       {9, day_of_year - (243 + extra_day)}
     end
 
-    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < (304 + extra_day) do
+    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < 304 + extra_day do
       {10, day_of_year - (273 + extra_day)}
     end
 
-    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < (334 + extra_day) do
+    defp year_day_to_year_date(extra_day, day_of_year) when day_of_year < 334 + extra_day do
       {11, day_of_year - (304 + extra_day)}
     end
 

@@ -9,14 +9,15 @@ defmodule ResultsTest do
 
     statement = "CREATE TABLE numbers (figure int PRIMARY KEY)"
     assert {:ok, result} = Xandra.execute(conn, statement)
+
     assert result == %SchemaChange{
-      effect: "CREATED",
-      options: %{
-        keyspace: String.downcase(keyspace),
-        subject: "numbers",
-      },
-      target: "TABLE",
-    }
+             effect: "CREATED",
+             options: %{
+               keyspace: String.downcase(keyspace),
+               subject: "numbers"
+             },
+             target: "TABLE"
+           }
 
     statement = "INSERT INTO numbers (figure) VALUES (123)"
     assert {:ok, result} = Xandra.execute(conn, statement)

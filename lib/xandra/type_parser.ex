@@ -29,10 +29,10 @@ defmodule Xandra.TypeParser do
     :tuple,
     :empty,
     :frozen,
-    :varchar,
+    :varchar
   ]
 
-  @spec parse(String.t) :: type | no_return
+  @spec parse(String.t()) :: type | no_return
   def parse(string) when is_binary(string) do
     try do
       string
@@ -45,6 +45,7 @@ defmodule Xandra.TypeParser do
     else
       {type, ""} ->
         type
+
       {_, _rest} ->
         raise "invalid type: " <> inspect(string)
     end
@@ -56,9 +57,11 @@ defmodule Xandra.TypeParser do
         case parse_inner(rest) do
           {types, ">" <> rest} ->
             {{type, types}, rest}
+
           _ ->
             throw(:invalid)
         end
+
       {type, rest} ->
         {type, rest}
     end
@@ -79,6 +82,7 @@ defmodule Xandra.TypeParser do
       {type, "," <> rest} ->
         {types, rest} = parse_inner(rest)
         {[type | types], rest}
+
       {type, rest} ->
         {[type], rest}
     end

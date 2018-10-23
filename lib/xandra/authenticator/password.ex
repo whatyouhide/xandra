@@ -16,7 +16,7 @@ defmodule Xandra.Authenticator.Password do
       0x00,
       Keyword.fetch!(options, :username),
       0x00,
-      Keyword.fetch!(options, :password),
+      Keyword.fetch!(options, :password)
     ]
   end
 end
