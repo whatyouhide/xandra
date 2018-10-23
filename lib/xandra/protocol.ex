@@ -468,7 +468,7 @@ defmodule Xandra.Protocol do
     varint_byte_size(-value - 1)
   end
 
-  defp varint_byte_size(value), do: 1
+  defp varint_byte_size(_value), do: 1
 
   @compile {:inline, decode_base16: 1}
   defp decode_base16(value) do
