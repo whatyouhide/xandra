@@ -26,6 +26,7 @@ jobs:
       otp_release: 19.2
       elixir: 1.7.3
       before_install: skip
+      sudo: false
 
 stages:
   - check formatted
