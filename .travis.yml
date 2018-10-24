@@ -21,14 +21,14 @@ script:
 
 jobs:
   include:
-    - stage: Check formatted
+    - stage: check formatted
       script: mix test --check-formatted
       otp_release: 19.2
       elixir: 1.7.3
       before_install: skip
 
 stages:
-  - format
+  - check formatted
   - test
 
 matrix:
