@@ -16,12 +16,6 @@ env:
   - CASSANDRA_VERSION=3.9 AUTHENTICATION=true
   - CASSANDRA_VERSION=3.9
 
-matrix:
-  include:
-    otp_release: 18.3
-    elixir: 1.4.0
-    env: CASSANDRA_VERSION=3.9
-
 script:
   - mix test
 
