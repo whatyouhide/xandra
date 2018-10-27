@@ -23,6 +23,8 @@ env:
     - CASSANDRA_VERSION=3
 
 script:
+  - docker-compose up --detach
+  - ./test/docker/wait-for-cassandra.sh
   - mix test
 
 jobs:
