@@ -100,6 +100,8 @@ To run tests, you need Cassandra running on your machine on port `9042`. You can
     docker-compose up
     ```
 
+Once you have Cassandra running (one way or the other), run `$ mix test` to run tests.
+
 ## License
 
 Xandra is released under the ISC license, see the [LICENSE](LICENSE) file.
