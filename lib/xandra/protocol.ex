@@ -117,8 +117,7 @@ defmodule Xandra.Protocol do
       |> set_flag(_serial_consistency = 0x10, serial_consistency)
       |> set_flag(_default_timestamp = 0x20, timestamp)
 
-    encoded_queries =
-      for query <- queries, into: [<<length(queries)::16>>], do: encode_query_in_batch(query)
+    encoded_queries = [<<length(queries)::16>>] ++ Enum.map(queries, &encode_query_in_batch/1)
 
     body = [
       encode_batch_type(type),
@@ -137,15 +136,17 @@ defmodule Xandra.Protocol do
   defp encode_batch_type(:counter), do: 2
 
   defp encode_string_list(list) do
-    for string <- list, into: [<<length(list)::16>>] do
-      [<<byte_size(string)::16>>, string]
-    end
+    parts = for string <- list, do: [<<byte_size(string)::16>>, string]
+    [<<length(list)::16>>] ++ parts
   end
 
   defp encode_string_map(map) do
-    for {key, value} <- map, into: [<<map_size(map)::16>>] do
-      [<<byte_size(key)::16>>, key, <<byte_size(value)::16>>, value]
-    end
+    parts =
+      for {key, value} <- map do
+        [<<byte_size(key)::16>>, key, <<byte_size(value)::16>>, value]
+      end
+
+    [<<map_size(map)::16>>] ++ parts
   end
 
   consistency_levels = %{
@@ -264,16 +265,17 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_values([], values) when is_list(values) do
-    for value <- values, into: [<<length(values)::16>>] do
-      encode_query_value(value)
-    end
+    [<<length(values)::16>>] ++ Enum.map(values, &encode_query_value/1)
   end
 
   defp encode_query_values([], values) when is_map(values) do
-    for {name, value} <- values, into: [<<map_size(values)::16>>] do
-      name = to_string(name)
-      [<<byte_size(name)::16>>, name, encode_query_value(value)]
-    end
+    parts =
+      for {name, value} <- values do
+        name = to_string(name)
+        [<<byte_size(name)::16>>, name, encode_query_value(value)]
+      end
+
+    [<<map_size(values)::16>>] ++ parts
   end
 
   defp encode_query_values(columns, values) when is_list(values) do
@@ -281,10 +283,13 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_query_values(columns, values) when map_size(values) == length(columns) do
-    for {_keyspace, _table, name, type} <- columns, into: [<<map_size(values)::16>>] do
-      value = Map.fetch!(values, name)
-      [<<byte_size(name)::16>>, name, encode_query_value(type, value)]
-    end
+    parts =
+      for {_keyspace, _table, name, type} <- columns do
+        value = Map.fetch!(values, name)
+        [<<byte_size(name)::16>>, name, encode_query_value(type, value)]
+      end
+
+    [<<map_size(values)::16>>] ++ parts
   end
 
   defp encode_bound_values([], [], acc) do
@@ -370,18 +375,19 @@ defmodule Xandra.Protocol do
   end
 
   defp encode_value({:list, [items_type]}, collection) when is_list(collection) do
-    for item <- collection,
-        into: [<<length(collection)::32>>],
-        do: encode_query_value(items_type, item)
+    [<<length(collection)::32>>] ++ Enum.map(collection, &encode_query_value(items_type, &1))
   end
 
   defp encode_value({:map, [key_type, value_type]}, collection) when is_map(collection) do
-    for {key, value} <- collection, into: [<<map_size(collection)::32>>] do
-      [
-        encode_query_value(key_type, key),
-        encode_query_value(value_type, value)
-      ]
-    end
+    parts =
+      for {key, value} <- collection do
+        [
+          encode_query_value(key_type, key),
+          encode_query_value(value_type, value)
+        ]
+      end
+
+    [<<map_size(collection)::32>>] ++ parts
   end
 
   defp encode_value({:set, inner_type}, %MapSet{} = collection) do
