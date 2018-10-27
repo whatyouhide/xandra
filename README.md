@@ -89,7 +89,16 @@ page_stream
 
 ## Contributing
 
-Clone the repository and run `$ mix test` to make sure your setup is correct; you're going to need Cassandra running locally on its default port (`9042`) for tests to pass.
+To run tests, you need Cassandra running on your machine on port `9042`. You can:
+
+  * install Cassandra and run it locally
+
+  * use [Docker][docker] to run a Cassandra container locally. If you choose this way, you only
+    need to have Docker installed. To run the test setup, just run:
+
+    ```bash
+    docker-compose up
+    ```
 
 ## License
 

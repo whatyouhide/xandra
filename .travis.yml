@@ -3,6 +3,9 @@ language: elixir
 dist: trusty
 sudo: required
 
+services:
+  - docker
+
 otp_release:
   - 19.2
 
@@ -11,10 +14,13 @@ elixir:
   - 1.7.3
 
 env:
-  - CASSANDRA_VERSION=2.2.8 AUTHENTICATION=true
-  - CASSANDRA_VERSION=2.2.8
-  - CASSANDRA_VERSION=3.9 AUTHENTICATION=true
-  - CASSANDRA_VERSION=3.9
+  global:
+    - DOCKER_COMPOSE_VERSION=1.22.0
+  matrix:
+    - CASSANDRA_VERSION=2.2 AUTHENTICATION=true
+    - CASSANDRA_VERSION=2.2
+    - CASSANDRA_VERSION=3 AUTHENTICATION=true
+    - CASSANDRA_VERSION=3
 
 script:
   - mix test
@@ -34,12 +40,7 @@ stages:
 
 # These steps are taken from: http://cassandra.apache.org/doc/latest/getting_started/installing.html#installation-from-binary-tarball-files.
 before_install:
-  - java -version
-  - wget https://archive.apache.org/dist/cassandra/$CASSANDRA_VERSION/apache-cassandra-$CASSANDRA_VERSION-bin.tar.gz
-  - tar -xzf apache-cassandra-$CASSANDRA_VERSION-bin.tar.gz
-  - |-
-    if [ $AUTHENTICATION = true ]; then
-      sed -i -e "s/\(authenticator: \)AllowAllAuthenticator/\1PasswordAuthenticator/" apache-cassandra-$CASSANDRA_VERSION/conf/cassandra.yaml
-    fi
-  - sh apache-cassandra-$CASSANDRA_VERSION/bin/cassandra
-  - for try in {1..12}; do (nodetool version > /dev/null 2>&1 && break) || sleep 5; done
+  - curl -L https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-`uname -s`-`uname -m` > docker-compose
+  - chmod +x docker-compose
+  - sudo mv docker-compose /usr/local/bin
+  - docker-compose build
