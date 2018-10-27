@@ -56,7 +56,7 @@ defmodule BatchTest do
   end
 
   test "using a default timestamp for the batch", %{conn: conn} do
-    timestamp = System.system_time(:seconds) - (_10_minutes = 600)
+    timestamp = System.system_time(:second) - (_10_minutes = 600)
 
     batch =
       Batch.new()
