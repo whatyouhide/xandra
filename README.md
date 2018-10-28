@@ -109,3 +109,4 @@ Xandra is released under the ISC license, see the [LICENSE](LICENSE) file.
 [documentation]: https://hexdocs.pm/xandra
 [cassandra]: http://cassandra.apache.org
 [production-use]: http://tech.forzafootball.com/blog/the-pursuit-of-instant-pushes
+[docker]: https://www.docker.com
