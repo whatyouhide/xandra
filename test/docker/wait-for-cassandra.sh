@@ -5,7 +5,7 @@ set -e
 MAX_TRIES=12
 
 function cassandra-is-ready() {
-  docker-compose logs cassandra | grep "Starting listening for CQL clients" >/dev/null
+  docker-compose logs cassandra | grep "Starting listening for CQL clients" > /dev/null
 }
 
 function wait-until-cassandra-is-ready() {
