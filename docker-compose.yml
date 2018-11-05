@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  cassandra:
+    build:
+      context: ./test/docker
+      dockerfile: Dockerfile.cassandra
+      args:
+        - CASSANDRA_VERSION
+        - AUTHENTICATION
+    ports:
+      - "9042:9042"
