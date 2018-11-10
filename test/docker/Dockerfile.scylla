@@ -1,0 +1,12 @@
+ARG SCYLLA_VERSION=latest
+
+FROM scylladb/scylla:$SCYLLA_VERSION
+
+ARG AUTHENTICATION=false
+
+RUN echo $SCYLLA_VERSION
+RUN echo $AUTHENTICATION
+
+RUN if [ "$AUTHENTICATION" = true ]; then \
+      sed -i -e "s/\(authenticator: \)AllowAllAuthenticator/\1PasswordAuthenticator/" /etc/scylla/scylla.yaml; \
+    fi
