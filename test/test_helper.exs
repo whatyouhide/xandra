@@ -1,7 +1,4 @@
-includes = Keyword.get(ExUnit.configuration(), :include)
-excludes = Keyword.get(ExUnit.configuration(), :exclude)
-
-ExUnit.start(include: includes, exclude: excludes)
+ExUnit.start()
 
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
