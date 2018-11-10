@@ -11,9 +11,9 @@ defmodule Mix.Tasks.Test.All do
     Mix.env(:test)
 
     if System.get_env("AUTHENTICATION") == "true" do
-      Mix.Task.run("test.cassandra", exclude: [:test], include: [:authentication])
+      Mix.Task.run("test.cassandra", ["--exclude", "test", "--include", "authentication"])
       Mix.Task.reenable("test")
-      Mix.Task.run("test.scylla", exclude: [:test], include: [:authentication])
+      Mix.Task.run("test.scylla", ["--exclude", "test", "--include", "authentication"])
     else
       Mix.Task.run("test.cassandra")
       Mix.Task.reenable("test")

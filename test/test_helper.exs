@@ -1,4 +1,7 @@
-ExUnit.start()
+includes = Keyword.get(ExUnit.configuration(), :include)
+excludes = Keyword.get(ExUnit.configuration(), :exclude)
+
+ExUnit.start(include: includes, exclude: excludes)
 
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
@@ -10,13 +13,9 @@ defmodule XandraTest.IntegrationCase do
       setup_all do
         keyspace = "xandra_test_" <> String.replace(inspect(__MODULE__), ".", "")
 
-        start_opts =
-          ExUnit.configuration()
-          |> Keyword.get(:include)
-          |> Enum.member?(:scylla_spacific)
-          |> if(do: [nodes: ["127.0.0.1:9043"]], else: [])
 
-        start_options = unquote(start_options) ++ start_opts
+
+        start_options = unquote(start_options)
 
         case_template = unquote(case_template)
 
