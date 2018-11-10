@@ -1,21 +1,4 @@
-excludes = []
-includes = []
-
-excludes =
-  if System.get_env("USE_SCYLLA") == "true" do
-    [:cassandra_specific] ++ excludes
-  else
-    excludes
-  end
-
-{excludes, includes} =
-  if System.get_env("AUTHENTICATION") == "true" do
-    {[:test] ++ excludes, [:authentication] ++ includes}
-  else
-    {excludes, includes}
-  end
-
-ExUnit.start(exclude: excludes, include: includes)
+ExUnit.start()
 
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
@@ -27,17 +10,13 @@ defmodule XandraTest.IntegrationCase do
       setup_all do
         keyspace = "xandra_test_" <> String.replace(inspect(__MODULE__), ".", "")
 
-        start_options =
-          [
-            nodes:
-              case System.get_env("USE_SCYLLA") do
-                "true" ->
-                  ["localhost:9043"]
+        start_opts =
+          ExUnit.configuration()
+          |> Keyword.get(:include)
+          |> Enum.member?(:scylla_spacific)
+          |> if(do: [nodes: ["127.0.0.1:9043"]], else: [])
 
-                _ ->
-                  ["localhost:9042"]
-              end
-          ] ++ unquote(start_options)
+        start_options = unquote(start_options) ++ start_opts
 
         case_template = unquote(case_template)
 

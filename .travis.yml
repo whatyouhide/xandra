@@ -25,7 +25,9 @@ env:
 script:
   - docker-compose up -d
   - ./test/docker/healthcheck-dockers.sh
-  - mix test
+  - mix compile
+  - mix test.cassandra
+  - mix test.scylla
 
 jobs:
   include:

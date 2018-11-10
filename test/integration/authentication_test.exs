@@ -6,7 +6,7 @@ defmodule AuthenticationTest do
 
   @moduletag :authentication
 
-  test "challenge is passed", %{keyspace: keyspace, start_options: start_options} do
+  test "challenge is passed", %{start_options: start_options, keyspace: keyspace} do
     call_options = [pool: Xandra.Cluster]
 
     {:ok, cluster} = Xandra.start_link(call_options ++ start_options)

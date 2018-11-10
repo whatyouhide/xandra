@@ -17,22 +17,38 @@ defmodule ClusteringTest do
     end
   end
 
-  test "basic interactions", %{keyspace: keyspace} do
+  @tag :cassandra_specific
+  test "basic interactions on Cassandra", %{keyspace: keyspace} do
     call_options = [pool: Xandra.Cluster]
     statement = "USE #{keyspace}"
 
     log =
       capture_log(fn ->
         start_options = [
-          # NEED TO ADD PORTS?
-          nodes:
-            case System.get_env("USE_SCYLLA") do
-              "true" ->
-                ["127.0.0.1:9043", "127.0.0.1:9043", "127.0.0.2:9043"]
+          nodes: ["127.0.0.1", "127.0.0.1", "127.0.0.2"],
+          name: TestCluster,
+          load_balancing: :random
+        ]
 
-              _ ->
-                ["127.0.0.1", "127.0.0.1", "127.0.0.2"]
-            end,
+        {:ok, cluster} = Xandra.start_link(call_options ++ start_options)
+
+        assert await_connected(cluster, call_options, &Xandra.execute!(&1, statement))
+      end)
+
+    assert log =~ "received request to start another connection pool to the same address"
+
+    assert Xandra.execute!(TestCluster, statement, [], call_options)
+  end
+
+  @tag :scylla_spacific
+  test "basic interactions on Scylla", %{keyspace: keyspace} do
+    call_options = [pool: Xandra.Cluster]
+    statement = "USE #{keyspace}"
+
+    log =
+      capture_log(fn ->
+        start_options = [
+          nodes: ["127.0.0.1:9043", "127.0.0.1:9043", "127.0.0.2:9043"],
           name: TestCluster,
           load_balancing: :random
         ]
