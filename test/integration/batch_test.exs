@@ -3,8 +3,8 @@ defmodule BatchTest do
 
   alias Xandra.{Batch, Error, Void}
 
-  setup_all %{keyspace: keyspace} do
-    {:ok, conn} = Xandra.start_link()
+  setup_all %{start_options: start_options, keyspace: keyspace} do
+    {:ok, conn} = Xandra.start_link(start_options)
     Xandra.execute!(conn, "USE #{keyspace}")
 
     statement = "CREATE TABLE users (id int, name text, PRIMARY KEY (id))"

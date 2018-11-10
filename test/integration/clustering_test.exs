@@ -24,7 +24,15 @@ defmodule ClusteringTest do
     log =
       capture_log(fn ->
         start_options = [
-          nodes: ["127.0.0.1", "127.0.0.1", "127.0.0.2"],
+          # NEED TO ADD PORTS?
+          nodes:
+            case System.get_env("USE_SCYLLA") do
+              "true" ->
+                ["127.0.0.1:9043", "127.0.0.1:9043", "127.0.0.2:9043"]
+
+              _ ->
+                ["127.0.0.1", "127.0.0.1", "127.0.0.2"]
+            end,
           name: TestCluster,
           load_balancing: :random
         ]
@@ -39,9 +47,9 @@ defmodule ClusteringTest do
     assert Xandra.execute!(TestCluster, statement, [], call_options)
   end
 
-  test "priority load balancing", %{keyspace: keyspace} do
+  test "priority load balancing", %{start_options: start_options, keyspace: keyspace} do
     call_options = [pool: Xandra.Cluster]
-    start_options = [load_balancing: :priority]
+    start_options = [load_balancing: :priority] ++ start_options
     {:ok, cluster} = Xandra.start_link(call_options ++ start_options)
 
     assert await_connected(cluster, call_options, &Xandra.execute!(&1, "USE #{keyspace}"))

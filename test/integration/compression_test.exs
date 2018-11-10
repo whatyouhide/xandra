@@ -23,8 +23,8 @@ defmodule CompressionTest do
     :ok
   end
 
-  test "compression with the snappy algorithm", %{keyspace: keyspace} do
-    assert {:ok, compressed_conn} = Xandra.start_link(compressor: Snappy, idle_timeout: 200)
+  test "compression with the snappy algorithm", %{start_options: start_options, keyspace: keyspace} do
+    assert {:ok, compressed_conn} = Xandra.start_link(start_options ++ [compressor: Snappy, idle_timeout: 200])
 
     statement = "SELECT * FROM #{keyspace}.users WHERE code = ?"
     options = [compressor: Snappy]

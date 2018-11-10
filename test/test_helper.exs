@@ -26,7 +26,19 @@ defmodule XandraTest.IntegrationCase do
     quote bind_quoted: [start_options: start_options, case_template: __MODULE__] do
       setup_all do
         keyspace = "xandra_test_" <> String.replace(inspect(__MODULE__), ".", "")
-        start_options = unquote(start_options)
+
+        start_options =
+          [
+            nodes:
+              case System.get_env("USE_SCYLLA") do
+                "true" ->
+                  ["localhost:9043"]
+
+                _ ->
+                  ["localhost:9042"]
+              end
+          ] ++ unquote(start_options)
+
         case_template = unquote(case_template)
 
         case_template.setup_keyspace(keyspace, start_options)
