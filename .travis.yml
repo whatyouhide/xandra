@@ -24,7 +24,7 @@ env:
 
 script:
   - docker-compose up -d
-  - ./test/docker/wait-for-cassandra.sh
+  - ./test/docker/healthcheck-dockers.sh
   - mix test
 
 jobs:
