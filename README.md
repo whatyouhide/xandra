@@ -87,26 +87,28 @@ page_stream
 |> Enum.each(fn(page) -> IO.puts "Got a bunch of rows: #{inspect(Enum.to_list(page))}" end)
 ```
 
-## Support for ScyllaDB
+## ScyllaDB support
 
-For now test are done on ScyllaDB version 2.1.
+Xandra supports [ScyllaDB][scylladb] (version `2.x`) without the need to do anything in particular.
 
 ## Contributing
 
-To run tests, you need Cassandra running on your machine on port `9042`. You can:
+To run tests, you need Cassandra running on your machine on port `9042`. If you also want to run tests on ScyllaDB, you will need ScyllaDB running on port `9043`. You can:
 
-  * install Cassandra and run it locally
+  * install Cassandra and ScyllaDB and run them locally
 
-  * use [Docker][docker] to run a Cassandra container locally. If you choose this way, you only
+  * use [Docker][docker] to run a Cassandra container and a ScyllaDB container locally. If you choose this way, you only
     need to have Docker installed. To run the test setup, just run:
 
     ```bash
     docker-compose up
     ```
 
-Once you have Cassandra running (one way or the other), run `$ mix test` to run tests.
+You can run tests:
 
-If you are trying to test this repository on [ScyllaDB][scylladb], you also need to add `$ export USE_SCYLLA=true` to your enviroment, otherwise the tests that are specific to Cassandra will fail.
+  * with `$ mix test` to only run Cassandra tests
+  * with `$ mix test.scylladb` to only run ScyllaDB tests
+  * with `$ mix test.all` to run both Cassandra and ScyllaDB tests
 
 ## License
 
@@ -116,3 +118,4 @@ Xandra is released under the ISC license, see the [LICENSE](LICENSE) file.
 [cassandra]: http://cassandra.apache.org
 [production-use]: http://tech.forzafootball.com/blog/the-pursuit-of-instant-pushes
 [docker]: https://www.docker.com
+[scylladb]: https://www.scylladb.com/

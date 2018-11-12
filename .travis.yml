@@ -25,9 +25,7 @@ env:
 script:
   - docker-compose up -d
   - ./test/docker/healthcheck-dockers.sh
-  - mix compile
-  - mix test.cassandra
-  - mix test.scylla
+  - mix test.all
 
 jobs:
   include:
@@ -42,8 +40,6 @@ stages:
   - check formatted
   - test
 
-# These steps are taken from: http://cassandra.apache.org/doc/latest/getting_started/installing.html#installation-from-binary-tarball-files.
-# Steps for Scylla taken from https://github.com/scylladb/gocqlx
 before_install:
   - curl -L https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m) > docker-compose
   - chmod +x docker-compose

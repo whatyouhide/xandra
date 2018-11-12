@@ -16,6 +16,10 @@ defmodule Xandra.Mixfile do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
 
+      # Tests
+      aliases: ["test.scylladb": &test_scylladb/1, "test.all": ["test", "test.scylladb"]],
+      preferred_cli_env: ["test.scylladb": :test, "test.all": :test],
+
       # Hex
       package: package(),
       description: @description,
@@ -44,5 +48,21 @@ defmodule Xandra.Mixfile do
       {:snappy, github: "skunkwerks/snappy-erlang-nif", only: [:dev, :test]},
       {:ex_doc, "~> 0.14", only: :dev}
     ]
+  end
+
+  defp test_scylladb(args) do
+    args = if IO.ANSI.enabled?(), do: ["--color" | args], else: ["--no-color" | args]
+
+    Mix.shell().info("Running ScyllaDB tests")
+
+    {_, res} =
+      System.cmd("mix", ["test", "--exclude", "cassandra_specific" | args],
+        into: IO.binstream(:stdio, :line),
+        env: [{"PORT", "9043"}]
+      )
+
+    if res > 0 do
+      System.at_exit(fn _ -> exit({:shutdown, 1}) end)
+    end
   end
 end

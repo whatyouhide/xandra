@@ -1,12 +1,19 @@
-ExUnit.start()
+if System.get_env("AUTHENTICATION") == "true" do
+  ExUnit.start(exclude: [:test], include: [:authentication])
+else
+  ExUnit.start()
+end
 
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
 
   using options do
     start_options = Keyword.get(options, :start_options, [])
+    port = System.get_env("PORT") || "9042"
 
-    quote bind_quoted: [start_options: start_options, case_template: __MODULE__] do
+    quote bind_quoted: [start_options: start_options, port: port, case_template: __MODULE__] do
+      start_options = Keyword.put(start_options, :nodes, ["localhost:#{port}"])
+
       setup_all do
         keyspace = "xandra_test_" <> String.replace(inspect(__MODULE__), ".", "")
 
@@ -20,7 +27,7 @@ defmodule XandraTest.IntegrationCase do
           case_template.drop_keyspace(keyspace, start_options)
         end)
 
-        %{keyspace: keyspace, start_options: start_options}
+        %{keyspace: keyspace, start_options: start_options, port: unquote(port)}
       end
     end
   end
