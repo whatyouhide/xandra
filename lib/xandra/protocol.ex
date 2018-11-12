@@ -917,6 +917,22 @@ defmodule Xandra.Protocol do
     {:inet, buffer}
   end
 
+  defp decode_type(<<0x0011::16, buffer::bits>>) do
+    {:date, buffer}
+  end
+
+  defp decode_type(<<0x0012::16, buffer::bits>>) do
+    {:time, buffer}
+  end
+
+  defp decode_type(<<0x0013::16, buffer::bits>>) do
+    {:smallint, buffer}
+  end
+
+  defp decode_type(<<0x0014::16, buffer::bits>>) do
+    {:tinyint, buffer}
+  end
+
   defp decode_type(<<0x0020::16, buffer::bits>>) do
     {type, buffer} = decode_type(buffer)
     {{:list, [type]}, buffer}
