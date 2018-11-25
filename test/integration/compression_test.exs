@@ -24,8 +24,8 @@ defmodule CompressionTest do
   end
 
   test "compression with the snappy algorithm", %{
-    start_options: start_options,
-    keyspace: keyspace
+    keyspace: keyspace,
+    start_options: start_options
   } do
     assert {:ok, compressed_conn} =
              Xandra.start_link(start_options ++ [compressor: Snappy, idle_timeout: 200])
