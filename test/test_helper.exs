@@ -16,9 +16,7 @@ defmodule XandraTest.IntegrationCase do
 
       setup_all do
         keyspace = "xandra_test_" <> String.replace(inspect(__MODULE__), ".", "")
-
         start_options = unquote(start_options)
-
         case_template = unquote(case_template)
 
         case_template.setup_keyspace(keyspace, start_options)

@@ -3,7 +3,7 @@ defmodule BatchTest do
 
   alias Xandra.{Batch, Error, Void}
 
-  setup_all %{start_options: start_options, keyspace: keyspace} do
+  setup_all %{keyspace: keyspace, start_options: start_options} do
     {:ok, conn} = Xandra.start_link(start_options)
     Xandra.execute!(conn, "USE #{keyspace}")
 
