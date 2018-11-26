@@ -24,7 +24,7 @@ env:
 
 script:
   - docker-compose up -d
-  - ./test/docker/healthcheck-dockers.sh
+  - ./test/docker/health-check-services.sh
   - mix test.all
 
 jobs:
