@@ -15,17 +15,12 @@ elixir:
 
 env:
   global:
-    - DOCKER_COMPOSE_VERSION=1.22.0
+    - DOCKER_COMPOSE_VERSION=1.23.1
   matrix:
-    - CASSANDRA_VERSION=2.2 SCYLLA_VERSION=2.0.0 AUTHENTICATION=true
-    - CASSANDRA_VERSION=2.2 SCYLLA_VERSION=2.0.0
-    - CASSANDRA_VERSION=3 SCYLLA_VERSION=2.3.0 AUTHENTICATION=true
-    - CASSANDRA_VERSION=3 SCYLLA_VERSION=2.3.0
-
-script:
-  - docker-compose up -d
-  - ./test/docker/health-check-services.sh
-  - mix test.all
+    - CASSANDRA_VERSION=2.2
+    - CASSANDRA_VERSION=2.2 AUTHENTICATION=true
+    - CASSANDRA_VERSION=3
+    - CASSANDRA_VERSION=3 AUTHENTICATION=true
 
 jobs:
   include:
@@ -35,12 +30,31 @@ jobs:
       elixir: 1.7.3
       before_install: skip
       sudo: false
+      env: null
+    - &test-scylla
+      stage: test scylla
+      script:
+        - docker-compose --file docker-compose.yml --file docker-compose.scylla.yml up -d
+        - ./test/docker/health-check-services.sh
+        - mix test --exclude cassandra_specific
+      env: SCYLLA_VERSION=2.0.0
+    - <<: *test-scylla
+      env: SCYLLA_VERSION=2.0.0 AUTHENTICATION=true
+    - <<: *test-scylla
+      env: SCYLLA_VERSION=2.3.0
+    - <<: *test-scylla
+      env: SCYLLA_VERSION=2.0.0 AUTHENTICATION=true
 
 stages:
   - check formatted
   - test
+  - test scylla
+
+script:
+  - docker-compose --file docker-compose.yml --file docker-compose.cassandra.yml up -d
+  - ./test/docker/health-check-services.sh
+  - mix test
 
 before_install:
   - curl -L https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m) > docker-compose
   - chmod +x docker-compose
-  - docker-compose build
