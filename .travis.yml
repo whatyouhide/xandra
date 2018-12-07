@@ -33,10 +33,10 @@ jobs:
       env: null
     - &test-scylla
       stage: test scylla
-      script:
+      before_script:
         - docker-compose --file docker-compose.yml --file docker-compose.scylla.yml up -d
         - ./test/docker/health-check-services.sh
-        - mix test --exclude cassandra_specific
+      script: mix test --exclude cassandra_specific
       env: SCYLLA_VERSION=2.0.0
     - <<: *test-scylla
       env: SCYLLA_VERSION=2.0.0 AUTHENTICATION=true
@@ -50,10 +50,11 @@ stages:
   - test
   - test scylla
 
-script:
+before_script:
   - docker-compose --file docker-compose.yml --file docker-compose.cassandra.yml up -d
   - ./test/docker/health-check-services.sh
-  - mix test
+
+script: mix test
 
 before_install:
   - curl -L https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m) > docker-compose
