@@ -87,28 +87,24 @@ page_stream
 |> Enum.each(fn(page) -> IO.puts "Got a bunch of rows: #{inspect(Enum.to_list(page))}" end)
 ```
 
-## ScyllaDB support
+## Scylla support
 
-Xandra supports [ScyllaDB][scylladb] (version `2.x`) without the need to do anything in particular.
+Xandra supports [Scylla][scylladb] (version `2.x`) without the need to do anything in particular.
 
 ## Contributing
 
-To run tests, you need Cassandra running on your machine on port `9042`. If you also want to run tests on ScyllaDB, you will need ScyllaDB running on port `9043`. You can:
+To run tests, you need database running on your machine on port `9042`. You can:
 
-  * install Cassandra and ScyllaDB and run them locally
+  * install Cassandra and Scylla and run them locally
 
-  * use [Docker][docker] to run a Cassandra container and a ScyllaDB container locally. If you choose this way, you only
-    need to have Docker installed. To run the test setup, just run:
+  * use [Docker][docker] to run a Cassandra container or a Scylla container locally. If you choose this way, you only
+    need to have Docker installed. To run the test setup, just execute:
 
-    ```bash
-    docker-compose up
+    ```sh
+    docker-compose --file docker-compose.yml --file docker-compose.cassandra.yml up
     ```
 
-You can run tests:
-
-  * with `$ mix test` to only run Cassandra tests
-  * with `$ mix test.scylladb` to only run ScyllaDB tests
-  * with `$ mix test.all` to run both Cassandra and ScyllaDB tests
+Finally, `mix test` to start tests.
 
 ## License
 

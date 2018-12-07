@@ -9,11 +9,8 @@ defmodule XandraTest.IntegrationCase do
 
   using options do
     start_options = Keyword.get(options, :start_options, [])
-    port = System.get_env("PORT") || "9042"
 
-    quote bind_quoted: [start_options: start_options, port: port, case_template: __MODULE__] do
-      start_options = Keyword.put(start_options, :nodes, ["localhost:#{port}"])
-
+    quote bind_quoted: [start_options: start_options, case_template: __MODULE__] do
       setup_all do
         keyspace = "xandra_test_" <> String.replace(inspect(__MODULE__), ".", "")
         start_options = unquote(start_options)
@@ -25,7 +22,7 @@ defmodule XandraTest.IntegrationCase do
           case_template.drop_keyspace(keyspace, start_options)
         end)
 
-        %{keyspace: keyspace, start_options: start_options, port: unquote(port)}
+        %{keyspace: keyspace, start_options: start_options}
       end
     end
   end
