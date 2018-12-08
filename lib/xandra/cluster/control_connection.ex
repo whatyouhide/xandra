@@ -2,6 +2,7 @@ defmodule Xandra.Cluster.ControlConnection do
   use Connection
 
   alias Xandra.{Frame, Protocol, Connection.Utils}
+  alias Xandra.Connection.Transport
 
   require Logger
 
@@ -14,7 +15,7 @@ defmodule Xandra.Cluster.ControlConnection do
     :node_ref,
     :address,
     :port,
-    :socket,
+    :transport,
     :options,
     new: true,
     buffer: <<>>
@@ -37,14 +38,14 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   def connect(_action, %__MODULE__{address: address, port: port, options: options} = state) do
-    case :gen_tcp.connect(address, port, @socket_options, @default_timeout) do
-      {:ok, socket} ->
-        state = %{state | socket: socket}
+    case Transport.connect(address, port, @socket_options, @default_timeout) do
+      {:ok, transport} ->
+        state = %{state | transport: transport}
 
-        with {:ok, supported_options} <- Utils.request_options(socket),
-             :ok <- startup_connection(socket, supported_options, options),
-             :ok <- register_to_events(socket),
-             :ok <- :inet.setopts(socket, active: true),
+        with {:ok, supported_options} <- Utils.request_options(transport),
+             :ok <- startup_connection(transport, supported_options, options),
+             :ok <- register_to_events(transport),
+             :ok <- Transport.setopts(transport, active: true),
              {:ok, state} <- report_active(state) do
           {:ok, state}
         else
@@ -58,49 +59,53 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  def handle_info({:tcp_error, socket, reason}, %__MODULE__{socket: socket} = state) do
-    {:disconnect, {:error, reason}, state}
+  def handle_info(message, %__MODULE__{transport: {:gen_tcp, socket}} = state) do
+    case message do
+      {:tcp_error, ^socket, reason} ->
+        {:disconnect, {:error, reason}, state}
+
+      {:tcp_closed, ^socket} ->
+        {:disconnect, {:error, :closed}, state}
+
+      {:tcp, ^socket, data} ->
+        state = %{state | buffer: state.buffer <> data}
+        {:noreply, report_event(state)}
+    end
   end
 
-  def handle_info({:tcp_closed, socket}, %__MODULE__{socket: socket} = state) do
-    {:disconnect, {:error, :closed}, state}
-  end
-
-  def handle_info({:tcp, socket, data}, %__MODULE__{socket: socket} = state) do
-    state = %{state | buffer: state.buffer <> data}
-    {:noreply, report_event(state)}
-  end
-
-  def disconnect({:error, _reason}, %__MODULE__{} = state) do
-    :gen_tcp.close(state.socket)
-    {:connect, :reconnect, %{state | socket: nil, buffer: <<>>}}
+  def disconnect({:error, _reason}, %__MODULE__{transport: transport} = state) do
+    Transport.close(transport)
+    # NOTE: really nil here???
+    {:connect, :reconnect, %{state | transport: nil, buffer: <<>>}}
   end
 
   defp report_active(%{new: false} = state) do
     {:ok, state}
   end
 
-  defp report_active(%{new: true, cluster: cluster, node_ref: node_ref, socket: socket} = state) do
-    with {:ok, {address, port}} <- :inet.peername(socket) do
+  defp report_active(
+         %{new: true, cluster: cluster, node_ref: node_ref, transport: transport} = state
+       ) do
+    with {:ok, {address, port}} <- Transport.peername(transport) do
       Xandra.Cluster.activate(cluster, node_ref, address, port)
       {:ok, %{state | new: false, address: address}}
     end
   end
 
-  defp startup_connection(socket, supported_options, options) do
+  defp startup_connection(transport, supported_options, options) do
     %{"CQL_VERSION" => [cql_version | _]} = supported_options
     requested_options = %{"CQL_VERSION" => cql_version}
-    Utils.startup_connection(socket, requested_options, nil, options)
+    Utils.startup_connection(transport, requested_options, nil, options)
   end
 
-  defp register_to_events(socket) do
+  defp register_to_events(transport) do
     payload =
       Frame.new(:register)
       |> Protocol.encode_request(["STATUS_CHANGE"])
       |> Frame.encode()
 
-    with :ok <- :gen_tcp.send(socket, payload),
-         {:ok, %Frame{} = frame} <- Utils.recv_frame(socket) do
+    with :ok <- Transport.send(transport, payload),
+         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport) do
       :ok = Protocol.decode_response(frame)
     else
       {:error, reason} ->
