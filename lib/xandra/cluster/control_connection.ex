@@ -1,7 +1,12 @@
 defmodule Xandra.Cluster.ControlConnection do
   use Connection
 
-  alias Xandra.{Frame, Protocol, Connection.Utils}
+  alias Xandra.{
+    Frame,
+    Protocol,
+    Connection.Utils
+  }
+
   alias Xandra.Connection.Transport
 
   require Logger
@@ -42,7 +47,8 @@ defmodule Xandra.Cluster.ControlConnection do
       {:ok, transport} ->
         state = %{state | transport: transport}
 
-        with {:ok, supported_options} <- Utils.request_options(transport),
+        with {:ok, transport} <- upgrade_protocol(transport, options),
+             {:ok, supported_options} <- Utils.request_options(transport),
              :ok <- startup_connection(transport, supported_options, options),
              :ok <- register_to_events(transport),
              :ok <- Transport.setopts(transport, active: true),
@@ -77,6 +83,18 @@ defmodule Xandra.Cluster.ControlConnection do
     Transport.close(transport)
     # NOTE: really nil here???
     {:connect, :reconnect, %{state | transport: nil, buffer: <<>>}}
+  end
+
+  defp upgrade_protocol(transport, options) do
+    encryption_options = Keyword.get(options, :encryption, false)
+
+    case Transport.maybe_upgrade_protocol(transport, encryption_options) do
+      {:ok, handler} ->
+        {:ok, handler}
+
+      {:error, reason} ->
+        {:error, Xandra.ConnectionError.new("upgrade protocol", reason)}
+    end
   end
 
   defp report_active(%{new: false} = state) do

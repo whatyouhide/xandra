@@ -34,7 +34,8 @@ defmodule Xandra.Connection do
           atom_keys?: atom_keys?
         }
 
-        with {:ok, supported_options} <- Utils.request_options(transport),
+        with {:ok, transport} <- upgrade_protocol(transport, options),
+             {:ok, supported_options} <- Utils.request_options(transport),
              :ok <- startup_connection(transport, supported_options, compressor, options) do
           {:ok, state}
         else
@@ -124,6 +125,18 @@ defmodule Xandra.Connection do
 
   defp prepared_cache_lookup(state, prepared, false) do
     Prepared.Cache.lookup(state.prepared_cache, prepared)
+  end
+
+  defp upgrade_protocol(transport, options) do
+    encryption_options = Keyword.get(options, :encryption, false)
+
+    case Transport.maybe_upgrade_protocol(transport, encryption_options) do
+      {:ok, handler} ->
+        {:ok, handler}
+
+      {:error, reason} ->
+        {:error, ConnectionError.new("upgrade protocol", reason)}
+    end
   end
 
   defp startup_connection(transport, supported_options, compressor, options) do

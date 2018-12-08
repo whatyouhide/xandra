@@ -9,6 +9,22 @@ defmodule Xandra.Connection.Transport do
     end
   end
 
+  def maybe_upgrade_protocol(transport, false) do
+    {:ok, transport}
+  end
+
+  def maybe_upgrade_protocol(transport, true) do
+    maybe_upgrade_protocol(transport, [])
+  end
+
+  def maybe_upgrade_protocol({:gen_tcp, socket}, options) when is_list(options) do
+    timeout = 5_000
+
+    with {:ok, socket} <- :ssl.connect(socket, options, timeout) do
+      {:ok, {:ssl, socket}}
+    end
+  end
+
   def close({mod, socket}) do
     mod.close(socket)
   end
