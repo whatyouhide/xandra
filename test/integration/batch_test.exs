@@ -29,9 +29,9 @@ defmodule BatchTest do
       |> Batch.add("INSERT INTO users (id, name) VALUES (?, ?)", [{"int", 3}, {"text", "Lisa"}])
       |> Batch.add("DELETE FROM users WHERE id = ?", [{"int", 3}])
 
-    assert {:ok, %Void{}} = Xandra.execute(conn, batch)
+    assert {:ok, %Batch{}, %Void{}} = Xandra.execute(conn, batch)
 
-    {:ok, result} = Xandra.execute(conn, "SELECT name FROM users")
+    {:ok, _batch, result} = Xandra.execute(conn, "SELECT name FROM users")
 
     assert Enum.to_list(result) == [
              %{"name" => "Marge"},
@@ -45,7 +45,7 @@ defmodule BatchTest do
       |> Batch.add("INSERT INTO users (id, name) VALUES (1, 'Rick')")
       |> Batch.add("INSERT INTO users (id, name) VALUES (2, 'Morty')")
 
-    assert {:ok, %Void{}} = Xandra.execute(conn, batch)
+    assert {:ok, %Batch{}, %Void{}} = Xandra.execute(conn, batch)
 
     result = Xandra.execute!(conn, "SELECT name FROM users")
 
@@ -63,7 +63,7 @@ defmodule BatchTest do
       |> Batch.add("INSERT INTO users (id, name) VALUES (1, 'Abed')")
       |> Batch.add("INSERT INTO users (id, name) VALUES (2, 'Troy')")
 
-    assert {:ok, %Void{}} = Xandra.execute(conn, batch, timestamp: timestamp)
+    assert {:ok, %Batch{}, %Void{}} = Xandra.execute(conn, batch, timestamp: timestamp)
 
     result = Xandra.execute!(conn, "SELECT name, WRITETIME(name) FROM users")
 
@@ -87,7 +87,7 @@ defmodule BatchTest do
 
     batch = Batch.add(Batch.new(), prepared_insert, %{"id" => 1, "name" => "Beth"})
 
-    assert {:ok, %Void{}} = Xandra.execute(conn, batch)
+    assert {:ok, %Batch{}, %Void{}} = Xandra.execute(conn, batch)
 
     result = Xandra.execute!(conn, "SELECT name FROM users WHERE id = 1")
 
@@ -117,7 +117,7 @@ defmodule BatchTest do
   end
 
   test "empty batch", %{conn: conn} do
-    assert {:ok, %Void{}} = Xandra.execute(conn, Batch.new())
+    assert {:ok, %Batch{}, %Void{}} = Xandra.execute(conn, Batch.new())
   end
 
   test "inspecting batch queries", %{conn: conn} do

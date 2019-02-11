@@ -31,7 +31,7 @@ defmodule PreparedTest do
     # Successive call to prepare uses cache.
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement)
 
-    assert {:ok, page} = Xandra.execute(conn, prepared, [1])
+    assert {:ok, ^prepared, page} = Xandra.execute(conn, prepared, [1])
 
     assert Enum.to_list(page) == [
              %{"name" => "Homer"},
@@ -39,13 +39,13 @@ defmodule PreparedTest do
              %{"name" => "Marge"}
            ]
 
-    assert {:ok, page} = Xandra.execute(conn, prepared, %{"code" => 2})
+    assert {:ok, ^prepared, page} = Xandra.execute(conn, prepared, %{"code" => 2})
 
     assert Enum.to_list(page) == [
              %{"name" => "Moe"}
            ]
 
-    assert {:ok, page} = Xandra.execute(conn, prepared, %{"code" => 5})
+    assert {:ok, ^prepared, page} = Xandra.execute(conn, prepared, %{"code" => 5})
     assert Enum.to_list(page) == []
   end
 
@@ -53,10 +53,10 @@ defmodule PreparedTest do
     statement = "INSERT INTO users (code, name) VALUES (3, 'Nelson') IF NOT EXISTS"
     assert {:ok, prepared} = Xandra.prepare(conn, statement)
 
-    assert {:ok, page} = Xandra.execute(conn, prepared)
+    assert {:ok, ^prepared, page} = Xandra.execute(conn, prepared)
     assert Enum.to_list(page) == [%{"[applied]" => true}]
 
-    assert {:ok, page} = Xandra.execute(conn, prepared)
+    assert {:ok, ^prepared, page} = Xandra.execute(conn, prepared)
     assert Enum.to_list(page) == [%{"[applied]" => false, "code" => 3, "name" => "Nelson"}]
   end
 

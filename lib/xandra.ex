@@ -159,6 +159,7 @@ defmodule Xandra do
   @type statement :: String.t()
   @type values :: list | map
   @type error :: Error.t() | ConnectionError.t()
+  @type query :: Xandra.Simple.t() | Xandra.Prepared.t() | Xandra.Batch.t()
   @type result :: Xandra.Void.t() | Page.t() | Xandra.SetKeyspace.t() | Xandra.SchemaChange.t()
   @type conn :: DBConnection.conn()
 
@@ -175,7 +176,7 @@ defmodule Xandra do
   @default_port 9042
   @default_start_options [
     nodes: ["127.0.0.1"],
-    idle_timeout: 30_000
+    idle_interval: 30_000
   ]
 
   @doc """
@@ -214,13 +215,13 @@ defmodule Xandra do
   example, to start a pool of connections to Cassandra, the `:pool` option can
   be used:
 
-      Xandra.start_link(pool: DBConnection.Poolboy)
+      Xandra.start_link(pool: DBConnection.ConnectionPool)
 
   Note that this requires the `poolboy` dependency to be specified in your
   application. The following options have default values that are different from
   the default values provided by `DBConnection`:
 
-    * `:idle_timeout` - defaults to `30_000` (30 seconds)
+    * `:idle_interval` - defaults to `30_000` (30 seconds)
 
   ## Examples
 
@@ -231,14 +232,14 @@ defmodule Xandra do
       {:ok, _conn} = Xandra.start_link(name: :xandra)
 
       # Start a named pool of connections:
-      {:ok, _pool} = Xandra.start_link(name: :xandra_pool, pool: DBConnection.Poolboy)
+      {:ok, _pool} = Xandra.start_link(name: :xandra_pool, pool: DBConnection.ConnectionPool)
 
   As the `DBConnection` documentation states, if using a pool it's necessary to
   pass a `:pool` option with the pool module being used to every call. For
   example:
 
-      {:ok, _pool} = Xandra.start_link(name: :xandra_pool, pool: DBConnection.Poolboy)
-      Xandra.execute!(:xandra_pool, "SELECT * FROM users", _params = [], pool: DBConnection.Poolboy)
+      {:ok, _pool} = Xandra.start_link(name: :xandra_pool, pool: DBConnection.ConnectionPool)
+      Xandra.execute!(:xandra_pool, "SELECT * FROM users", _params = [], pool: DBConnection.ConnectionPool)
 
   ### Using a keyspace for new connections
 
@@ -465,12 +466,12 @@ defmodule Xandra do
 
   All `DBConnection.execute/4` options are supported here as well:
 
-      Xandra.execute(conn, batch, pool: DBConnection.Poolboy)
+      Xandra.execute(conn, batch, pool: DBConnection.ConnectionPool)
       #=> {:ok, %Xandra.Void{}}
 
   """
-  @spec execute(conn, statement | Prepared.t(), values) :: {:ok, result} | {:error, error}
-  @spec execute(conn, Batch.t(), Keyword.t()) :: {:ok, Xandra.Void.t()} | {:error, error}
+  @spec execute(conn, statement | Prepared.t(), values) :: {:ok, query, result} | {:error, error}
+  @spec execute(conn, Batch.t(), Keyword.t()) :: {:ok, query, Xandra.Void.t()} | {:error, error}
   def execute(conn, query, params_or_options \\ [])
 
   def execute(conn, statement, params) when is_binary(statement) do
@@ -626,11 +627,11 @@ defmodule Xandra do
       {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], consistency: :three)
 
   This function supports all options supported by `DBConnection.execute/4`; for
-  example, if the `conn` connection was started with `pool: DBConnection.Poolboy`,
+  example, if the `conn` connection was started with `pool: DBConnection.ConnectionPool`,
   then the `:pool` option would have to be passed here as well:
 
       statement = "DELETE FROM users WHERE first_name = 'Chandler'"
-      {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], pool: DBConnection.Poolboy)
+      {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], pool: DBConnection.ConnectionPool)
 
   ## Paging
 
@@ -663,7 +664,7 @@ defmodule Xandra do
   be sure to check for this with `page.paging_state != nil`.
   """
   @spec execute(conn, statement | Prepared.t(), values, Keyword.t()) ::
-          {:ok, result} | {:error, error}
+          {:ok, query, result} | {:error, error}
   def execute(conn, query, params, options)
 
   def execute(conn, statement, params, options) when is_binary(statement) do
@@ -692,6 +693,7 @@ defmodule Xandra do
   @spec execute!(conn, Batch.t(), Keyword.t()) :: Xandra.Void.t() | no_return
   def execute!(conn, query, params_or_options \\ []) do
     case execute(conn, query, params_or_options) do
+      {:ok, _query, result} -> result
       {:ok, result} -> result
       {:error, exception} -> raise(exception)
     end
@@ -714,6 +716,7 @@ defmodule Xandra do
   @spec execute!(conn, statement | Prepared.t(), values, Keyword.t()) :: result | no_return
   def execute!(conn, query, params, options) do
     case execute(conn, query, params, options) do
+      {:ok, _query, result} -> result
       {:ok, result} -> result
       {:error, exception} -> raise(exception)
     end
@@ -828,12 +831,12 @@ defmodule Xandra do
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
     run(conn, options, fn conn ->
       case DBConnection.execute(conn, batch, nil, options) do
-        {:ok, %Error{reason: :unprepared}} ->
+        {:ok, _batch, %Error{reason: :unprepared}} ->
           with :ok <- reprepare_queries(conn, batch.queries, options) do
             execute(conn, batch, options)
           end
 
-        {:ok, %Error{} = error} ->
+        {:ok, _batch, %Error{} = error} ->
           {:error, error}
 
         other ->
@@ -843,7 +846,7 @@ defmodule Xandra do
   end
 
   defp execute_without_retrying(conn, %Simple{} = query, params, options) do
-    with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, options) do
+    with {:ok, _query, %Error{} = error} <- DBConnection.execute(conn, query, params, options) do
       {:error, error}
     end
   end
@@ -851,7 +854,7 @@ defmodule Xandra do
   defp execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
     run(conn, options, fn conn ->
       case DBConnection.execute(conn, prepared, params, options) do
-        {:ok, %Error{reason: :unprepared}} ->
+        {:ok, _prepared, %Error{reason: :unprepared}} ->
           # We can ignore the newly returned prepared query since it will have the
           # same id of the query we are repreparing.
           case DBConnection.prepare_execute(
@@ -870,7 +873,7 @@ defmodule Xandra do
               error
           end
 
-        {:ok, %Error{} = error} ->
+        {:ok, _prepared, %Error{} = error} ->
           {:error, error}
 
         other ->

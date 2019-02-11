@@ -35,7 +35,7 @@ defmodule PagingTest do
 
     options = [page_size: 3]
 
-    assert {:ok, %Page{paging_state: paging_state} = page} =
+    assert {:ok, ^query, %Page{paging_state: paging_state} = page} =
              Xandra.execute(conn, query, [], options)
 
     assert Enum.to_list(page) == [
@@ -48,7 +48,7 @@ defmodule PagingTest do
 
     options = [page_size: 2, paging_state: paging_state]
 
-    assert {:ok, %Page{paging_state: paging_state} = page} =
+    assert {:ok, ^query, %Page{paging_state: paging_state} = page} =
              Xandra.execute(conn, query, [], options)
 
     assert Enum.to_list(page) == [
@@ -60,7 +60,7 @@ defmodule PagingTest do
 
     options = [page_size: 6, paging_state: paging_state]
 
-    assert {:ok, %Page{paging_state: paging_state} = page} =
+    assert {:ok, ^query, %Page{paging_state: paging_state} = page} =
              Xandra.execute(conn, query, [], options)
 
     assert Enum.count(page) == 5

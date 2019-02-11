@@ -26,7 +26,8 @@ defmodule ClusteringTest do
         start_options = [
           nodes: ["127.0.0.1", "127.0.0.1", "127.0.0.2"],
           name: TestCluster,
-          load_balancing: :random
+          load_balancing: :random,
+          underlying_pool: DBConnection.ConnectionPool
         ]
 
         {:ok, cluster} = Xandra.start_link(call_options ++ start_options)

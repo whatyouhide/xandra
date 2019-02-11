@@ -31,18 +31,23 @@ defmodule CompressionTest do
 
     # We check that sending a non-compressed request which will receive a
     # compressed response works.
-    assert {:ok, %Xandra.Page{} = page} = Xandra.execute(compressed_conn, statement, [{"int", 1}])
+    assert {:ok, %Xandra.Simple{}, %Xandra.Page{} = page} =
+             Xandra.execute(compressed_conn, statement, [{"int", 1}])
+
     assert Enum.to_list(page) == [%{"code" => 1, "name" => "Homer"}]
 
     # Compressing simple queries.
-    assert {:ok, %Xandra.Page{} = page} =
+    assert {:ok, %Xandra.Simple{}, %Xandra.Page{} = page} =
              Xandra.execute(compressed_conn, statement, [{"int", 1}], options)
 
     assert Enum.to_list(page) == [%{"code" => 1, "name" => "Homer"}]
 
     # Compressing preparing queries and executing prepared queries.
     assert {:ok, prepared} = Xandra.prepare(compressed_conn, statement, options)
-    assert {:ok, %Xandra.Page{} = page} = Xandra.execute(compressed_conn, prepared, [1], options)
+
+    assert {:ok, ^prepared, %Xandra.Page{} = page} =
+             Xandra.execute(compressed_conn, prepared, [1], options)
+
     assert Enum.to_list(page) == [%{"code" => 1, "name" => "Homer"}]
 
     # This sleep is needed to test pings with compression,
@@ -55,6 +60,6 @@ defmodule CompressionTest do
       |> Xandra.Batch.add("INSERT INTO #{keyspace}.users (code, name) VALUES (2, 'Marge')")
       |> Xandra.Batch.add("DELETE FROM #{keyspace}.users WHERE code = ?", [{"int", 1}])
 
-    assert {:ok, %Xandra.Void{}} = Xandra.execute(compressed_conn, batch, options)
+    assert {:ok, ^batch, %Xandra.Void{}} = Xandra.execute(compressed_conn, batch, options)
   end
 end

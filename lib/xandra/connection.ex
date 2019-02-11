@@ -9,7 +9,7 @@ defmodule Xandra.Connection do
   @default_timeout 5_000
   @default_socket_options [packet: :raw, mode: :binary, active: false]
 
-  defstruct [:socket, :prepared_cache, :compressor, :atom_keys?]
+  defstruct [:socket, :prepared_cache, :compressor, :atom_keys?, transaction_status: :idle]
 
   def connect(options) do
     address = Keyword.fetch!(options, :address)
@@ -79,17 +79,21 @@ defmodule Xandra.Connection do
     end
   end
 
-  def handle_execute(_query, payload, options, %__MODULE__{} = state) do
+  def handle_execute(query, payload, options, %__MODULE__{} = state) do
     %{socket: socket, compressor: compressor, atom_keys?: atom_keys?} = state
     assert_valid_compressor(compressor, options[:compressor])
 
     with :ok <- :gen_tcp.send(socket, payload),
          {:ok, %Frame{} = frame} <- Utils.recv_frame(socket, compressor) do
-      {:ok, %{frame | atom_keys?: atom_keys?}, state}
+      {:ok, query, %{frame | atom_keys?: atom_keys?}, state}
     else
       {:error, reason} ->
         {:disconnect, ConnectionError.new("execute", reason), state}
     end
+  end
+
+  def handle_status(_, %{transaction_status: status} = state) do
+    {status, state}
   end
 
   def handle_close(query, _options, state) do
