@@ -217,10 +217,6 @@ defmodule Xandra do
 
       Xandra.start_link(pool: DBConnection.ConnectionPool)
 
-  Note that this requires the `poolboy` dependency to be specified in your
-  application. The following options have default values that are different from
-  the default values provided by `DBConnection`:
-
     * `:idle_interval` - defaults to `30_000` (30 seconds)
 
   ## Examples

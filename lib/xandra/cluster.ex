@@ -17,7 +17,7 @@ defmodule Xandra.Cluster do
   in the specified list of nodes (used for internal purposes).
 
   Here is an example of how one could use `Xandra.Cluster` to connect to
-  multiple nodes, while using `:poolboy` for pooling the connections to each
+  multiple nodes, while using `DBConnection.ConnectionPool` for pooling the connections to each
   node:
 
       Xandra.start_link([
