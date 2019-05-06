@@ -13,8 +13,6 @@ elixir: '1.8'
 env:
   global:
     - DOCKER_COMPOSE_VERSION=1.23.1
-    - CASSANDRA_VERSION=3
-    - SCYLLA_VERSION=2.3.0
 
 jobs:
   include:
@@ -23,9 +21,10 @@ jobs:
       before_script:
         - docker-compose --file docker-compose.yml --file docker-compose.cassandra.yml up -d
         - ./test/docker/health-check-services.sh
+      env: CASSANDRA_VERSION=3
 
     - elixir: '1.4'
-      otp_version: '19.3'
+      otp_release: '19.3'
 
     - env: CASSANDRA_VERSION=3 AUTHENTICATION=true
 
@@ -38,9 +37,10 @@ jobs:
       before_script:
         - docker-compose --file docker-compose.yml --file docker-compose.scylla.yml up -d
         - ./test/docker/health-check-services.sh
+      env: SCYLLA_VERSION=2.3.0
 
     - elixir: '1.4'
-      otp_version: '19.3'
+      otp_release: '19.3'
 
     - env: SCYLLA_VERSION=2.3.0 AUTHENTICATION=true
     
