@@ -38,14 +38,6 @@ def deps() do
 end
 ```
 
-and add `:xandra` to your list of applications:
-
-```elixir
-def application() do
-  [applications: [:logger, :xandra]]
-end
-```
-
 Then, run `mix deps.get` in your shell to fetch the new dependency.
 
 ## Overview
@@ -84,7 +76,7 @@ page_stream = Xandra.stream_pages!(conn, prepared, _params = [], page_size: 1_00
 # This is going to execute the prepared query every time a new page is needed:
 page_stream
 |> Enum.take(10)
-|> Enum.each(fn(page) -> IO.puts "Got a bunch of rows: #{inspect(Enum.to_list(page))}" end)
+|> Enum.each(fn page -> IO.puts("Got a bunch of rows: #{inspect(Enum.to_list(page))}") end)
 ```
 
 ## Contributing
