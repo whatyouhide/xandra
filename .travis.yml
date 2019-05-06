@@ -7,11 +7,11 @@ services:
   - docker
 
 otp_release:
-  - 19.2
+  - '21'
 
 elixir:
-  - 1.4.5
-  - 1.7.3
+  - '1.4'
+  - '1.8.1'
 
 env:
   global:
@@ -26,8 +26,8 @@ jobs:
   include:
     - stage: check formatted
       script: mix format --check-formatted
-      otp_release: 19.2
-      elixir: 1.7.3
+      otp_release: '21'
+      elixir: '1.8'
       before_install: skip
       sudo: false
       env: null
