@@ -3,6 +3,7 @@ defmodule ResultsTest do
 
   alias Xandra.{SchemaChange, SetKeyspace, Void}
 
+  @tag :cassandra_specific
   test "each possible result", %{conn: conn, keyspace: keyspace} do
     assert {:ok, result} = Xandra.execute(conn, "USE #{keyspace}")
     assert result == %SetKeyspace{keyspace: String.downcase(keyspace)}

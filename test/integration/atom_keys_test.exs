@@ -3,6 +3,8 @@ defmodule AtomKeysTest do
 
   alias Xandra.{SchemaChange, SetKeyspace, Void}
 
+  @moduletag :cassandra_specific
+
   test "each possible result and prepared", %{conn: conn, keyspace: keyspace} do
     result = Xandra.execute!(conn, "USE #{keyspace}")
     assert result == %SetKeyspace{keyspace: String.downcase(keyspace)}
