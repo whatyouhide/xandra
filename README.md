@@ -93,7 +93,7 @@ Xandra supports [Scylla][scylladb] (version `2.x`) without the need to do anythi
 
 ## Contributing
 
-To run tests, you need database running on your machine on port `9042`. You can:
+To run tests, you need Cassandra or ScyllaDB running on your machine on port `9042`. You can:
 
   * install Cassandra and Scylla and run them locally
 
@@ -104,7 +104,7 @@ To run tests, you need database running on your machine on port `9042`. You can:
     docker-compose --file docker-compose.yml --file docker-compose.cassandra.yml up
     ```
 
-Finally, `mix test` to start tests.
+Finally, `mix test` to start tests. If you're testing ScyllaDB, make sure to use `mix test --exclude cassandra_specific`.
 
 ## License
 
