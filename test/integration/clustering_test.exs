@@ -39,9 +39,9 @@ defmodule ClusteringTest do
     assert Xandra.execute!(TestCluster, statement, [], call_options)
   end
 
-  test "priority load balancing", %{keyspace: keyspace} do
+  test "priority load balancing", %{keyspace: keyspace, start_options: start_options} do
     call_options = [pool: Xandra.Cluster]
-    start_options = [load_balancing: :priority]
+    start_options = [load_balancing: :priority] ++ start_options
     {:ok, cluster} = Xandra.start_link(call_options ++ start_options)
 
     assert await_connected(cluster, call_options, &Xandra.execute!(&1, "USE #{keyspace}"))

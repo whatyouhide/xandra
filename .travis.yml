@@ -6,41 +6,71 @@ sudo: required
 services:
   - docker
 
-otp_release:
-  - 19.2
+otp_release: '21.2'
 
-elixir:
-  - 1.4.5
-  - 1.7.3
+elixir: '1.8'
 
 env:
   global:
-    - DOCKER_COMPOSE_VERSION=1.22.0
-  matrix:
-    - CASSANDRA_VERSION=2.2 AUTHENTICATION=true
-    - CASSANDRA_VERSION=2.2
-    - CASSANDRA_VERSION=3 AUTHENTICATION=true
-    - CASSANDRA_VERSION=3
-
-script:
-  - docker-compose up -d
-  - ./test/docker/wait-for-cassandra.sh
-  - mix test
+    - DOCKER_COMPOSE_VERSION=1.23.1
 
 jobs:
   include:
+    - &test
+      stage: test
+      script: mix test
+      before_script:
+        - docker-compose --file docker-compose.yml --file docker-compose.cassandra.yml up -d
+        - ./test/docker/health-check-services.sh
+      env: CASSANDRA_VERSION=3
+
+    - <<: *test
+      elixir: '1.4'
+      otp_release: '19.3'
+      env: CASSANDRA_VERSION=3
+
+    - <<: *test
+      env: CASSANDRA_VERSION=3 AUTHENTICATION=true
+
+    - <<: *test
+      env: CASSANDRA_VERSION=2.2
+
+    - <<: *test
+      env: CASSANDRA_VERSION=2.2 AUTHENTICATION=true
+
+    - &test-scylla
+      stage: test scylla
+      script: mix test --exclude cassandra_specific
+      before_script:
+        - docker-compose --file docker-compose.yml --file docker-compose.scylla.yml up -d
+        - ./test/docker/health-check-services.sh
+      env: SCYLLA_VERSION=2.3.0
+
+    - <<: *test-scylla
+      elixir: '1.4'
+      otp_release: '19.3'
+      env: SCYLLA_VERSION=2.3.0
+
+    - <<: *test-scylla
+      env: SCYLLA_VERSION=2.3.0 AUTHENTICATION=true
+    
+    - <<: *test-scylla
+      env: SCYLLA_VERSION=2.0.0
+
+    - <<: *test-scylla
+      env: SCYLLA_VERSION=2.0.0 AUTHENTICATION=true
+
     - stage: check formatted
       script: mix format --check-formatted
-      otp_release: 19.2
-      elixir: 1.7.3
       before_install: skip
       sudo: false
+      env: null
 
 stages:
   - check formatted
   - test
+  - test scylla
 
 before_install:
   - curl -L https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m) > docker-compose
   - chmod +x docker-compose
-  - docker-compose build

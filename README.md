@@ -79,20 +79,24 @@ page_stream
 |> Enum.each(fn page -> IO.puts("Got a bunch of rows: #{inspect(Enum.to_list(page))}") end)
 ```
 
+## Scylla support
+
+Xandra supports [Scylla][scylladb] (version `2.x`) without the need to do anything in particular.
+
 ## Contributing
 
-To run tests, you need Cassandra running on your machine on port `9042`. You can:
+To run tests, you need Cassandra or ScyllaDB running on your machine on port `9042`. You can:
 
-  * install Cassandra and run it locally
+  * install Cassandra and Scylla and run them locally
 
-  * use [Docker][docker] to run a Cassandra container locally. If you choose this way, you only
-    need to have Docker installed. To run the test setup, just run:
+  * use [Docker][docker] to run a Cassandra container or a Scylla container locally. If you choose this way, you only
+    need to have Docker installed. To run the test setup, just execute:
 
-    ```bash
-    docker-compose up
+    ```sh
+    docker-compose --file docker-compose.yml --file docker-compose.cassandra.yml up
     ```
 
-Once you have Cassandra running (one way or the other), run `$ mix test` to run tests.
+Finally, `mix test` to start tests. If you're testing ScyllaDB, make sure to use `mix test --exclude cassandra_specific`.
 
 ## License
 
@@ -102,3 +106,4 @@ Xandra is released under the ISC license, see the [LICENSE](LICENSE) file.
 [cassandra]: http://cassandra.apache.org
 [production-use]: http://tech.forzafootball.com/blog/the-pursuit-of-instant-pushes
 [docker]: https://www.docker.com
+[scylladb]: https://www.scylladb.com/

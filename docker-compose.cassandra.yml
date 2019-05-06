@@ -1,0 +1,9 @@
+version: '3'
+
+services:
+  database:
+    build:
+      dockerfile: Dockerfile.cassandra
+      args:
+        - CASSANDRA_VERSION
+        - AUTHENTICATION

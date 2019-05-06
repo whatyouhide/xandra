@@ -1,8 +1,8 @@
 defmodule PreparedTest do
   use XandraTest.IntegrationCase, async: true
 
-  setup_all %{keyspace: keyspace} do
-    {:ok, conn} = Xandra.start_link()
+  setup_all %{keyspace: keyspace, start_options: start_options} do
+    {:ok, conn} = Xandra.start_link(start_options)
     Xandra.execute!(conn, "USE #{keyspace}")
 
     statement = "CREATE TABLE users (code int, name text, PRIMARY KEY (code, name))"
@@ -49,6 +49,7 @@ defmodule PreparedTest do
     assert Enum.to_list(page) == []
   end
 
+  @tag :cassandra_specific
   test "dynamic result columns", %{conn: conn} do
     statement = "INSERT INTO users (code, name) VALUES (3, 'Nelson') IF NOT EXISTS"
     assert {:ok, prepared} = Xandra.prepare(conn, statement)
