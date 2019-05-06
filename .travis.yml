@@ -16,37 +16,49 @@ env:
 
 jobs:
   include:
-    - stage: test
+    - &test
+      stage: test
       script: mix test
       before_script:
         - docker-compose --file docker-compose.yml --file docker-compose.cassandra.yml up -d
         - ./test/docker/health-check-services.sh
       env: CASSANDRA_VERSION=3
 
-    - elixir: '1.4'
+    - <<: *test
+      elixir: '1.4'
       otp_release: '19.3'
+      env: CASSANDRA_VERSION=3
 
-    - env: CASSANDRA_VERSION=3 AUTHENTICATION=true
+    - <<: *test
+      env: CASSANDRA_VERSION=3 AUTHENTICATION=true
 
-    - env: CASSANDRA_VERSION=2.2
+    - <<: *test
+      env: CASSANDRA_VERSION=2.2
 
-    - env: CASSANDRA_VERSION=2.2 AUTHENTICATION=true
+    - <<: *test
+      env: CASSANDRA_VERSION=2.2 AUTHENTICATION=true
 
-    - stage: test scylla
+    - &test-scylla
+      stage: test scylla
       script: mix test --exclude cassandra_specific
       before_script:
         - docker-compose --file docker-compose.yml --file docker-compose.scylla.yml up -d
         - ./test/docker/health-check-services.sh
       env: SCYLLA_VERSION=2.3.0
 
-    - elixir: '1.4'
+    - <<: *test-scylla
+      elixir: '1.4'
       otp_release: '19.3'
+      env: SCYLLA_VERSION=2.3.0
 
-    - env: SCYLLA_VERSION=2.3.0 AUTHENTICATION=true
+    - <<: *test-scylla
+      env: SCYLLA_VERSION=2.3.0 AUTHENTICATION=true
     
-    - env: SCYLLA_VERSION=2.0.0
+    - <<: *test-scylla
+      env: SCYLLA_VERSION=2.0.0
 
-    - env: SCYLLA_VERSION=2.0.0 AUTHENTICATION=true
+    - <<: *test-scylla
+      env: SCYLLA_VERSION=2.0.0 AUTHENTICATION=true
 
     - stage: check formatted
       script: mix format --check-formatted
