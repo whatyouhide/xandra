@@ -27,7 +27,7 @@ defmodule Xandra.Mixfile do
   end
 
   def application() do
-    [applications: [:logger, :db_connection]]
+    [extra_applications: [:logger]]
   end
 
   defp package() do
