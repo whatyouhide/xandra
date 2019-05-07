@@ -58,8 +58,9 @@ defmodule Xandra.Connection do
   end
 
   @impl true
-  def handle_status(_opts, _state) do
-    raise ArgumentError, "Cassandra doesn't support transactions"
+  def handle_status(_opts, state) do
+    # :idle means we're not in a transaction.
+    {:idle, state}
   end
 
   @impl true
@@ -121,7 +122,7 @@ defmodule Xandra.Connection do
   @impl true
   def handle_execute(query, payload, options, %__MODULE__{} = state) do
     %{socket: socket, compressor: compressor, atom_keys?: atom_keys?} = state
-    compressor = assert_valid_compressor(compressor, options[:compressor])
+    assert_valid_compressor(compressor, options[:compressor])
 
     with :ok <- :gen_tcp.send(socket, payload),
          {:ok, %Frame{} = frame} <- Utils.recv_frame(socket, compressor) do
