@@ -276,6 +276,33 @@ defmodule Xandra do
   end
 
   @doc """
+  Returns a child space to use Xandra in supervision trees.
+
+  To use Xandra without passing any options you can just do:
+
+      children = [
+        Xandra,
+        # ...
+      ]
+
+  If you want to pass options, use a two-element tuple like
+  usual when using child specs:
+
+      children = [
+        {Xandra, name: :xandra_connection}
+      ]
+
+  """
+  @spec child_spec(start_options) :: Supervisor.child_spec()
+  def child_spec(options) do
+    %{
+      id: __MODULE__,
+      type: :worker,
+      start: {__MODULE__, :start_link, [options]}
+    }
+  end
+
+  @doc """
   Streams the results of a simple query or a prepared query with the given `params`.
 
   This function can be used to stream the results of `query` so as not to load
