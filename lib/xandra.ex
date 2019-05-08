@@ -3,7 +3,7 @@ defmodule Xandra do
   This module provides the main API to interface with Cassandra.
 
   This module handles the connection to Cassandra, queries, connection pooling,
-  connection backoff, logging, and more. Many of these features are provided by
+  connection backoff, logging, and more. Some of these features are provided by
   the [`DBConnection`](https://hex.pm/packages/db_connection) library, which
   Xandra is built on top of.
 
@@ -179,7 +179,7 @@ defmodule Xandra do
   ]
 
   @doc """
-  Starts a new connection or pool of connections to Cassandra.
+  Starts a new pool of connections to Cassandra.
 
   This function starts a new connection or pool of connections to the provided
   Cassandra server. `options` is a list of both Xandra-specific options, as well
@@ -193,9 +193,8 @@ defmodule Xandra do
       in the list has to be in the form `"ADDRESS:PORT"` or in the form
       `"ADDRESS"`: if the latter is used, the default port (`#{@default_port}`)
       will be used for that node. Defaults to `["127.0.0.1"]`. This option must
-      contain only one node unless the `:pool` option is set to
-      `Xandra.Cluster`; see the documentation for `Xandra.Cluster` for more
-      information.
+      contain only one node. See the documentation for `Xandra.Cluster` for more
+      information on connecting to multiple nodes.
 
     * `:compressor` - (module) the compressor module to use for compressing and
       decompressing data. See the "Compression" section in the module
@@ -208,13 +207,18 @@ defmodule Xandra do
     * `:atom_keys` - (boolean) whether or not results of and parameters to
       `execute/4` will have atom keys. If `true`, the result maps will have
       column names returned as atoms rather than as strings. Additionally,
-      maps that represent named parameters will need atom keys. Defaults to `false`.
+      maps that represent named parameters will need atom keys. Defaults to
+      `false`.
+
+    * `:pool_size` - (integer) the number of connections to start for the
+      pool. Defaults to `1`, which means that a single connection is
+      started.
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
-  example, to start a pool of connections to Cassandra, the `:pool` option can
-  be used:
+  example, to start a pool of five connections, you can use the `:pool_size`
+  option:
 
-      Xandra.start_link(pool: DBConnection.ConnectionPool)
+      Xandra.start_link(pool_size: 5)
 
   The following options have default values that are different from
   the default values provided by `DBConnection`:
@@ -229,16 +233,7 @@ defmodule Xandra do
       # Start a connection and register it under a name:
       {:ok, _conn} = Xandra.start_link(name: :xandra)
 
-      # Start a named pool of connections:
-      {:ok, _pool} = Xandra.start_link(name: :xandra_pool, pool: DBConnection.ConnectionPool)
-
-  As the `DBConnection` documentation states, if using a pool it's necessary to
-  pass a `:pool` option with the pool module being used to every call. For
-  example:
-
-      pool_module = DBConnection.ConnectionPool
-      {:ok, _pool} = Xandra.start_link(name: :xandra_pool, pool: pool_module)
-      Xandra.execute!(:xandra_pool, "SELECT * FROM users", _params = [], pool: pool_module)
+  If you're using Xandra under a supervisor, see `Xandra.child_spec/1`.
 
   ### Using a keyspace for new connections
 
@@ -249,17 +244,21 @@ defmodule Xandra do
       Xandra.execute!(conn, "USE my_keyspace")
 
   will work just fine when you only have one connection. If you have a pool of
-  connections (with the `:pool` option), however, the code above won't work:
-  that code would start the pool, and then checkout one connection from the pool
+  connections more than one connection, however, the code above won't work:
+  it would start the pool and then checkout one connection from the pool
   to execute the `USE my_keyspace` query. That specific connection will then be
   using the `my_keyspace` keyspace, but all other connections in the pool will
   not. Fortunately, `DBConnection` provides an option we can use to solve this
   problem: `:after_connect`. This option can specify a function that will be run
   after each single connection to Cassandra. This function will take a
-  connection and can be used to setup that connection; since this function is
+  connection and can be used to setup that connection. Since this function is
   run for every established connection, it will work well with pools as well.
 
-      {:ok, conn} = Xandra.start_link(after_connect: fn(conn) -> Xandra.execute(conn, "USE my_keyspace") end)
+      after_connect_fun = fn conn ->
+        Xandra.execute(conn, "USE my_keyspace")
+      end
+
+      {:ok, conn} = Xandra.start_link(after_connect: after_connect_fun)
 
   See the documentation for `DBConnection.start_link/2` for more information
   about this option.
@@ -270,13 +269,14 @@ defmodule Xandra do
       @default_start_options
       |> Keyword.merge(options)
       |> parse_start_options()
+      |> Keyword.put(:pool, DBConnection.ConnectionPool)
       |> Keyword.put(:prepared_cache, Prepared.Cache.new())
 
     DBConnection.start_link(Connection, options)
   end
 
   @doc """
-  Returns a child space to use Xandra in supervision trees.
+  Returns a child spec to use Xandra in supervision trees.
 
   To use Xandra without passing any options you can just do:
 
@@ -492,7 +492,7 @@ defmodule Xandra do
 
   All `DBConnection.execute/4` options are supported here as well:
 
-      Xandra.execute(conn, batch, pool: DBConnection.ConnectionPool)
+      Xandra.execute(conn, batch, timeout: 10_000)
       #=> {:ok, %Xandra.Void{}}
 
   """
@@ -656,16 +656,10 @@ defmodule Xandra do
       {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], consistency: :three)
 
   This function supports all options supported by `DBConnection.execute/4`; for
-  example, if the `conn` connection was started with `pool: DBConnection.ConnectionPool`,
-  then the `:pool` option would have to be passed here as well:
+  example, to use a timeout:
 
-      {:ok, %Xandra.Void{}} =
-        Xandra.execute(
-          conn,
-          "DELETE FROM users WHERE first_name = 'Chandler'",
-          _params = [],
-          pool: DBConnection.ConnectionPool
-        )
+      statement = "DELETE FROM users WHERE first_name = 'Chandler'"
+      {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], timeout: 10_000)
 
   ## Paging
 
@@ -760,8 +754,7 @@ defmodule Xandra do
   Acquires a locked connection from `conn` and executes `fun` passing such
   connection as the argument.
 
-  All options are forwarded to `DBConnection.run/3` (and thus some of them to
-  the underlying pool).
+  All options are forwarded to `DBConnection.run/3`.
 
   The return value of this function is the return value of `fun`.
 
