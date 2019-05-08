@@ -930,19 +930,14 @@ defmodule Xandra do
   end
 
   defp parse_start_options(options) do
-    cluster? = options[:pool] == Xandra.Cluster
-
     Enum.flat_map(options, fn
-      {:nodes, nodes} when cluster? ->
-        [nodes: Enum.map(nodes, &parse_node/1)]
-
       {:nodes, [string]} ->
         {address, port} = parse_node(string)
         [address: address, port: port]
 
       {:nodes, _nodes} ->
         raise ArgumentError,
-              "multi-node use requires the :pool option to be set to Xandra.Cluster"
+              "multi-node use requires Xandra.Cluster instead of Xandra"
 
       {_key, _value} = option ->
         [option]

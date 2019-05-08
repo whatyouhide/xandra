@@ -1,10 +1,9 @@
 defmodule Xandra.Cluster do
   @moduledoc """
-  A `DBConnection.Pool` pool that implements clustering support.
+  A pool that implements clustering support.
 
-  This module implements a `DBConnection.Pool` pool that implements support for
-  connecting to multiple nodes and executing queries on such nodes based on a
-  given "strategy".
+  This module is a pool that implements support for connecting to multiple nodes
+  and executing queries on such nodes based on a given "strategy".
 
   ## Usage
 
@@ -23,13 +22,13 @@ defmodule Xandra.Cluster do
   internal purposes).
 
   Here is an example of how one could use `Xandra.Cluster` to connect to
-  multiple nodes, while using `:poolboy` for pooling the connections to each
-  node:
+  multiple nodes, while using the `DBConnection.ConnectionPool` for pooling
+  the connections to each node:
 
       Xandra.start_link([
         nodes: ["cassandra1.example.net", "cassandra2.example.net"],
         pool: Xandra.Cluster,
-        underlying_pool: DBConnection.Poolboy,
+        underlying_pool: DBConnection.ConnectionPool,
         pool_size: 10,
       ])
 
@@ -79,10 +78,14 @@ defmodule Xandra.Cluster do
 
   use GenServer
 
-  @behaviour DBConnection.Pool
-
   @default_pool_module DBConnection.Connection
   @default_load_balancing :random
+  @default_port 9042
+
+  @default_start_options [
+    nodes: ["127.0.0.1"],
+    idle_interval: 30_000
+  ]
 
   alias __MODULE__.{ControlConnection, StatusChange}
   alias Xandra.ConnectionError
@@ -98,16 +101,9 @@ defmodule Xandra.Cluster do
     pools: %{}
   ]
 
-  def ensure_all_started(options, type) do
-    {pool_module, options} = Keyword.pop(options, :underlying_pool, @default_pool_module)
-    pool_module.ensure_all_started(options, type)
-  end
+  def start_link(options) do
+    options = Keyword.merge(@default_start_options, options)
 
-  def child_spec(module, options, child_options) do
-    Supervisor.Spec.worker(__MODULE__, [module, options], child_options)
-  end
-
-  def start_link(Xandra.Connection, options) do
     {pool_module, options} = Keyword.pop(options, :underlying_pool, @default_pool_module)
     {load_balancing, options} = Keyword.pop(options, :load_balancing, @default_load_balancing)
     {nodes, options} = Keyword.pop(options, :nodes)
@@ -119,38 +115,9 @@ defmodule Xandra.Cluster do
       pool_module: pool_module
     }
 
+    nodes = Enum.map(nodes, &parse_node/1)
+
     GenServer.start_link(__MODULE__, {state, nodes}, name: name)
-  end
-
-  def init({%__MODULE__{options: options} = state, nodes}) do
-    {:ok, pool_supervisor} = Supervisor.start_link([], strategy: :one_for_one, max_restarts: 0)
-    node_refs = start_control_connections(nodes, options)
-    {:ok, %{state | node_refs: node_refs, pool_supervisor: pool_supervisor}}
-  end
-
-  def checkout(cluster, options) do
-    case GenServer.call(cluster, :checkout) do
-      {:ok, pool_module, pool} ->
-        with {:ok, pool_ref, module, state} <- pool_module.checkout(pool, options) do
-          {:ok, {pool_module, pool_ref}, module, state}
-        end
-
-      {:error, :empty} ->
-        action = "checkout from cluster #{inspect(name())}"
-        {:error, ConnectionError.new(action, {:cluster, :not_connected})}
-    end
-  end
-
-  def checkin({pool_module, pool_ref}, state, options) do
-    pool_module.checkin(pool_ref, state, options)
-  end
-
-  def disconnect({pool_module, pool_ref}, error, state, options) do
-    pool_module.disconnect(pool_ref, error, state, options)
-  end
-
-  def stop({pool_module, pool_ref}, error, state, options) do
-    pool_module.stop(pool_ref, error, state, options)
   end
 
   def activate(cluster, node_ref, address, port) do
@@ -161,6 +128,57 @@ defmodule Xandra.Cluster do
     GenServer.cast(cluster, {:update, status_change})
   end
 
+  def stream_pages!(conn, query, params, options \\ []) do
+    Xandra.stream_pages!(conn, query, params, options)
+  end
+
+  def prepare(cluster, statement, options \\ []) when is_binary(statement) do
+    with_conn(cluster, &Xandra.prepare(&1, statement, options))
+  end
+
+  def prepare!(cluster, statement, options \\ []) do
+    case prepare(cluster, statement, options) do
+      {:ok, result} -> result
+      {:error, exception} -> raise exception
+    end
+  end
+
+  def execute(cluster, query, params_or_options \\ []) do
+    with_conn(cluster, &Xandra.execute(&1, query, params_or_options))
+  end
+
+  def execute(cluster, query, params, options) do
+    with_conn(cluster, &Xandra.execute(&1, query, params, options))
+  end
+
+  def execute!(cluster, query, params_or_options \\ []) do
+    case execute(cluster, query, params_or_options) do
+      {:ok, result} -> result
+      {:error, exception} -> raise exception
+    end
+  end
+
+  def execute!(cluster, query, params, options) do
+    case execute(cluster, query, params, options) do
+      {:ok, result} -> result
+      {:error, exception} -> raise exception
+    end
+  end
+
+  def run(cluster, options \\ [], fun) do
+    with_conn(cluster, &Xandra.run(&1, options, fun))
+  end
+
+  ## Callbacks
+
+  @impl true
+  def init({%__MODULE__{options: options} = state, nodes}) do
+    {:ok, pool_supervisor} = Supervisor.start_link([], strategy: :one_for_one, max_restarts: 0)
+    node_refs = start_control_connections(nodes, options)
+    {:ok, %{state | node_refs: node_refs, pool_supervisor: pool_supervisor}}
+  end
+
+  @impl true
   def handle_call(:checkout, _from, %__MODULE__{} = state) do
     %{
       node_refs: node_refs,
@@ -177,12 +195,28 @@ defmodule Xandra.Cluster do
     end
   end
 
+  @impl true
+  def handle_cast(message, state)
+
   def handle_cast({:activate, node_ref, address, port}, %__MODULE__{} = state) do
     {:noreply, start_pool(state, node_ref, address, port)}
   end
 
   def handle_cast({:update, %StatusChange{} = status_change}, %__MODULE__{} = state) do
     {:noreply, toggle_pool(state, status_change)}
+  end
+
+  ## Helpers
+
+  defp with_conn(cluster, fun) do
+    case GenServer.call(cluster, :checkout) do
+      {:ok, _pool_module, pool} ->
+        fun.(pool)
+
+      {:error, :empty} ->
+        action = "checkout from cluster #{inspect(cluster)}"
+        {:error, ConnectionError.new(action, {:cluster, :not_connected})}
+    end
   end
 
   defp start_control_connections(nodes, options) do
@@ -199,13 +233,18 @@ defmodule Xandra.Cluster do
     %{
       options: options,
       node_refs: node_refs,
-      pool_module: pool_module,
+      pool_module: _pool_module,
       pool_supervisor: pool_supervisor,
       pools: pools
     } = state
 
-    options = [address: address, port: port] ++ options
-    child_spec = pool_module.child_spec(Xandra.Connection, options, id: address)
+    options = Keyword.merge(options, address: address, port: port)
+
+    child_spec = %{
+      id: address,
+      start: {Xandra, :start_link, [options]},
+      type: :worker
+    }
 
     case Supervisor.start_child(pool_supervisor, child_spec) do
       {:ok, pool} ->
@@ -213,20 +252,16 @@ defmodule Xandra.Cluster do
         %{state | node_refs: node_refs, pools: Map.put(pools, address, pool)}
 
       {:error, {:already_started, _pool}} ->
+        # TODO: to have a reliable cluster name, we need to bring the name given on
+        # start_link/1 into the state because it could be an atom, {:global, term}
+        # and so on.
         Logger.warn(fn ->
-          "Xandra cluster #{inspect(name())} " <>
+          "Xandra cluster #{inspect(self())} " <>
             "received request to start another connection pool " <>
             "to the same address: #{inspect(address)}"
         end)
 
         state
-    end
-  end
-
-  defp name() do
-    case Process.info(self(), :registered_name) |> elem(1) do
-      [] -> self()
-      name -> name
     end
   end
 
@@ -258,5 +293,21 @@ defmodule Xandra.Cluster do
     Enum.find_value(node_refs, fn {_node_ref, address} ->
       Map.get(pools, address)
     end)
+  end
+
+  defp parse_node(string) do
+    case String.split(string, ":", parts: 2) do
+      [address, port] ->
+        case Integer.parse(port) do
+          {port, ""} ->
+            {String.to_charlist(address), port}
+
+          _ ->
+            raise ArgumentError, "invalid item #{inspect(string)} in the :nodes option"
+        end
+
+      [address] ->
+        {String.to_charlist(address), @default_port}
+    end
   end
 end
