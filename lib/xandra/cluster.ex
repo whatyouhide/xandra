@@ -78,7 +78,6 @@ defmodule Xandra.Cluster do
 
   use GenServer
 
-  @default_pool_module DBConnection.Connection
   @default_load_balancing :random
   @default_port 9042
 
@@ -97,22 +96,19 @@ defmodule Xandra.Cluster do
     :node_refs,
     :load_balancing,
     :pool_supervisor,
-    :pool_module,
     pools: %{}
   ]
 
   def start_link(options) do
     options = Keyword.merge(@default_start_options, options)
 
-    {pool_module, options} = Keyword.pop(options, :underlying_pool, @default_pool_module)
     {load_balancing, options} = Keyword.pop(options, :load_balancing, @default_load_balancing)
     {nodes, options} = Keyword.pop(options, :nodes)
     {name, options} = Keyword.pop(options, :name)
 
     state = %__MODULE__{
       options: Keyword.delete(options, :pool),
-      load_balancing: load_balancing,
-      pool_module: pool_module
+      load_balancing: load_balancing
     }
 
     nodes = Enum.map(nodes, &parse_node/1)
@@ -183,7 +179,6 @@ defmodule Xandra.Cluster do
     %{
       node_refs: node_refs,
       load_balancing: load_balancing,
-      pool_module: pool_module,
       pools: pools
     } = state
 
@@ -191,7 +186,7 @@ defmodule Xandra.Cluster do
       {:reply, {:error, :empty}, state}
     else
       pool = select_pool(load_balancing, pools, node_refs)
-      {:reply, {:ok, pool_module, pool}, state}
+      {:reply, {:ok, pool}, state}
     end
   end
 
@@ -210,7 +205,7 @@ defmodule Xandra.Cluster do
 
   defp with_conn(cluster, fun) do
     case GenServer.call(cluster, :checkout) do
-      {:ok, _pool_module, pool} ->
+      {:ok, pool} ->
         fun.(pool)
 
       {:error, :empty} ->
@@ -233,7 +228,6 @@ defmodule Xandra.Cluster do
     %{
       options: options,
       node_refs: node_refs,
-      pool_module: _pool_module,
       pool_supervisor: pool_supervisor,
       pools: pools
     } = state
