@@ -234,13 +234,7 @@ defmodule Xandra.Cluster do
 
     options = Keyword.merge(options, address: address, port: port)
 
-    child_spec = %{
-      id: address,
-      start: {Xandra, :start_link, [options]},
-      type: :worker
-    }
-
-    case Supervisor.start_child(pool_supervisor, child_spec) do
+    case Supervisor.start_child(pool_supervisor, {Xandra, options}) do
       {:ok, pool} ->
         node_refs = List.keystore(node_refs, node_ref, 0, {node_ref, address})
         %{state | node_refs: node_refs, pools: Map.put(pools, address, pool)}
