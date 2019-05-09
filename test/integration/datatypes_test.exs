@@ -215,21 +215,7 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "time") == nil
     assert Map.fetch!(row, "timestamp") == nil
 
-    # NOTE: DateTime.from_naive!/2 was introduced in Elixir v1.4.
-    datetime =
-      if Code.ensure_loaded?(DateTime) and function_exported?(DateTime, :from_naive!, 2) do
-        DateTime.from_naive!(~N[2016-05-24 13:26:08.003], "Etc/UTC")
-      else
-        fields =
-          ~N[2016-05-24 13:26:08.003]
-          |> Map.from_struct()
-          |> Map.put(:std_offset, 0)
-          |> Map.put(:utc_offset, 0)
-          |> Map.put(:zone_abbr, "UTC")
-          |> Map.put(:time_zone, "Etc/UTC")
-
-        struct(DateTime, fields)
-      end
+    datetime = DateTime.from_naive!(~N[2016-05-24 13:26:08.003], "Etc/UTC")
 
     values = [
       {"int", 2},
