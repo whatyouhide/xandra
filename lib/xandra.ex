@@ -3,7 +3,7 @@ defmodule Xandra do
   This module provides the main API to interface with Cassandra.
 
   This module handles the connection to Cassandra, queries, connection pooling,
-  connection backoff, logging, and more. Many of these features are provided by
+  connection backoff, logging, and more. Some of these features are provided by
   the [`DBConnection`](https://hex.pm/packages/db_connection) library, which
   Xandra is built on top of.
 
@@ -175,11 +175,11 @@ defmodule Xandra do
   @default_port 9042
   @default_start_options [
     nodes: ["127.0.0.1"],
-    idle_timeout: 30_000
+    idle_interval: 30_000
   ]
 
   @doc """
-  Starts a new connection or pool of connections to Cassandra.
+  Starts a new pool of connections to Cassandra.
 
   This function starts a new connection or pool of connections to the provided
   Cassandra server. `options` is a list of both Xandra-specific options, as well
@@ -193,9 +193,8 @@ defmodule Xandra do
       in the list has to be in the form `"ADDRESS:PORT"` or in the form
       `"ADDRESS"`: if the latter is used, the default port (`#{@default_port}`)
       will be used for that node. Defaults to `["127.0.0.1"]`. This option must
-      contain only one node unless the `:pool` option is set to
-      `Xandra.Cluster`; see the documentation for `Xandra.Cluster` for more
-      information.
+      contain only one node. See the documentation for `Xandra.Cluster` for more
+      information on connecting to multiple nodes.
 
     * `:compressor` - (module) the compressor module to use for compressing and
       decompressing data. See the "Compression" section in the module
@@ -208,19 +207,23 @@ defmodule Xandra do
     * `:atom_keys` - (boolean) whether or not results of and parameters to
       `execute/4` will have atom keys. If `true`, the result maps will have
       column names returned as atoms rather than as strings. Additionally,
-      maps that represent named parameters will need atom keys. Defaults to `false`.
+      maps that represent named parameters will need atom keys. Defaults to
+      `false`.
+
+    * `:pool_size` - (integer) the number of connections to start for the
+      pool. Defaults to `1`, which means that a single connection is
+      started.
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
-  example, to start a pool of connections to Cassandra, the `:pool` option can
-  be used:
+  example, to start a pool of five connections, you can use the `:pool_size`
+  option:
 
-      Xandra.start_link(pool: DBConnection.Poolboy)
+      Xandra.start_link(pool_size: 5)
 
-  Note that this requires the `poolboy` dependency to be specified in your
-  application. The following options have default values that are different from
+  The following options have default values that are different from
   the default values provided by `DBConnection`:
 
-    * `:idle_timeout` - defaults to `30_000` (30 seconds)
+    * `:idle_interval` - defaults to `30_000` (30 seconds)
 
   ## Examples
 
@@ -230,15 +233,7 @@ defmodule Xandra do
       # Start a connection and register it under a name:
       {:ok, _conn} = Xandra.start_link(name: :xandra)
 
-      # Start a named pool of connections:
-      {:ok, _pool} = Xandra.start_link(name: :xandra_pool, pool: DBConnection.Poolboy)
-
-  As the `DBConnection` documentation states, if using a pool it's necessary to
-  pass a `:pool` option with the pool module being used to every call. For
-  example:
-
-      {:ok, _pool} = Xandra.start_link(name: :xandra_pool, pool: DBConnection.Poolboy)
-      Xandra.execute!(:xandra_pool, "SELECT * FROM users", _params = [], pool: DBConnection.Poolboy)
+  If you're using Xandra under a supervisor, see `Xandra.child_spec/1`.
 
   ### Using a keyspace for new connections
 
@@ -249,17 +244,21 @@ defmodule Xandra do
       Xandra.execute!(conn, "USE my_keyspace")
 
   will work just fine when you only have one connection. If you have a pool of
-  connections (with the `:pool` option), however, the code above won't work:
-  that code would start the pool, and then checkout one connection from the pool
+  connections more than one connection, however, the code above won't work:
+  it would start the pool and then checkout one connection from the pool
   to execute the `USE my_keyspace` query. That specific connection will then be
   using the `my_keyspace` keyspace, but all other connections in the pool will
   not. Fortunately, `DBConnection` provides an option we can use to solve this
   problem: `:after_connect`. This option can specify a function that will be run
   after each single connection to Cassandra. This function will take a
-  connection and can be used to setup that connection; since this function is
+  connection and can be used to setup that connection. Since this function is
   run for every established connection, it will work well with pools as well.
 
-      {:ok, conn} = Xandra.start_link(after_connect: fn(conn) -> Xandra.execute(conn, "USE my_keyspace") end)
+      after_connect_fun = fn conn ->
+        Xandra.execute!(conn, "USE my_keyspace")
+      end
+
+      {:ok, conn} = Xandra.start_link(after_connect: after_connect_fun)
 
   See the documentation for `DBConnection.start_link/2` for more information
   about this option.
@@ -270,13 +269,14 @@ defmodule Xandra do
       @default_start_options
       |> Keyword.merge(options)
       |> parse_start_options()
+      |> Keyword.put(:pool, DBConnection.ConnectionPool)
       |> Keyword.put(:prepared_cache, Prepared.Cache.new())
 
     DBConnection.start_link(Connection, options)
   end
 
   @doc """
-  Returns a child space to use Xandra in supervision trees.
+  Returns a child spec to use Xandra in supervision trees.
 
   To use Xandra without passing any options you can just do:
 
@@ -424,7 +424,7 @@ defmodule Xandra do
   def prepare!(conn, statement, options \\ []) do
     case prepare(conn, statement, options) do
       {:ok, result} -> result
-      {:error, exception} -> raise(exception)
+      {:error, exception} -> raise exception
     end
   end
 
@@ -492,7 +492,7 @@ defmodule Xandra do
 
   All `DBConnection.execute/4` options are supported here as well:
 
-      Xandra.execute(conn, batch, pool: DBConnection.Poolboy)
+      Xandra.execute(conn, batch, timeout: 10_000)
       #=> {:ok, %Xandra.Void{}}
 
   """
@@ -614,10 +614,12 @@ defmodule Xandra do
   Executing a simple query (which is just a string):
 
       statement = "INSERT INTO users (first_name, last_name) VALUES (:first_name, :last_name)"
-      {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, %{
-        "first_name" => {"text", "Chandler"},
-        "last_name" => {"text", "Bing"},
-      })
+
+      {:ok, %Xandra.Void{}} =
+        Xandra.execute(conn, statement, %{
+          "first_name" => {"text", "Chandler"},
+          "last_name" => {"text", "Bing"},
+        })
 
   Executing the query when `atom_keys: true` has been specified in `Xandra.start_link/1`:
 
@@ -629,6 +631,7 @@ defmodule Xandra do
   Executing a prepared query:
 
       prepared = Xandra.prepare!(conn, "INSERT INTO users (first_name, last_name) VALUES (?, ?)")
+
       {:ok, %Xandra.Void{}} = Xandra.execute(conn, prepared, ["Monica", "Geller"])
 
   Performing a `SELECT` query and using `Enum.to_list/1` to convert the
@@ -653,11 +656,10 @@ defmodule Xandra do
       {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], consistency: :three)
 
   This function supports all options supported by `DBConnection.execute/4`; for
-  example, if the `conn` connection was started with `pool: DBConnection.Poolboy`,
-  then the `:pool` option would have to be passed here as well:
+  example, to use a timeout:
 
       statement = "DELETE FROM users WHERE first_name = 'Chandler'"
-      {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], pool: DBConnection.Poolboy)
+      {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], timeout: 10_000)
 
   ## Paging
 
@@ -676,10 +678,12 @@ defmodule Xandra do
       Enum.to_list(page)
       #=> [%{"first_name" => "Ross"}, %{"first_name" => "Rachel"}]
 
-  Now, we can pass `page.paging_state` as the value of the `:paging_state` option to let the paging
-  start from where we left off:
+  Now, we can pass `page.paging_state` as the value of the `:paging_state`
+  option to let the paging start from where we left off:
 
-      {:ok, %Xandra.Page{} = new_page} = Xandra.execute(conn, prepared, [], page_size: 2, paging_state: page.paging_state)
+      {:ok, %Xandra.Page{} = new_page} =
+        Xandra.execute(conn, prepared, [], page_size: 2, paging_state: page.paging_state)
+
       Enum.to_list(page)
       #=> [%{"first_name" => "Joey"}, %{"first_name" => "Phoebe"}]
 
@@ -720,7 +724,7 @@ defmodule Xandra do
   def execute!(conn, query, params_or_options \\ []) do
     case execute(conn, query, params_or_options) do
       {:ok, result} -> result
-      {:error, exception} -> raise(exception)
+      {:error, exception} -> raise exception
     end
   end
 
@@ -742,7 +746,7 @@ defmodule Xandra do
   def execute!(conn, query, params, options) do
     case execute(conn, query, params, options) do
       {:ok, result} -> result
-      {:error, exception} -> raise(exception)
+      {:error, exception} -> raise exception
     end
   end
 
@@ -750,8 +754,7 @@ defmodule Xandra do
   Acquires a locked connection from `conn` and executes `fun` passing such
   connection as the argument.
 
-  All options are forwarded to `DBConnection.run/3` (and thus some of them to
-  the underlying pool).
+  All options are forwarded to `DBConnection.run/3`.
 
   The return value of this function is the return value of `fun`.
 
@@ -855,30 +858,40 @@ defmodule Xandra do
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
     run(conn, options, fn conn ->
       case DBConnection.execute(conn, batch, nil, options) do
-        {:ok, %Error{reason: :unprepared}} ->
+        {:ok, _query, %Error{reason: :unprepared}} ->
           with :ok <- reprepare_queries(conn, batch.queries, options) do
             execute(conn, batch, options)
           end
 
-        {:ok, %Error{} = error} ->
+        {:ok, _query, %Error{} = error} ->
           {:error, error}
 
-        other ->
-          other
+        {:ok, _query, result} ->
+          {:ok, result}
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end)
   end
 
   defp execute_without_retrying(conn, %Simple{} = query, params, options) do
-    with {:ok, %Error{} = error} <- DBConnection.execute(conn, query, params, options) do
-      {:error, error}
+    case DBConnection.execute(conn, query, params, options) do
+      {:ok, _query, %Error{} = error} ->
+        {:error, error}
+
+      {:ok, _query, result} ->
+        {:ok, result}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
   defp execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
     run(conn, options, fn conn ->
       case DBConnection.execute(conn, prepared, params, options) do
-        {:ok, %Error{reason: :unprepared}} ->
+        {:ok, _query, %Error{reason: :unprepared}} ->
           # We can ignore the newly returned prepared query since it will have the
           # same id of the query we are repreparing.
           case DBConnection.prepare_execute(
@@ -897,29 +910,27 @@ defmodule Xandra do
               error
           end
 
-        {:ok, %Error{} = error} ->
+        {:ok, _query, %Error{} = error} ->
           {:error, error}
 
-        other ->
-          other
+        {:ok, _query, result} ->
+          {:ok, result}
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end)
   end
 
   defp parse_start_options(options) do
-    cluster? = options[:pool] == Xandra.Cluster
-
     Enum.flat_map(options, fn
-      {:nodes, nodes} when cluster? ->
-        [nodes: Enum.map(nodes, &parse_node/1)]
-
       {:nodes, [string]} ->
         {address, port} = parse_node(string)
         [address: address, port: port]
 
       {:nodes, _nodes} ->
         raise ArgumentError,
-              "multi-node use requires the :pool option to be set to Xandra.Cluster"
+              "multi-node use requires Xandra.Cluster instead of Xandra"
 
       {_key, _value} = option ->
         [option]

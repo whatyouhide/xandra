@@ -11,6 +11,7 @@ defmodule Xandra.Connection do
 
   defstruct [:socket, :prepared_cache, :compressor, :atom_keys?]
 
+  @impl true
   def connect(options) do
     address = Keyword.fetch!(options, :address)
     port = Keyword.fetch!(options, :port)
@@ -41,14 +42,53 @@ defmodule Xandra.Connection do
     end
   end
 
+  @impl true
+  def handle_begin(_opts, _state) do
+    raise ArgumentError, "Cassandra doesn't support transactions"
+  end
+
+  @impl true
+  def handle_commit(_opts, _state) do
+    raise ArgumentError, "Cassandra doesn't support transactions"
+  end
+
+  @impl true
+  def handle_rollback(_opts, _state) do
+    raise ArgumentError, "Cassandra doesn't support transactions"
+  end
+
+  @impl true
+  def handle_status(_opts, state) do
+    # :idle means we're not in a transaction.
+    {:idle, state}
+  end
+
+  @impl true
+  def handle_declare(_query, _params, _opts, _state) do
+    raise ArgumentError, "Cassandra doesn't support cursors"
+  end
+
+  @impl true
+  def handle_deallocate(_query, _cursor, _opts, _state) do
+    raise ArgumentError, "Cassandra doesn't support cursors"
+  end
+
+  @impl true
+  def handle_fetch(_query, _cursor, _opts, _state) do
+    raise ArgumentError, "Cassandra doesn't support cursors"
+  end
+
+  @impl true
   def checkout(state) do
     {:ok, state}
   end
 
+  @impl true
   def checkin(state) do
     {:ok, state}
   end
 
+  @impl true
   def handle_prepare(%Prepared{} = prepared, options, %__MODULE__{socket: socket} = state) do
     force? = Keyword.get(options, :force, false)
     compressor = assert_valid_compressor(state.compressor, options[:compressor])
@@ -79,27 +119,31 @@ defmodule Xandra.Connection do
     end
   end
 
-  def handle_execute(_query, payload, options, %__MODULE__{} = state) do
+  @impl true
+  def handle_execute(query, payload, options, %__MODULE__{} = state) do
     %{socket: socket, compressor: compressor, atom_keys?: atom_keys?} = state
     assert_valid_compressor(compressor, options[:compressor])
 
     with :ok <- :gen_tcp.send(socket, payload),
          {:ok, %Frame{} = frame} <- Utils.recv_frame(socket, compressor) do
-      {:ok, %{frame | atom_keys?: atom_keys?}, state}
+      {:ok, query, %{frame | atom_keys?: atom_keys?}, state}
     else
       {:error, reason} ->
         {:disconnect, ConnectionError.new("execute", reason), state}
     end
   end
 
+  @impl true
   def handle_close(query, _options, state) do
     {:ok, query, state}
   end
 
+  @impl true
   def disconnect(_exception, %__MODULE__{socket: socket}) do
     :ok = :gen_tcp.close(socket)
   end
 
+  @impl true
   def ping(%__MODULE__{socket: socket, compressor: compressor} = state) do
     case Utils.request_options(socket, compressor) do
       {:ok, _options} ->
@@ -175,7 +219,7 @@ defmodule Xandra.Connection do
             "a query was compressed with the #{inspect(provided)} compressor module " <>
               "(which uses the #{inspect(provided_algorithm)} algorithm) but the " <>
               "connection was initialized with the #{inspect(initial)} compressor " <>
-              "module (which uses the #{inspect(initial_algorithm)}"
+              "module (which uses the #{inspect(initial_algorithm)} algorithm)"
     end
   end
 end
