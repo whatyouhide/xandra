@@ -3,7 +3,7 @@ defmodule Xandra.Prepared.Cache do
 
   alias Xandra.Prepared
 
-  @type t :: :ets.tid()
+  @opaque t :: :ets.tid()
 
   @spec new() :: t
   def new() do
