@@ -85,7 +85,7 @@ defmodule Xandra.Frame do
   defp maybe_compress_body(compressor, body), do: compressor.compress(body)
 
   defp maybe_decompress_body(_compression? = true, _compressor = nil, _body) do
-    raise("received frame was flagged as compressed, but there's no module to decompress")
+    raise "received frame was flagged as compressed, but there's no module to decompress"
   end
 
   defp maybe_decompress_body(_compression? = true, compressor, body) do
