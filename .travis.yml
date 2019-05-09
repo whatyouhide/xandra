@@ -60,6 +60,14 @@ jobs:
     - <<: *test-scylla
       env: SCYLLA_VERSION=2.0.0 AUTHENTICATION=true
 
+    - &test-encrypted
+      stage: test encrypted
+      script: mix test --only encrypted
+      before_script:
+        - docker-compose --file docker-compose.yml --file docker-compose.cassandra-encrypted.yml up -d
+        - ./test/docker/health-check-services.sh
+      env: CASSANDRA_VERSION=3
+
     - stage: check formatted
       script: mix format --check-formatted
       before_install: skip
@@ -70,6 +78,7 @@ stages:
   - check formatted
   - test
   - test scylla
+  - test encrypted
 
 before_install:
   - curl -L https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m) > docker-compose
