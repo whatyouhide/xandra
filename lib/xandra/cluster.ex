@@ -1,45 +1,40 @@
 defmodule Xandra.Cluster do
   @moduledoc """
-  A pool that implements clustering support.
+  Connection to a Cassandra cluster.
 
-  This module is a pool that implements support for connecting to multiple nodes
-  and executing queries on such nodes based on a given "strategy".
+  This module is a "proxy" connection with support for connecting to multiple
+  nodes in a Cassandra cluster and executing queries on such nodes based on a
+  given *strategy*.
 
   ## Usage
 
-  To use this pool, the `:pool` option in `Xandra.start_link/1` needs to be set
-  to `Xandra.Cluster`. `Xandra.Cluster` is a "proxy" pool in the sense that it
-  only proxies requests to other underlying pools of Xandra connections; the
-  underlying pool can be specified with the `:underlying_pool` option. When you
-  start a `Xandra.Cluster` connection, it will start one pool
-  (`:underlying_pool`) of connections to each of the nodes specified in
-  `:nodes`. The default `:underlying_pool` is `DBConnection.Connection`, which
-  means by default only a single connection to each specified node will be
-  established.
+  This module manages connections to different nodes in a Cassandra cluster.
+  Each connection to a node is a `Xandra` connection (so it can also be
+  a pool of connections). When a `Xandra.Cluster` connection is started,
+  one `Xandra` connection or pool of connections will be started for each
+  node specified in the `:nodes` option.
+
+  The API provided by this module mirrors the API provided by the `Xandra`
+  module. Queries executed through this module will be "routed" to nodes
+  in the provided list of nodes based on a strategy. See the
+  "Load balancing strategies" section below
 
   Note that regardless of the underlying pool, `Xandra.Cluster` will establish
   one extra connection to each node in the specified list of nodes (used for
   internal purposes).
 
   Here is an example of how one could use `Xandra.Cluster` to connect to
-  multiple nodes, while using the `DBConnection.ConnectionPool` for pooling
-  the connections to each node:
+  multiple nodes:
 
-      Xandra.start_link([
+      Xandra.Cluster.start_link(
         nodes: ["cassandra1.example.net", "cassandra2.example.net"],
-        pool: Xandra.Cluster,
-        underlying_pool: DBConnection.ConnectionPool,
         pool_size: 10,
-      ])
+      )
 
   The code above will establish a pool of ten connections to each of the nodes
   specified in `:nodes`, for a total of twenty connections going out of the
   current machine, plus two extra connections (one per node) used for internal
   purposes.
-
-  Once a `Xandra.Cluster` pool is started, queries executed through such pool
-  will be "routed" to nodes in the provided list of nodes; see the "Load
-  balancing strategies" section below.
 
   ## Load balancing strategies
 
@@ -61,22 +56,16 @@ defmodule Xandra.Cluster do
   If all specified nodes happen to be down when a query is executed, a
   `Xandra.ConnectionError` with reason `{:cluster, :not_connected}` will be
   returned.
-
-  ## Options
-
-  These are the options that `Xandra.start_link/1` accepts when
-  `pool: Xandra.Cluster` is passed to it:
-
-    * `:underlying_pool` - (module) the `DBConnection.Pool` pool used to pool
-      connections to each of the specified nodes.
-
-    * `:load_balancing` - (atom) load balancing "strategy". Defaults to `:random`.
-
-  To pass options to the underlying pool, you can just pass them alongside other
-  options to `Xandra.start_link/1`.
   """
 
   use GenServer
+
+  alias __MODULE__.{ControlConnection, StatusChange}
+  alias Xandra.ConnectionError
+
+  require Logger
+
+  @type cluster :: GenServer.server()
 
   @default_load_balancing :random
   @default_port 9042
@@ -86,11 +75,6 @@ defmodule Xandra.Cluster do
     idle_interval: 30_000
   ]
 
-  alias __MODULE__.{ControlConnection, StatusChange}
-  alias Xandra.ConnectionError
-
-  require Logger
-
   defstruct [
     :options,
     :node_refs,
@@ -99,6 +83,41 @@ defmodule Xandra.Cluster do
     pools: %{}
   ]
 
+  @doc """
+  Starts a cluster connection.
+
+  Note that a cluster connection starts an additional connection for each
+  node in the cluster that is used for monitoring cluster updates.
+
+  ## Options
+
+  This function accepts all options accepted by `Xandra.start_link/1` and
+  and forwards them to each connection or pool of connections. The following
+  options are specific to this function:
+
+    * `:load_balancing` - (atom) load balancing "strategy". Either `:random`
+      or `:priority`. See the "Load balancing strategies" section above.
+      Defaults to `:random`.
+
+  ## Examples
+
+  Starting a cluster connection and executing a query:
+
+      {:ok, cluster} =
+        Xandra.Cluster.start_link(
+          nodes: ["cassandra1.example.net", "cassandra2.example.net"]
+        )
+
+  Passing options down to each connection:
+
+      {:ok, cluster} =
+        Xandra.Cluster.start_link(
+          nodes: ["cassandra1.example.net", "cassandra2.example.net"],
+          after_connect: &Xandra.execute!(&1, "USE my_keyspace")
+        )
+
+  """
+  @spec start_link([Xandra.start_option() | {:load_balancing, atom}]) :: GenServer.on_start()
   def start_link(options) do
     options = Keyword.merge(@default_start_options, options)
 
@@ -116,22 +135,45 @@ defmodule Xandra.Cluster do
     GenServer.start_link(__MODULE__, {state, nodes}, name: name)
   end
 
+  # Used internally by Xandra.Cluster.ControlConnection.
+  @doc false
   def activate(cluster, node_ref, address, port) do
     GenServer.cast(cluster, {:activate, node_ref, address, port})
   end
 
+  # Used internally by Xandra.Cluster.ControlConnection.
+  @doc false
   def update(cluster, status_change) do
     GenServer.cast(cluster, {:update, status_change})
   end
 
+  @doc """
+  Same as `Xandra.stream_pages!/4`.
+  """
+  @spec stream_pages!(
+          cluster,
+          Xandra.statement() | Xandra.Prepared.t(),
+          Xandra.values(),
+          Keyword.t()
+        ) ::
+          Enumerable.t()
   def stream_pages!(conn, query, params, options \\ []) do
     Xandra.stream_pages!(conn, query, params, options)
   end
 
+  @doc """
+  Same as `Xandra.prepare/3`.
+  """
+  @spec prepare(cluster, Xandra.startement(), Keyword.t()) ::
+          {:ok, Xandra.Prepared.t()} | {:error, Xandra.error()}
   def prepare(cluster, statement, options \\ []) when is_binary(statement) do
     with_conn(cluster, &Xandra.prepare(&1, statement, options))
   end
 
+  @doc """
+  Same as `Xandra.prepare!/3`.
+  """
+  @spec prepare!(cluster, Xandra.statement(), Keyword.t()) :: Xandra.Prepared.t() | no_return
   def prepare!(cluster, statement, options \\ []) do
     case prepare(cluster, statement, options) do
       {:ok, result} -> result
@@ -139,14 +181,33 @@ defmodule Xandra.Cluster do
     end
   end
 
+  @doc """
+  Same as `Xandra.execute/3`.
+  """
+  @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values()) ::
+          {:ok, Xandra.result()} | {:error, Xandra.error()}
+  @spec execute(cluster, Xandra.Batch.t(), Keyword.t()) ::
+          {:ok, Xandra.Void.t()} | {:error, Xandra.error()}
   def execute(cluster, query, params_or_options \\ []) do
     with_conn(cluster, &Xandra.execute(&1, query, params_or_options))
   end
 
+  @doc """
+  Same as `Xandra.execute/4`.
+  """
+  @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), Keyword.t()) ::
+          {:ok, Xandra.result()} | {:error, Xandra.error()}
   def execute(cluster, query, params, options) do
     with_conn(cluster, &Xandra.execute(&1, query, params, options))
   end
 
+  @doc """
+  Same as `Xandra.execute!/3`.
+  """
+  @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values()) ::
+          Xandra.result() | no_return
+  @spec execute(cluster, Xandra.Batch.t(), Keyword.t()) ::
+          Xandra.Void.t() | no_return
   def execute!(cluster, query, params_or_options \\ []) do
     case execute(cluster, query, params_or_options) do
       {:ok, result} -> result
@@ -154,6 +215,11 @@ defmodule Xandra.Cluster do
     end
   end
 
+  @doc """
+  Same as `Xandra.execute!/4`.
+  """
+  @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), Keyword.t()) ::
+          Xandra.result() | no_return
   def execute!(cluster, query, params, options) do
     case execute(cluster, query, params, options) do
       {:ok, result} -> result
@@ -161,8 +227,23 @@ defmodule Xandra.Cluster do
     end
   end
 
+  @doc """
+  Same as `Xandra.run/3`.
+  """
+  @spec run(cluster, Keyword.t(), (Xandra.conn() -> result)) :: result when result: var
   def run(cluster, options \\ [], fun) do
     with_conn(cluster, &Xandra.run(&1, options, fun))
+  end
+
+  defp with_conn(cluster, fun) do
+    case GenServer.call(cluster, :checkout) do
+      {:ok, pool} ->
+        fun.(pool)
+
+      {:error, :empty} ->
+        action = "checkout from cluster #{inspect(cluster)}"
+        {:error, ConnectionError.new(action, {:cluster, :not_connected})}
+    end
   end
 
   ## Callbacks
@@ -202,17 +283,6 @@ defmodule Xandra.Cluster do
   end
 
   ## Helpers
-
-  defp with_conn(cluster, fun) do
-    case GenServer.call(cluster, :checkout) do
-      {:ok, pool} ->
-        fun.(pool)
-
-      {:error, :empty} ->
-        action = "checkout from cluster #{inspect(cluster)}"
-        {:error, ConnectionError.new(action, {:cluster, :not_connected})}
-    end
-  end
 
   defp start_control_connections(nodes, options) do
     cluster = self()

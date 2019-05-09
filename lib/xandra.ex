@@ -255,7 +255,7 @@ defmodule Xandra do
   run for every established connection, it will work well with pools as well.
 
       after_connect_fun = fn conn ->
-        Xandra.execute(conn, "USE my_keyspace")
+        Xandra.execute!(conn, "USE my_keyspace")
       end
 
       {:ok, conn} = Xandra.start_link(after_connect: after_connect_fun)
