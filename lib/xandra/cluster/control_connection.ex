@@ -1,4 +1,6 @@
 defmodule Xandra.Cluster.ControlConnection do
+  @moduledoc false
+
   use Connection
 
   alias Xandra.{Frame, Protocol, Connection.Utils}
