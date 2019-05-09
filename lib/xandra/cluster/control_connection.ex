@@ -55,7 +55,7 @@ defmodule Xandra.Cluster.ControlConnection do
             {:backoff, @default_backoff, state}
         end
 
-      {:error, reason} ->
+      {:error, _reason} ->
         {:backoff, @default_backoff, state}
     end
   end
