@@ -164,7 +164,7 @@ defmodule Xandra.Cluster do
   @doc """
   Same as `Xandra.prepare/3`.
   """
-  @spec prepare(cluster, Xandra.startement(), Keyword.t()) ::
+  @spec prepare(cluster, Xandra.statement(), Keyword.t()) ::
           {:ok, Xandra.Prepared.t()} | {:error, Xandra.error()}
   def prepare(cluster, statement, options \\ []) when is_binary(statement) do
     with_conn(cluster, &Xandra.prepare(&1, statement, options))
