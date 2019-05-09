@@ -165,7 +165,7 @@ defmodule Xandra do
   @type xandra_start_option ::
           {:nodes, [String.t()]}
           | {:compressor, module}
-          | {:authentication, {module, Keyword.t()}}
+          | {:authentication, {module, keyword}}
           | {:atom_keys, boolean}
 
   @type db_connection_start_option :: {atom(), any}
@@ -338,7 +338,7 @@ defmodule Xandra do
       [%Xandra.Page{} = _page1, %Xandra.Page{} = _page2] = Enum.take(users_stream, 2)
 
   """
-  @spec stream_pages!(conn, statement | Prepared.t(), values, Keyword.t()) :: Enumerable.t()
+  @spec stream_pages!(conn, statement | Prepared.t(), values, keyword) :: Enumerable.t()
   def stream_pages!(conn, query, params, options \\ [])
 
   def stream_pages!(conn, statement, params, options) when is_binary(statement) do
@@ -403,7 +403,7 @@ defmodule Xandra do
       Xandra.prepare!(conn, "SELECT * FROM users WHERE ID = ?", force: true)
 
   """
-  @spec prepare(conn, statement, Keyword.t()) :: {:ok, Prepared.t()} | {:error, error}
+  @spec prepare(conn, statement, keyword) :: {:ok, Prepared.t()} | {:error, error}
   def prepare(conn, statement, options \\ []) when is_binary(statement) do
     DBConnection.prepare(conn, %Prepared{statement: statement}, options)
   end
@@ -420,7 +420,7 @@ defmodule Xandra do
       {:ok, _page} = Xandra.execute(conn, prepared, [_id = 1])
 
   """
-  @spec prepare!(conn, statement, Keyword.t()) :: Prepared.t() | no_return
+  @spec prepare!(conn, statement, keyword) :: Prepared.t() | no_return
   def prepare!(conn, statement, options \\ []) do
     case prepare(conn, statement, options) do
       {:ok, result} -> result
@@ -497,7 +497,7 @@ defmodule Xandra do
 
   """
   @spec execute(conn, statement | Prepared.t(), values) :: {:ok, result} | {:error, error}
-  @spec execute(conn, Batch.t(), Keyword.t()) :: {:ok, Xandra.Void.t()} | {:error, error}
+  @spec execute(conn, Batch.t(), keyword) :: {:ok, Xandra.Void.t()} | {:error, error}
   def execute(conn, query, params_or_options \\ [])
 
   def execute(conn, statement, params) when is_binary(statement) do
@@ -693,7 +693,7 @@ defmodule Xandra do
   meaning there are no more pages to fetch, an `ArgumentError` exception will be raised;
   be sure to check for this with `page.paging_state != nil`.
   """
-  @spec execute(conn, statement | Prepared.t(), values, Keyword.t()) ::
+  @spec execute(conn, statement | Prepared.t(), values, keyword) ::
           {:ok, result} | {:error, error}
   def execute(conn, query, params, options)
 
@@ -720,7 +720,7 @@ defmodule Xandra do
 
   """
   @spec execute!(conn, statement | Prepared.t(), values) :: result | no_return
-  @spec execute!(conn, Batch.t(), Keyword.t()) :: Xandra.Void.t() | no_return
+  @spec execute!(conn, Batch.t(), keyword) :: Xandra.Void.t() | no_return
   def execute!(conn, query, params_or_options \\ []) do
     case execute(conn, query, params_or_options) do
       {:ok, result} -> result
@@ -742,7 +742,7 @@ defmodule Xandra do
       #=> %Xandra.Void{}
 
   """
-  @spec execute!(conn, statement | Prepared.t(), values, Keyword.t()) :: result | no_return
+  @spec execute!(conn, statement | Prepared.t(), values, keyword) :: result | no_return
   def execute!(conn, query, params, options) do
     case execute(conn, query, params, options) do
       {:ok, result} -> result
@@ -768,7 +768,7 @@ defmodule Xandra do
       end)
 
   """
-  @spec run(conn, Keyword.t(), (conn -> result)) :: result when result: var
+  @spec run(conn, keyword, (conn -> result)) :: result when result: var
   def run(conn, options \\ [], fun) when is_function(fun, 1) do
     DBConnection.run(conn, fun, options)
   end

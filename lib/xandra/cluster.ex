@@ -154,7 +154,7 @@ defmodule Xandra.Cluster do
           cluster,
           Xandra.statement() | Xandra.Prepared.t(),
           Xandra.values(),
-          Keyword.t()
+          keyword
         ) ::
           Enumerable.t()
   def stream_pages!(conn, query, params, options \\ []) do
@@ -164,7 +164,7 @@ defmodule Xandra.Cluster do
   @doc """
   Same as `Xandra.prepare/3`.
   """
-  @spec prepare(cluster, Xandra.statement(), Keyword.t()) ::
+  @spec prepare(cluster, Xandra.statement(), keyword) ::
           {:ok, Xandra.Prepared.t()} | {:error, Xandra.error()}
   def prepare(cluster, statement, options \\ []) when is_binary(statement) do
     with_conn(cluster, &Xandra.prepare(&1, statement, options))
@@ -173,7 +173,7 @@ defmodule Xandra.Cluster do
   @doc """
   Same as `Xandra.prepare!/3`.
   """
-  @spec prepare!(cluster, Xandra.statement(), Keyword.t()) :: Xandra.Prepared.t() | no_return
+  @spec prepare!(cluster, Xandra.statement(), keyword) :: Xandra.Prepared.t() | no_return
   def prepare!(cluster, statement, options \\ []) do
     case prepare(cluster, statement, options) do
       {:ok, result} -> result
@@ -186,7 +186,7 @@ defmodule Xandra.Cluster do
   """
   @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values()) ::
           {:ok, Xandra.result()} | {:error, Xandra.error()}
-  @spec execute(cluster, Xandra.Batch.t(), Keyword.t()) ::
+  @spec execute(cluster, Xandra.Batch.t(), keyword) ::
           {:ok, Xandra.Void.t()} | {:error, Xandra.error()}
   def execute(cluster, query, params_or_options \\ []) do
     with_conn(cluster, &Xandra.execute(&1, query, params_or_options))
@@ -195,7 +195,7 @@ defmodule Xandra.Cluster do
   @doc """
   Same as `Xandra.execute/4`.
   """
-  @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), Keyword.t()) ::
+  @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), keyword) ::
           {:ok, Xandra.result()} | {:error, Xandra.error()}
   def execute(cluster, query, params, options) do
     with_conn(cluster, &Xandra.execute(&1, query, params, options))
@@ -206,7 +206,7 @@ defmodule Xandra.Cluster do
   """
   @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values()) ::
           Xandra.result() | no_return
-  @spec execute(cluster, Xandra.Batch.t(), Keyword.t()) ::
+  @spec execute(cluster, Xandra.Batch.t(), keyword) ::
           Xandra.Void.t() | no_return
   def execute!(cluster, query, params_or_options \\ []) do
     case execute(cluster, query, params_or_options) do
@@ -218,7 +218,7 @@ defmodule Xandra.Cluster do
   @doc """
   Same as `Xandra.execute!/4`.
   """
-  @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), Keyword.t()) ::
+  @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), keyword) ::
           Xandra.result() | no_return
   def execute!(cluster, query, params, options) do
     case execute(cluster, query, params, options) do
@@ -230,7 +230,7 @@ defmodule Xandra.Cluster do
   @doc """
   Same as `Xandra.run/3`.
   """
-  @spec run(cluster, Keyword.t(), (Xandra.conn() -> result)) :: result when result: var
+  @spec run(cluster, keyword, (Xandra.conn() -> result)) :: result when result: var
   def run(cluster, options \\ [], fun) do
     with_conn(cluster, &Xandra.run(&1, options, fun))
   end

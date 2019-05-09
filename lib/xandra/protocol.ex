@@ -42,7 +42,7 @@ defmodule Xandra.Protocol do
     end
   end
 
-  @spec encode_request(Frame.t(kind), term, Keyword.t()) :: Frame.t(kind) when kind: var
+  @spec encode_request(Frame.t(kind), term, keyword) :: Frame.t(kind) when kind: var
   def encode_request(frame, params, options \\ [])
 
   def encode_request(%Frame{kind: :options} = frame, nil, _options) do
