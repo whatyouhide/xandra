@@ -51,13 +51,11 @@ defmodule Xandra.Cluster.ControlConnection do
           {:ok, state}
         else
           {:error, _reason} = error ->
-            IO.inspect(error, label: "error in CC.connect")
             {:connect, :reconnect, state} = disconnect(error, state)
             {:backoff, @default_backoff, state}
         end
 
       {:error, reason} ->
-        IO.inspect(reason, label: "couldn't connect to #{address}:#{port}")
         {:backoff, @default_backoff, state}
     end
   end
