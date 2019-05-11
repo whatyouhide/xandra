@@ -350,6 +350,20 @@ defmodule Xandra.Protocol do
     [encode_value(:int, scale), encode_value(:varint, value)]
   end
 
+  # Decimal stores the decimal as "sign * coef * 10^exp", but Cassandra stores it
+  # as "coef * 10^(-1 * exp).
+  defp encode_value(:decimal, decimal) do
+    decimal_mod = Decimal
+
+    if decimal_mod.decimal?(decimal) do
+      %^decimal_mod{coef: coef, exp: exp, sign: sign} = decimal
+      encode_value(:decimal, {_value = sign * coef, _scale = -exp})
+    else
+      raise ArgumentError,
+            "can only encode %Decimal{} structs or {value, scale} tuples as decimals"
+    end
+  end
+
   defp encode_value(:double, value) when is_float(value) do
     <<value::64-float>>
   end
@@ -622,6 +636,10 @@ defmodule Xandra.Protocol do
     {:timestamp, [Keyword.get(options, :timestamp_format, :datetime)]}
   end
 
+  defp rewrite_type(:decimal, options) do
+    {:decimal, [Keyword.get(options, :decimal_format, :tuple)]}
+  end
+
   defp rewrite_type(type, _options), do: type
 
   defp decode_change_options(<<buffer::bits>>, "KEYSPACE") do
@@ -741,8 +759,19 @@ defmodule Xandra.Protocol do
   defp decode_value(<<value::16-bytes>>, :timeuuid), do: value
   defp decode_value(<<value::16-bytes>>, :uuid), do: value
 
-  defp decode_value(<<scale::32-signed, data::bits>>, :decimal) do
-    {decode_value(data, :varint), scale}
+  defp decode_value(<<scale::32-signed, data::bits>>, {:decimal, [format]}) do
+    value = decode_value(data, :varint)
+
+    case format do
+      :tuple ->
+        {value, scale}
+
+      :decimal ->
+        # Avoid compilation warnings by using a dynamic module name.
+        decimal_mod = Decimal
+        sign = if(value >= 0, do: 1, else: -1)
+        decimal_mod.new(sign, _coefficient = value, _exponent = -scale)
+    end
   end
 
   defp decode_value(<<count::32-signed, data::bits>>, {:list, [type]}) do

@@ -255,6 +255,65 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "timestamp") == -2_167_219_200
   end
 
+  test "decimal type", %{conn: conn} do
+    statement = """
+    CREATE TABLE decs (id int PRIMARY KEY, decimal decimal)
+    """
+
+    Xandra.execute!(conn, statement)
+
+    statement = """
+    INSERT INTO decs (id, decimal) VALUES (?, ?)
+    """
+
+    values = [
+      {"int", 1},
+      {"decimal", nil}
+    ]
+
+    Xandra.execute!(conn, statement, values)
+
+    page = Xandra.execute!(conn, "SELECT * FROM decs WHERE id = 1")
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 1
+    assert Map.fetch!(row, "decimal") == nil
+
+    # 95.343
+    decimal_as_tuple = {95343, 3}
+
+    values = [
+      {"int", 2},
+      {"decimal", decimal_as_tuple}
+    ]
+
+    Xandra.execute!(conn, statement, values)
+
+    page = Xandra.execute!(conn, "SELECT * FROM decs WHERE id = 2")
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 2
+    assert Map.fetch!(row, "decimal") == decimal_as_tuple
+
+    # 95.343
+    decimal_as_decimal = Decimal.new(1, 95343, -3)
+
+    values = [
+      {"int", 3},
+      {"decimal", decimal_as_decimal}
+    ]
+
+    Xandra.execute!(conn, statement, values)
+
+    page = Xandra.execute!(conn, "SELECT * FROM decs WHERE id = 3", [], decimal_format: :decimal)
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 3
+    assert Map.fetch!(row, "decimal") == Decimal.new(1, 95343, -3)
+
+    page = Xandra.execute!(conn, "SELECT * FROM decs WHERE id = 3", [], decimal_format: :tuple)
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 3
+    assert Map.fetch!(row, "decimal") == decimal_as_tuple
+  end
+
   test "collection datatypes", %{conn: conn} do
     statement = """
     CREATE TABLE collections
