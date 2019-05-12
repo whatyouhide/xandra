@@ -606,6 +606,13 @@ defmodule Xandra do
       a number of milliseconds from the Unix epoch, a datetime struct otherwise.
       Defaults to `:datetime`.
 
+    * `:decimal_format` - (`:decimal` or `:tuple`) controls the format in which
+      decimals are returned. When set to `:decimal`, a `Decimal` struct from the
+      [decimal](https://hex.pm/packages/decimal) package is returned. When set to
+      `:tuple`, a `{value, scale}` is returned such that the returned number is
+      `value * 10^(-1 * scale)`. Defaults to `:tuple`. If you use `:decimal`,
+      you'll have to add the `:decimal` dependency to your application explicitly.
+
   ## Parameters
 
   The `params` argument specifies parameters to use when executing the query; it
