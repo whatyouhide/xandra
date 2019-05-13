@@ -229,6 +229,19 @@ defmodule Xandra.Cluster do
 
   @doc """
   Same as `Xandra.run/3`.
+
+  The connection that is passed to `fun` is a Xandra connection, not a
+  cluster. This means that you should call `Xandra` functions on it.
+
+  ## Examples
+
+      query = "SELECT * FROM system_schema.keyspaces"
+
+      Xandra.Cluster.run(cluster, fn conn ->
+        prepared = Xandra.prepare!(conn, query)
+        Xandra.execute!(conn, prepared, _params = [])
+      end)
+
   """
   @spec run(cluster, keyword, (Xandra.conn() -> result)) :: result when result: var
   def run(cluster, options \\ [], fun) do
