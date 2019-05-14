@@ -62,7 +62,7 @@ jobs:
 
     - &test-encrypted
       stage: test encrypted
-      script: mix test --only encrypted
+      script: mix test --only encryption
       before_script:
         - docker-compose --file docker-compose.yml --file docker-compose.cassandra-encrypted.yml up -d
         - ./test/docker/health-check-services.sh
