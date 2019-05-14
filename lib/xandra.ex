@@ -873,7 +873,7 @@ defmodule Xandra do
 
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
     run(conn, options, fn conn ->
-      case DBConnection.execute(conn, batch, nil, options) do
+      case DBConnection.prepare_execute(conn, batch, nil, options) do
         {:ok, _query, %Error{reason: :unprepared}} ->
           with :ok <- reprepare_queries(conn, batch.queries, options) do
             execute(conn, batch, options)
@@ -892,7 +892,7 @@ defmodule Xandra do
   end
 
   defp execute_without_retrying(conn, %Simple{} = query, params, options) do
-    case DBConnection.execute(conn, query, params, options) do
+    case DBConnection.prepare_execute(conn, query, params, options) do
       {:ok, _query, %Error{} = error} ->
         {:error, error}
 
@@ -906,7 +906,7 @@ defmodule Xandra do
 
   defp execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
     run(conn, options, fn conn ->
-      case DBConnection.execute(conn, prepared, params, options) do
+      case DBConnection.prepare_execute(conn, prepared, params, options) do
         {:ok, _query, %Error{reason: :unprepared}} ->
           # We can ignore the newly returned prepared query since it will have the
           # same id of the query we are repreparing.
