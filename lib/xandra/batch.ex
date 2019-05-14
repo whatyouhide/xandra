@@ -98,10 +98,7 @@ defmodule Xandra.Batch do
 
     def encode(batch, nil, options) do
       batch = %{batch | queries: Enum.reverse(batch.queries)}
-
-      Frame.new(:batch)
-      |> Protocol.encode_request(batch, options)
-      |> Frame.encode(options[:compressor])
+      {Frame.new(:batch), batch}
     end
 
     def decode(batch, %Frame{} = frame, _options) do

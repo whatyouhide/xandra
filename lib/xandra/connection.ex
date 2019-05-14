@@ -136,9 +136,14 @@ defmodule Xandra.Connection do
   end
 
   @impl true
-  def handle_execute(query, payload, options, %__MODULE__{} = state) do
+  def handle_execute(_query, {frame, query}, options, %__MODULE__{} = state) do
     %{socket: socket, compressor: compressor, atom_keys?: atom_keys?} = state
     assert_valid_compressor(compressor, options[:compressor])
+
+    payload =
+      frame
+      |> Protocol.encode_request(query, options)
+      |> Frame.encode(options[:compressor])
 
     with :ok <- state.transport.send(socket, payload),
          {:ok, %Frame{} = frame} <- Utils.recv_frame(state.transport, socket, compressor) do
