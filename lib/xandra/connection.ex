@@ -3,7 +3,7 @@ defmodule Xandra.Connection do
 
   use DBConnection
 
-  alias Xandra.{ConnectionError, Prepared, Frame, Protocol}
+  alias Xandra.{Batch, ConnectionError, Prepared, Frame, Protocol, Simple}
   alias __MODULE__.Utils
 
   @default_timeout 5_000
@@ -133,6 +133,14 @@ defmodule Xandra.Connection do
             {:error, reason, state}
         end
     end
+  end
+
+  def handle_prepare(%Simple{} = simple, _options, state) do
+    {:ok, simple, state}
+  end
+
+  def handle_prepare(%Batch{} = batch, _options, state) do
+    {:ok, batch, state}
   end
 
   @impl true

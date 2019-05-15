@@ -12,7 +12,7 @@ defmodule Xandra.Simple do
     alias Xandra.{Frame, Protocol}
 
     def parse(query, _options) do
-      raise "cannot prepare #{inspect(query)}"
+      query
     end
 
     def encode(query, values, options) do
@@ -26,7 +26,7 @@ defmodule Xandra.Simple do
     end
 
     def describe(query, _options) do
-      raise "cannot prepare #{inspect(query)}"
+      query
     end
   end
 end
