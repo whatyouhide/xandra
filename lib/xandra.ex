@@ -907,7 +907,7 @@ defmodule Xandra do
 
   defp execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
     run(conn, options, fn conn ->
-      case DBConnection.prepare_execute(conn, prepared, params, options) do
+      case DBConnection.execute(conn, prepared, params, options) do
         {:ok, _query, %Error{reason: :unprepared}} ->
           # We can ignore the newly returned prepared query since it will have the
           # same id of the query we are repreparing.

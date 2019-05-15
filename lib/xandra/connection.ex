@@ -135,11 +135,11 @@ defmodule Xandra.Connection do
     end
   end
 
-  def handle_prepare(%Simple{} = simple, options, state) do
+  def handle_prepare(%Simple{} = simple, _options, state) do
     {:ok, simple, state}
   end
 
-  def handle_prepare(%Batch{} = batch, options, state) do
+  def handle_prepare(%Batch{} = batch, _options, state) do
     {:ok, batch, state}
   end
 
