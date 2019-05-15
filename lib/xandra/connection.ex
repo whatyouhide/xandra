@@ -46,8 +46,6 @@ defmodule Xandra.Connection do
           atom_keys?: atom_keys?
         }
 
-        IO.inspect(state)
-
         with {:ok, supported_options} <- Utils.request_options(transport, socket),
              :ok <- startup_connection(transport, socket, supported_options, compressor, options) do
           {:ok, state}
