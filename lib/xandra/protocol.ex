@@ -80,7 +80,7 @@ defmodule Xandra.Protocol do
     body = [
       <<byte_size(statement)::32>>,
       statement,
-      encode_params([], values, options, _skip_metadata? = false)
+      encode_params([], values, options, query.default_consistency, _skip_metadata? = false)
     ]
 
     %{frame | body: body}
@@ -98,7 +98,7 @@ defmodule Xandra.Protocol do
     body = [
       <<byte_size(id)::16>>,
       id,
-      encode_params(columns, values, options, skip_metadata?)
+      encode_params(columns, values, options, prepared.default_consistency, skip_metadata?)
     ]
 
     %{frame | body: body}
@@ -107,7 +107,7 @@ defmodule Xandra.Protocol do
   def encode_request(%Frame{kind: :batch} = frame, %Batch{} = batch, options) do
     %{queries: queries, type: type} = batch
 
-    consistency = Keyword.get(options, :consistency, :one)
+    consistency = Keyword.get(options, :consistency, batch.default_consistency)
     serial_consistency = Keyword.get(options, :serial_consistency)
     timestamp = Keyword.get(options, :timestamp)
 
@@ -189,8 +189,8 @@ defmodule Xandra.Protocol do
     end
   end
 
-  defp encode_params(columns, values, options, skip_metadata?) do
-    consistency = Keyword.get(options, :consistency, :one)
+  defp encode_params(columns, values, options, default_consistency, skip_metadata?) do
+    consistency = Keyword.get(options, :consistency, default_consistency)
     page_size = Keyword.get(options, :page_size, 10_000)
     paging_state = Keyword.get(options, :paging_state)
     serial_consistency = Keyword.get(options, :serial_consistency)

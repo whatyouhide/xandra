@@ -3,14 +3,15 @@ defmodule Xandra.Prepared do
   A data structure used to internally represent prepared queries.
   """
 
-  defstruct [:statement, :values, :id, :bound_columns, :result_columns]
+  defstruct [:statement, :values, :id, :bound_columns, :result_columns, :default_consistency]
 
   @opaque t :: %__MODULE__{
             statement: Xandra.statement(),
             values: Xandra.values() | nil,
             id: binary | nil,
             bound_columns: list | nil,
-            result_columns: list | nil
+            result_columns: list | nil,
+            default_consistency: atom | nil
           }
 
   @doc false

@@ -176,7 +176,8 @@ defmodule Xandra do
   @default_port 9042
 
   @default_start_options [
-    idle_interval: 30_000
+    idle_interval: 30_000,
+    default_consistency: :one
   ]
 
   @doc """
@@ -223,6 +224,11 @@ defmodule Xandra do
       transport. If `:ssl` is `true`, then the transport is SSL (see
       the Erlang `:ssl` module) otherwise it's TCP (see the `:gen_tcp` Erlang
       module).
+
+    * `:default_consistency` - (atom) the default consistency to set for
+      all queries. For a list of values, look at the `:consistency` option
+      in `execute/4`. Can be overridden through the `:consistency` option in
+      `execute/4`. Defaults to `:one`.
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of five connections, you can use the `:pool_size`
