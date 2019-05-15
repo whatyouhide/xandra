@@ -172,9 +172,10 @@ defmodule Xandra do
   @type start_option :: xandra_start_option | db_connection_start_option
   @type start_options :: [start_option]
 
+  @default_address '127.0.0.1'
   @default_port 9042
+
   @default_start_options [
-    nodes: ["127.0.0.1"],
     idle_interval: 30_000
   ]
 
@@ -277,7 +278,7 @@ defmodule Xandra do
     options =
       @default_start_options
       |> Keyword.merge(options)
-      |> parse_start_options()
+      |> convert_nodes_options_to_address_and_port()
       |> Keyword.put(:pool, DBConnection.ConnectionPool)
       |> Keyword.put(:prepared_cache, Prepared.Cache.new())
 
@@ -938,19 +939,40 @@ defmodule Xandra do
     end)
   end
 
-  defp parse_start_options(options) do
-    Enum.flat_map(options, fn
-      {:nodes, [string]} ->
-        {address, port} = parse_node(string)
-        [address: address, port: port]
+  # If we have :address and :port, we raise if there's :nodes and otherwise
+  # leave it like that. If we have :nodes, we validate it and turn it into
+  # :address and :port. If we have none, we fill in :address and :port with
+  # defaults.
+  defp convert_nodes_options_to_address_and_port(options) do
+    {nodes, options} = Keyword.pop(options, :nodes)
+    address_and_port? = Keyword.has_key?(options, :address) and Keyword.has_key?(options, :port)
 
-      {:nodes, _nodes} ->
-        raise ArgumentError,
-              "multi-node use requires Xandra.Cluster instead of Xandra"
+    cond do
+      nodes && address_and_port? ->
+        raise ArgumentError, "passing :nodes alongside :address/:port is not supported"
 
-      {_key, _value} = option ->
-        [option]
-    end)
+      address_and_port? ->
+        options
+
+      nodes ->
+        {address, port} = parse_nodes_option(nodes)
+        Keyword.merge(options, address: address, port: port)
+
+      true ->
+        Keyword.merge(options, address: @default_address, port: @default_port)
+    end
+  end
+
+  defp parse_nodes_option([node]) do
+    parse_node(node)
+  end
+
+  defp parse_nodes_option([]) do
+    raise ArgumentError, "the :nodes option can't be an empty list"
+  end
+
+  defp parse_nodes_option(_nodes) do
+    raise ArgumentError, "multi-node use requires Xandra.Cluster instead of Xandra"
   end
 
   defp parse_node(string) do
