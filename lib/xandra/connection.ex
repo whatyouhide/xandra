@@ -15,6 +15,7 @@ defmodule Xandra.Connection do
     :socket,
     :prepared_cache,
     :compressor,
+    :default_consistency,
     :atom_keys?
   ]
 
@@ -24,6 +25,7 @@ defmodule Xandra.Connection do
     port = Keyword.fetch!(options, :port)
     prepared_cache = Keyword.fetch!(options, :prepared_cache)
     compressor = Keyword.get(options, :compressor)
+    default_consistency = Keyword.fetch!(options, :default_consistency)
     atom_keys? = Keyword.get(options, :atom_keys, false)
     transport = if(options[:ssl], do: :ssl, else: :gen_tcp)
 
@@ -40,6 +42,7 @@ defmodule Xandra.Connection do
           socket: socket,
           prepared_cache: prepared_cache,
           compressor: compressor,
+          default_consistency: default_consistency,
           atom_keys?: atom_keys?
         }
 
@@ -105,6 +108,8 @@ defmodule Xandra.Connection do
 
   @impl true
   def handle_prepare(%Prepared{} = prepared, options, %__MODULE__{socket: socket} = state) do
+    prepared = %{prepared | default_consistency: state.default_consistency}
+
     force? = Keyword.get(options, :force, false)
     compressor = assert_valid_compressor(state.compressor, options[:compressor])
     transport = state.transport
@@ -136,10 +141,12 @@ defmodule Xandra.Connection do
   end
 
   def handle_prepare(%Simple{} = simple, _options, state) do
+    simple = %{simple | default_consistency: state.default_consistency}
     {:ok, simple, state}
   end
 
   def handle_prepare(%Batch{} = batch, _options, state) do
+    batch = %{batch | default_consistency: state.default_consistency}
     {:ok, batch, state}
   end
 

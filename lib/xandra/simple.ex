@@ -1,11 +1,12 @@
 defmodule Xandra.Simple do
   @moduledoc false
 
-  defstruct [:statement, :values]
+  defstruct [:statement, :values, :default_consistency]
 
   @opaque t :: %__MODULE__{
             statement: Xandra.statement(),
-            values: Xandra.values() | nil
+            values: Xandra.values() | nil,
+            default_consistency: atom() | nil
           }
 
   defimpl DBConnection.Query do
