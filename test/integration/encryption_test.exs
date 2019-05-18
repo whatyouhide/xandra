@@ -1,5 +1,10 @@
 defmodule EncryptionTest do
-  use XandraTest.IntegrationCase, start_options: [ssl: true]
+  start_options = [
+    nodes: ["127.0.0.1:9044"],
+    ssl: true
+  ]
+
+  use XandraTest.IntegrationCase, start_options: start_options
 
   @moduletag :encryption
 

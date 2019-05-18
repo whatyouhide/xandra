@@ -2,11 +2,7 @@ ARG CASSANDRA_VERSION=latest
 
 FROM cassandra:$CASSANDRA_VERSION
 
-ARG CASSANDRA_VERSION
 ARG AUTHENTICATION=false
-
-RUN echo $CASSANDRA_VERSION
-RUN echo $AUTHENTICATION
 
 RUN if [ "$AUTHENTICATION" = true ]; then \
       sed -i -e "s/\(authenticator: \)AllowAllAuthenticator/\1PasswordAuthenticator/" /etc/cassandra/cassandra.yaml; \

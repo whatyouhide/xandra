@@ -1,4 +1,0 @@
-FROM cassandra:latest
-
-COPY ./cassandra-encrypted/cassandra.yaml /etc/cassandra/cassandra.yaml
-COPY ./cassandra-encrypted/.keystore /conf/.keystore

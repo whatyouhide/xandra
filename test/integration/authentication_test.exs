@@ -1,6 +1,10 @@
 defmodule AuthenticationTest do
   auth_options = [username: "cassandra", password: "cassandra"]
-  start_options = [authentication: {Xandra.Authenticator.Password, auth_options}]
+
+  start_options = [
+    authentication: {Xandra.Authenticator.Password, auth_options},
+    nodes: ["127.0.0.1:9043"]
+  ]
 
   use XandraTest.IntegrationCase, start_options: start_options
 
