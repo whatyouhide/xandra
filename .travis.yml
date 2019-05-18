@@ -30,7 +30,7 @@ jobs:
 
     - &test-scylla
       stage: test scylla
-      script: mix test --exclude cassandra_specific --exclude encryption
+      script: mix test.scylladb
       before_script:
         - docker-compose --file docker-compose.scylladb.yml up -d
         - ./test/docker/health-check-services.sh

@@ -16,6 +16,10 @@ defmodule Xandra.Mixfile do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
 
+      # Task aliases
+      aliases: ["test.scylladb": "test --exclude encryption --exclude cassandra_specific"],
+      preferred_cli_env: ["test.scylladb": :test],
+
       # Hex
       package: package(),
       description: @description,
