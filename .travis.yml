@@ -54,4 +54,3 @@ stages:
   - check formatted
   - test
   - test scylla
-  - test encrypted
