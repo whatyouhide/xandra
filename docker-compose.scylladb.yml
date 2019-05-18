@@ -1,0 +1,37 @@
+version: '3'
+
+services:
+  scylladb:
+    build:
+      context: ./test/docker
+      dockerfile: scylladb.dockerfile
+    ports:
+      - "9042:9042"
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status"]
+      interval: 20s
+      timeout: 10s
+      retries: 12
+    logging:
+      driver: "json-file"
+      options:
+        max-size: 50m
+
+  scylladb_with_auth:
+    build:
+      context: ./test/docker
+      dockerfile: scylladb.dockerfile
+      args:
+        AUTHENTICATION: "true"
+    ports:
+      - "9043:9042"
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status"]
+      interval: 20s
+      timeout: 10s
+      retries: 12
+    logging:
+      driver: "json-file"
+      options:
+        max-size: 50m
+

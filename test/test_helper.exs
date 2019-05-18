@@ -1,8 +1,4 @@
-if System.get_env("AUTHENTICATION") == "true" do
-  ExUnit.start(exclude: [:test], include: [:authentication])
-else
-  ExUnit.start(exclude: [:encryption])
-end
+ExUnit.start()
 
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
