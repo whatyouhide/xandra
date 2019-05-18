@@ -111,4 +111,5 @@ Xandra is released under the ISC license, see the [LICENSE](LICENSE) file.
 [cassandra]: http://cassandra.apache.org
 [production-use]: http://tech.forzafootball.com/blog/the-pursuit-of-instant-pushes
 [docker]: https://www.docker.com
+[docker-compose]: https://docs.docker.com/compose/
 [scylladb]: https://www.scylladb.com/
