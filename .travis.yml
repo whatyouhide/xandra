@@ -10,10 +10,6 @@ otp_release: '21.2'
 
 elixir: '1.8'
 
-env:
-  global:
-    - DOCKER_COMPOSE_VERSION=1.23.1
-
 jobs:
   include:
     - &test
