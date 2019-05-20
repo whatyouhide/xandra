@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.11.0
+
+* Add `Xandra.child_spec/1`.
+* Add encryption support through the `:encryption` option.
+* Add the `:decimal_format` option to return decimals as tuples or [`Decimal`](https://github.com/ericmj/decimal) structs. If you want to use `decimal_format: :decimal` you have to specify [decimal](https://github.com/ericmj/decimal) as a dependency.
+* Add the `:default_consistency` option to provide a connection-wide default consistency.
+* Add the `:uuid_format` and `:timeuuid_format` options to return UUIDs as binaries or human-readable strings.
+
+__Breaking changes__:
+
+* Remove support for the `:pool` option in Xandra. Now the pool of connections is always a pool with size configurable by `:pool_size`.
+* Add `Xandra.Cluster` as a separate module with an API that mirrors `Xandra`, instead of as a DBConnection pool.
+* Bump the Elixir requirement to ~> 1.6.
+
 ## v0.10.0
 
 * Added the `:atom_keys` option to return and accept column names as atoms.
