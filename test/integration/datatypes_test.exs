@@ -255,7 +255,7 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "timestamp") == -2_167_219_200
   end
 
-  test "decimal type", %{conn: conn} do
+  test "decimal type with formats", %{conn: conn} do
     statement = """
     CREATE TABLE decs (id int PRIMARY KEY, decimal decimal)
     """
@@ -312,6 +312,54 @@ defmodule DataTypesTest do
     assert [row] = Enum.to_list(page)
     assert Map.fetch!(row, "id") == 3
     assert Map.fetch!(row, "decimal") == decimal_as_tuple
+  end
+
+  test "uuid/timeuuid types with format", %{conn: conn} do
+    statement = """
+    CREATE TABLE uuids (id int PRIMARY KEY, uuid uuid, timeuuid timeuuid)
+    """
+
+    Xandra.execute!(conn, statement)
+
+    statement = """
+    INSERT INTO uuids (id, uuid, timeuuid) VALUES (?, ?, ?)
+    """
+
+    uuid_as_binary = <<0, 182, 145, 128, 208, 225, 17, 226, 139, 139, 8, 0, 32, 12, 154, 102>>
+    timeuuid_as_binary = <<0, 182, 145, 128, 208, 225, 17, 226, 139, 139, 8, 0, 32, 12, 154, 102>>
+
+    values = [
+      {"int", 1},
+      {"uuid", uuid_as_binary},
+      {"timeuuid", timeuuid_as_binary}
+    ]
+
+    Xandra.execute!(conn, statement, values)
+
+    options = [uuid_format: :binary, timeuuid_format: :binary]
+    page = Xandra.execute!(conn, "SELECT * FROM uuids WHERE id = 1", [], options)
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 1
+    assert Map.fetch!(row, "uuid") == uuid_as_binary
+    assert Map.fetch!(row, "timeuuid") == timeuuid_as_binary
+
+    uuid_as_string = "fe2b4360-28c6-11e2-81c1-0800200c9a66"
+    timeuuid_as_string = "fe2b4360-28c6-11e2-81c1-0800200c9a67"
+
+    values = [
+      {"int", 2},
+      {"uuid", uuid_as_string},
+      {"timeuuid", timeuuid_as_string}
+    ]
+
+    Xandra.execute!(conn, statement, values)
+
+    options = [uuid_format: :string, timeuuid_format: :string]
+    page = Xandra.execute!(conn, "SELECT * FROM uuids WHERE id = 2", [], options)
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 2
+    assert Map.fetch!(row, "uuid") == uuid_as_string
+    assert Map.fetch!(row, "timeuuid") == timeuuid_as_string
   end
 
   test "collection datatypes", %{conn: conn} do

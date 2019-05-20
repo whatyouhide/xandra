@@ -494,6 +494,11 @@ defmodule Xandra.Protocol do
     Base.decode16!(value, case: :mixed)
   end
 
+  @compile {:inline, encode_base16: 1}
+  defp encode_base16(value) do
+    Base.encode16(value, case: :lower)
+  end
+
   error_codes = %{
     0x0000 => :server_failure,
     0x000A => :protocol_violation,
@@ -640,6 +645,14 @@ defmodule Xandra.Protocol do
     {:decimal, [Keyword.get(options, :decimal_format, :tuple)]}
   end
 
+  defp rewrite_type(:uuid, options) do
+    {:uuid, [Keyword.get(options, :uuid_format, :string)]}
+  end
+
+  defp rewrite_type(:timeuuid, options) do
+    {:timeuuid, [Keyword.get(options, :timeuuid_format, :string)]}
+  end
+
   defp rewrite_type(type, _options), do: type
 
   defp decode_change_options(<<buffer::bits>>, "KEYSPACE") do
@@ -756,8 +769,26 @@ defmodule Xandra.Protocol do
     {n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15, n16}
   end
 
-  defp decode_value(<<value::16-bytes>>, :timeuuid), do: value
-  defp decode_value(<<value::16-bytes>>, :uuid), do: value
+  defp decode_value(<<value::16-bytes>>, {uuid_type, [format]})
+       when uuid_type in [:uuid, :timeuuid] do
+    case format do
+      :binary ->
+        value
+
+      :string ->
+        <<part1::32, part2::16, part3::16, part4::16, part5::48>> = value
+
+        encode_base16(<<part1::32>>) <>
+          "-" <>
+          encode_base16(<<part2::16>>) <>
+          "-" <>
+          encode_base16(<<part3::16>>) <>
+          "-" <>
+          encode_base16(<<part4::16>>) <>
+          "-" <>
+          encode_base16(<<part5::48>>)
+    end
+  end
 
   defp decode_value(<<scale::32-signed, data::bits>>, {:decimal, [format]}) do
     value = decode_value(data, :varint)

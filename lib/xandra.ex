@@ -620,6 +620,16 @@ defmodule Xandra do
       `value * 10^(-1 * scale)`. Defaults to `:tuple`. If you use `:decimal`,
       you'll have to add the `:decimal` dependency to your application explicitly.
 
+    * `:uuid_format` - (`:binary` or `:string`) controls the format in which UUIDs
+      are returned. When set to `:binary`, UUIDs are returned as raw binaries with
+      16 bytes in it, such as: `<<0, 182, 145, 128, 208, 225, 17, 226, 139, 139, 8,
+      0, 32, 12, 154, 102>>`. When set to `:string`, UUIDs are returned in the
+      human-readable format such as `"fe2b4360-28c6-11e2-81c1-0800200c9a66"`.
+      Defaults to `:string`.
+
+    * `:timeuuid_format` - (`:binary` or `:string`) same as the `:uuid_format`
+      option but for values of the timeuuid type. Defaults to `:string`.
+
   ## Parameters
 
   The `params` argument specifies parameters to use when executing the query; it
