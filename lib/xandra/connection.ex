@@ -27,7 +27,7 @@ defmodule Xandra.Connection do
     compressor = Keyword.get(options, :compressor)
     default_consistency = Keyword.fetch!(options, :default_consistency)
     atom_keys? = Keyword.get(options, :atom_keys, false)
-    transport = if(options[:ssl], do: :ssl, else: :gen_tcp)
+    transport = if(options[:encryption], do: :ssl, else: :gen_tcp)
 
     transport_options =
       options

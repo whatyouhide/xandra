@@ -36,7 +36,7 @@ defmodule Xandra.Cluster.ControlConnection do
       address: address,
       port: port,
       options: options,
-      transport: if(options[:ssl], do: :ssl, else: :gen_tcp),
+      transport: if(options[:encryption], do: :ssl, else: :gen_tcp),
       transport_options: transport_options
     }
 

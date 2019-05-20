@@ -216,12 +216,12 @@ defmodule Xandra do
       pool. Defaults to `1`, which means that a single connection is
       started.
 
-    * `:ssl` - (boolean) whether to connect to Cassandra using SSL. If you
+    * `:encryption` - (boolean) whether to connect to Cassandra using SSL. If you
       want to set up SSL options, see the `:transport_options` option below.
       Defaults to `false`.
 
     * `:transport_options` - (keyword) options to forward to the socket
-      transport. If `:ssl` is `true`, then the transport is SSL (see
+      transport. If `:encryption` is `true`, then the transport is SSL (see
       the Erlang `:ssl` module) otherwise it's TCP (see the `:gen_tcp` Erlang
       module).
 
