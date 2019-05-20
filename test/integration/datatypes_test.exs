@@ -125,15 +125,9 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "int") == -42
     assert Map.fetch!(row, "smallint") == -33
     assert Map.fetch!(row, "text") == "эликсир"
-
-    assert Map.fetch!(row, "timeuuid") ==
-             <<254, 43, 67, 96, 40, 198, 17, 226, 129, 193, 8, 0, 32, 12, 154, 102>>
-
+    assert Map.fetch!(row, "timeuuid") == "fe2b4360-28c6-11e2-81c1-0800200c9a66"
     assert Map.fetch!(row, "tinyint") == -21
-
-    assert Map.fetch!(row, "uuid") ==
-             <<0, 182, 145, 128, 208, 225, 17, 226, 139, 139, 8, 0, 32, 12, 154, 102>>
-
+    assert Map.fetch!(row, "uuid") == "00b69180-d0e1-11e2-8b8b-0800200c9a66"
     assert Map.fetch!(row, "varchar") == "тоже эликсир"
     assert Map.fetch!(row, "varint") == -6_789_065_678_192_312_391_879_827_349
   end
