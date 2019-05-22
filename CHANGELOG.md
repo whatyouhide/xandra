@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.10.1
+
+* Require Elixir 1.4 and fix compilation warnings.
+
 ## v0.10.0
 
 * Added the `:atom_keys` option to return and accept column names as atoms.
