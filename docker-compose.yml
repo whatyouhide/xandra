@@ -59,3 +59,41 @@ services:
       driver: "json-file"
       options:
         max-size: 50m
+
+  cassandra_cluster_seed:
+    image: cassandra
+    container_name: cassandra_cluster_seed
+    ports:
+      - 19042:9042
+      - 7199:7199
+    environment:
+      - HEAP_NEWSIZE=1M
+      - MAX_HEAP_SIZE=200M
+
+  cassandra_cluster_1:
+    image: cassandra
+    container_name: cassandra_cluster_1
+    ports:
+      - 19043:9042
+    links:
+      - cassandra_cluster_seed:seed
+    environment:
+      - CASSANDRA_SEEDS=seed
+      - HEAP_NEWSIZE=1M
+      - MAX_HEAP_SIZE=200M
+    depends_on:
+      - cassandra_cluster_seed
+
+  cassandra_cluster_2:
+    image: cassandra
+    container_name: cassandra_cluster_2
+    ports:
+      - 19044:9042
+    links:
+      - cassandra_cluster_seed:seed
+    environment:
+      - CASSANDRA_SEEDS=seed
+      - HEAP_NEWSIZE=1M
+      - MAX_HEAP_SIZE=200M
+    depends_on:
+      - cassandra_cluster_seed
