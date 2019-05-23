@@ -73,8 +73,7 @@ defmodule Xandra.Cluster.ControlConnection do
             {:backoff, @default_backoff, state}
         end
 
-      {:error, reason} ->
-        _ = Logger.warn("Couldn't connect to #{:inet.ntoa(address)}:#{port}: #{inspect(reason)}")
+      {:error, _reason} ->
         {:backoff, @default_backoff, state}
     end
   end
@@ -95,12 +94,7 @@ defmodule Xandra.Cluster.ControlConnection do
     {:noreply, report_event(state)}
   end
 
-  def disconnect({:error, reason}, %__MODULE__{} = state) do
-    _ =
-      Logger.warn(
-        "Disconnecting from #{inspect(state.address)}:#{state.port}: #{inspect(reason)}"
-      )
-
+  def disconnect({:error, _reason}, %__MODULE__{} = state) do
     state.transport.close(state.socket)
     {:connect, :reconnect, %{state | socket: nil, buffer: <<>>}}
   end

@@ -303,8 +303,7 @@ defmodule Xandra.Cluster do
 
   def handle_cast({:activate, node_ref, address, port}, %__MODULE__{} = state) do
     _ = Logger.debug("Control connection for #{:inet.ntoa(address)}:#{port} is up")
-    state = start_pool(state, node_ref, address, port)
-    {:noreply, state}
+    {:noreply, start_pool(state, node_ref, address, port)}
   end
 
   def handle_cast({:discovered_peers, peers}, %__MODULE__{} = state) do

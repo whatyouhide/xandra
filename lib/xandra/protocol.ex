@@ -13,7 +13,7 @@ defmodule Xandra.Protocol do
     TypeParser
   }
 
-  alias Xandra.Cluster.{StatusChange, TopologyChange}
+  alias Xandra.Cluster.StatusChange
 
   @unix_epoch_days 0x80000000
 
@@ -552,18 +552,10 @@ defmodule Xandra.Protocol do
 
   def decode_response(%Frame{kind: :event, body: body}, nil, _options) do
     decode_string(event <- body)
-
-    case event do
-      "STATUS_CHANGE" ->
-        decode_string(effect <- body)
-        {address, port, <<>>} = decode_inet(body)
-        %StatusChange{effect: effect, address: address, port: port}
-
-      "TOPOLOGY_CHANGE" ->
-        decode_string(effect <- body)
-        {address, port, <<>>} = decode_inet(body)
-        %TopologyChange{effect: effect, address: address, port: port}
-    end
+    "STATUS_CHANGE" = event
+    decode_string(effect <- body)
+    {address, port, <<>>} = decode_inet(body)
+    %StatusChange{effect: effect, address: address, port: port}
   end
 
   def decode_response(
