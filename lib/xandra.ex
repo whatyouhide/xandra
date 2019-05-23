@@ -116,6 +116,20 @@ defmodule Xandra do
       profile
       #=> %{"username" => "bperry", "full_name" => %{"first_name" => "Britta", "last_name" => "Perry"}}
 
+  ### Values
+
+  Xandra supports two special value types: `nil` and `:unset`. Using `nil` explicitly inserts a
+  `null` value into the Cassandra table. This is useful to delete a value while inserting. Note
+  however that explicitly inserting `null` values into Cassandra creates so called tombstones
+  which negatively affects performance and resource utilisation and is thus usually not
+  recommended.
+
+  The `:unset` value is a special value that allows to leave the value of a parametrized query
+  unset, telling Cassandra not to insert anything for the given field. In contrast to explicit
+  `null` values no tombstone is created for this field. This is useful for prepared queries with
+  optional fields. The `:unset` value requires Cassandra native protocol v4, available since
+  Cassandra `2.2.x`.
+
   ## Reconnections
 
   Thanks to the `DBConnection` library, Xandra is able to handle connection
@@ -174,12 +188,14 @@ defmodule Xandra do
   @type error :: Error.t() | ConnectionError.t()
   @type result :: Xandra.Void.t() | Page.t() | Xandra.SetKeyspace.t() | Xandra.SchemaChange.t()
   @type conn :: DBConnection.conn()
+  @type protocol_version :: :v3 | :v4
 
   @type xandra_start_option ::
           {:nodes, [String.t()]}
           | {:compressor, module}
           | {:authentication, {module, keyword}}
           | {:atom_keys, boolean}
+          | protocol_version()
 
   @type db_connection_start_option :: {atom(), any}
   @type start_option :: xandra_start_option | db_connection_start_option
@@ -243,6 +259,9 @@ defmodule Xandra do
       in `execute/4`. Can be overridden through the `:consistency` option in
       `execute/4`. Defaults to `:one`.
 
+    * `:protocol_version` - (v3|v4) the version of the Cassandra native protocol to use.
+      Defaults to `:v3`, available are versions `:v3` and `:v4`.
+
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of five connections, you can use the `:pool_size`
   option:
@@ -294,13 +313,19 @@ defmodule Xandra do
   """
   @spec start_link(start_options) :: GenServer.on_start()
   def start_link(options \\ []) when is_list(options) do
+    protocol_module =
+      case Keyword.get(options, :protocol_version, :v3) do
+        :v3 -> Xandra.Protocol.V3
+        :v4 -> Xandra.Protocol.V4
+      end
+
     options =
       @default_start_options
       |> Keyword.merge(options)
       |> convert_nodes_options_to_address_and_port()
       |> Keyword.put(:pool, DBConnection.ConnectionPool)
       |> Keyword.put(:prepared_cache, Prepared.Cache.new())
-      |> Keyword.put(:protocol_module, Xandra.Protocol)
+      |> Keyword.put(:protocol_module, protocol_module)
 
     DBConnection.start_link(Connection, options)
   end

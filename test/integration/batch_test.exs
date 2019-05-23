@@ -55,6 +55,46 @@ defmodule BatchTest do
            ]
   end
 
+  @tag protocol_version: :v4
+  test "batch of type \"unlogged\" producing warning in v4", %{conn: conn} do
+    # batches spanning more partitions than `unlogged_batch_across_partitions_warn_threshold`
+    #   (default: 10) generate a warning
+    batch =
+      Batch.new(:unlogged)
+      |> Batch.add("INSERT INTO users (id, name) VALUES (1, 'Rick')")
+      |> Batch.add("INSERT INTO users (id, name) VALUES (2, 'Morty')")
+      |> Batch.add("INSERT INTO users (id, name) VALUES (3, 'Beth')")
+      |> Batch.add("INSERT INTO users (id, name) VALUES (4, 'Jerry')")
+      |> Batch.add("INSERT INTO users (id, name) VALUES (5, 'Summer')")
+      |> Batch.add("INSERT INTO users (id, name) VALUES (6, 'Jessica')")
+      |> Batch.add("INSERT INTO users (id, name) VALUES (7, 'Gene')")
+      |> Batch.add("INSERT INTO users (id, name) VALUES (8, 'Feratu')")
+      |> Batch.add("INSERT INTO users (id, name) VALUES (9, 'Brad')")
+      |> Batch.add("INSERT INTO users (id, name) VALUES (10, 'Ethan')")
+      |> Batch.add("INSERT INTO users (id, name) VALUES (11, 'Nancy')")
+
+    {:ok, %Void{}} = Xandra.execute(conn, batch)
+
+    result =
+      Xandra.execute!(conn, "SELECT name FROM users")
+      |> Enum.flat_map(&Map.values/1)
+      |> Enum.sort()
+
+    assert result == [
+             "Beth",
+             "Brad",
+             "Ethan",
+             "Feratu",
+             "Gene",
+             "Jerry",
+             "Jessica",
+             "Morty",
+             "Nancy",
+             "Rick",
+             "Summer"
+           ]
+  end
+
   test "using a default timestamp for the batch", %{conn: conn} do
     timestamp = System.system_time(:second) - (_10_minutes = 600)
 

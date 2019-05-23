@@ -1,7 +1,7 @@
 defmodule Xandra.Connection.Utils do
   @moduledoc false
 
-  alias Xandra.{ConnectionError, Frame}
+  alias Xandra.{ConnectionError, Error, Frame}
 
   @spec recv_frame(:gen_tcp | :ssl, term, module, nil | module) ::
           {:ok, Frame.t()} | {:error, :closed | :inet.posix()}
@@ -35,6 +35,9 @@ defmodule Xandra.Connection.Utils do
     else
       {:error, reason} ->
         {:error, ConnectionError.new("request options", reason)}
+
+      %Error{} = error ->
+        {:error, ConnectionError.new("request options", error)}
     end
   end
 
@@ -75,6 +78,15 @@ defmodule Xandra.Connection.Utils do
             compressor,
             options
           )
+
+        # %Frame{kind: :error} ->
+        #   # errors like
+        #   # %Xandra.Error{
+        #   #   message: "Invalid message version. Got 4/v4 but previous messages on this connection had version 3/v3",
+        #   #   reason: :protocol_violation
+        #   # }
+        #   error = %Error{} = protocol_module.decode_response(frame)
+        #   raise error
 
         _ ->
           raise "protocol violation, got unexpected frame: #{inspect(frame)}"
