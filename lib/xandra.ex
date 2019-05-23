@@ -230,6 +230,9 @@ defmodule Xandra do
       in `execute/4`. Can be overridden through the `:consistency` option in
       `execute/4`. Defaults to `:one`.
 
+    * `:protocol_version` - (v3) the version of the Cassandra native protocol to use.
+      Defaults to `:v3` (the only currently supported version).
+
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of five connections, you can use the `:pool_size`
   option:
@@ -281,12 +284,18 @@ defmodule Xandra do
   """
   @spec start_link(start_options) :: GenServer.on_start()
   def start_link(options \\ []) when is_list(options) do
+    protocol_module =
+      case Keyword.get(options, :protocol_version, :v3) do
+        :v3 -> Xandra.Protocol
+      end
+
     options =
       @default_start_options
       |> Keyword.merge(options)
       |> convert_nodes_options_to_address_and_port()
       |> Keyword.put(:pool, DBConnection.ConnectionPool)
       |> Keyword.put(:prepared_cache, Prepared.Cache.new())
+      |> Keyword.put(:protocol_module, protocol_module)
 
     DBConnection.start_link(Connection, options)
   end

@@ -173,6 +173,13 @@ defmodule Xandra.Cluster do
   def start_link(options) do
     options = Keyword.merge(@default_start_options, options)
 
+    protocol_module =
+      case Keyword.get(options, :protocol_version, :v3) do
+        :v3 -> Xandra.Protocol
+      end
+
+    options = Keyword.put(options, :protocol_module, protocol_module)
+
     {load_balancing, options} = Keyword.pop(options, :load_balancing, @default_load_balancing)
     {nodes, options} = Keyword.pop(options, :nodes)
     {autodiscovery?, options} = Keyword.pop(options, :autodiscovery)

@@ -3,7 +3,15 @@ defmodule Xandra.Prepared do
   A data structure used to internally represent prepared queries.
   """
 
-  defstruct [:statement, :values, :id, :bound_columns, :result_columns, :default_consistency]
+  defstruct [
+    :statement,
+    :values,
+    :id,
+    :bound_columns,
+    :result_columns,
+    :default_consistency,
+    :protocol_module
+  ]
 
   @opaque t :: %__MODULE__{
             statement: Xandra.statement(),
@@ -11,7 +19,8 @@ defmodule Xandra.Prepared do
             id: binary | nil,
             bound_columns: list | nil,
             result_columns: list | nil,
-            default_consistency: atom | nil
+            default_consistency: atom | nil,
+            protocol_module: module | nil
           }
 
   @doc false
@@ -31,7 +40,7 @@ defmodule Xandra.Prepared do
   end
 
   defimpl DBConnection.Query do
-    alias Xandra.{Frame, Protocol}
+    alias Xandra.Frame
 
     def parse(prepared, _options) do
       prepared
@@ -43,12 +52,12 @@ defmodule Xandra.Prepared do
 
     def encode(prepared, values, options) when is_list(values) do
       Frame.new(:execute)
-      |> Protocol.encode_request(%{prepared | values: values}, options)
-      |> Frame.encode(options[:compressor])
+      |> prepared.protocol_module.encode_request(%{prepared | values: values}, options)
+      |> Frame.encode(prepared.protocol_module, options[:compressor])
     end
 
     def decode(prepared, %Frame{} = frame, options) do
-      Protocol.decode_response(frame, prepared, options)
+      prepared.protocol_module.decode_response(frame, prepared, options)
     end
 
     def describe(prepared, _options) do

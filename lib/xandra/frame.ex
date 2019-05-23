@@ -48,8 +48,9 @@ defmodule Xandra.Frame do
     length
   end
 
-  @spec encode(t(kind), nil | module) :: iodata
-  def encode(%__MODULE__{} = frame, compressor \\ nil) when is_atom(compressor) do
+  @spec encode(t(kind), module, nil | module) :: iodata
+  def encode(%__MODULE__{} = frame, _protocol_module, compressor \\ nil)
+      when is_atom(compressor) do
     %{tracing: tracing?, kind: kind, stream_id: stream_id, body: body} = frame
     body = maybe_compress_body(compressor, body)
 
@@ -63,13 +64,24 @@ defmodule Xandra.Frame do
     ]
   end
 
-  @spec decode(binary, binary, nil | module) :: t(kind)
-  def decode(header, body \\ <<>>, compressor \\ nil)
+  @spec decode(binary, binary, module, nil | module) :: t(kind)
+  def decode(header, body \\ <<>>, protocol_module, compressor \\ nil)
       when is_binary(body) and is_atom(compressor) do
-    <<@response_version, flags, _stream_id::16, opcode, _::32>> = header
-    kind = Map.fetch!(@response_opcodes, opcode)
-    body = maybe_decompress_body(flag_set?(flags, _compression = 0x01), compressor, body)
-    %__MODULE__{kind: kind, body: body}
+    <<response_version, flags, _stream_id::16, opcode, _::32>> = header
+
+    if assert_correct_response_version(response_version, protocol_module) do
+      kind = Map.fetch!(@response_opcodes, opcode)
+      body = maybe_decompress_body(flag_set?(flags, _compression = 0x01), compressor, body)
+      {:ok, %__MODULE__{kind: kind, body: body}}
+    else
+      {:error,
+       "you requested protocol v#{protocol_module} " <>
+         "but server answered with protocol v#{inspect(response_version, base: :hex)}"}
+    end
+  end
+
+  def assert_correct_response_version(response_version, _protocol_module) do
+    @response_version == response_version
   end
 
   defp encode_flags(_compressor = nil, _tracing? = false), do: 0x00

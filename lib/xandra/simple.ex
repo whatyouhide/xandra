@@ -1,16 +1,17 @@
 defmodule Xandra.Simple do
   @moduledoc false
 
-  defstruct [:statement, :values, :default_consistency]
+  defstruct [:statement, :values, :default_consistency, :protocol_module]
 
   @opaque t :: %__MODULE__{
             statement: Xandra.statement(),
             values: Xandra.values() | nil,
-            default_consistency: atom() | nil
+            default_consistency: atom() | nil,
+            protocol_module: module | nil
           }
 
   defimpl DBConnection.Query do
-    alias Xandra.{Frame, Protocol}
+    alias Xandra.Frame
 
     def parse(query, _options) do
       query
@@ -18,12 +19,12 @@ defmodule Xandra.Simple do
 
     def encode(query, values, options) do
       Frame.new(:query)
-      |> Protocol.encode_request(%{query | values: values}, options)
-      |> Frame.encode(options[:compressor])
+      |> query.protocol_module.encode_request(%{query | values: values}, options)
+      |> Frame.encode(query.protocol_module, options[:compressor])
     end
 
     def decode(query, %Frame{} = frame, options) do
-      Protocol.decode_response(frame, query, options)
+      query.protocol_module.decode_response(frame, query, options)
     end
 
     def describe(query, _options) do
