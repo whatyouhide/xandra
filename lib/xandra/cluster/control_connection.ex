@@ -3,7 +3,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   use Connection
 
-  alias Xandra.{Frame, Protocol, Connection.Utils}
+  alias Xandra.{Frame, Protocol, Simple, Connection.Utils}
 
   require Logger
 
@@ -55,6 +55,7 @@ defmodule Xandra.Cluster.ControlConnection do
         with {:ok, supported_options} <- Utils.request_options(state.transport, socket),
              :ok <- startup_connection(state.transport, socket, supported_options, options),
              :ok <- register_to_events(state.transport, socket),
+             {:ok, peers} <- discover_peers(state.transport, socket),
              :ok <- inet_mod(state.transport).setopts(socket, active: true),
              {:ok, state} <- report_active(state) do
           {:ok, state}
@@ -119,6 +120,25 @@ defmodule Xandra.Cluster.ControlConnection do
     else
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp discover_peers(transport, socket) do
+    query = %Simple{
+      statement: "SELECT peer FROM system.peers",
+      values: [],
+      default_consistency: :one
+    }
+
+    payload =
+      Frame.new(:query)
+      |> Protocol.encode_request(query)
+      |> Frame.encode()
+
+    with :ok <- transport.send(socket, payload),
+         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket) do
+      Protocol.decode_response(frame, query) |> IO.inspect()
+      {:ok, []}
     end
   end
 
