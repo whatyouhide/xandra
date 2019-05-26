@@ -26,7 +26,14 @@ defmodule Xandra.Mixfile do
 
       # Docs
       name: "Xandra",
-      docs: [main: "Xandra", source_ref: "v#{@version}", source_url: @repo_url]
+      docs: [
+        main: "Xandra",
+        source_ref: "v#{@version}",
+        source_url: @repo_url,
+        extras: [
+          "pages/Data types comparison table.md"
+        ]
+      ]
     ]
   end
 
