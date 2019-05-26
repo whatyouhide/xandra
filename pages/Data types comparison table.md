@@ -1,10 +1,10 @@
 # Data types comparison table
 
-This page contains a table that compares the datatypes used by Cassandra with their counterparts used by Xandra. Each Cassandra datatype corresponds to one or more Elixir datatypes. What Elixir datatype is used for a given Cassandra type is often controlled by a formatting option. For example, a `date` value from Cassandra can be returned as a `Date.t()` struct or as an integer representing the number of days since the Unix epoch depending on the `:date_format` option passed to various Xandra functions.
+This page contains a table that compares the data types used by Cassandra with their counterparts used by Xandra. Each Cassandra data type corresponds to one or more Elixir data types. What Elixir data type is used for a given Cassandra type is often controlled by a formatting option. For example, a `date` value from Cassandra can be returned as a `Date.t()` struct or as an integer representing the number of days since the Unix epoch depending on the `:date_format` option passed to various Xandra functions.
 
 ## Comparison table
 
-| Cassandra type                                              | Elixir type                                                |
+| Cassandra data type                                         | Elixir data type                                           |
 |-------------------------------------------------------------|------------------------------------------------------------|
 | `NULL`                                                      | `nil`                                                      |
 | `bool`                                                      | `boolean()`                                                |
