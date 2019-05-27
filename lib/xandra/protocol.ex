@@ -41,6 +41,8 @@ defmodule Xandra.Protocol do
     end
   end
 
+  def protocol_version, do: :v3
+
   @spec encode_request(Frame.t(kind), term, keyword) :: Frame.t(kind) when kind: var
   def encode_request(frame, params, options \\ [])
 

@@ -10,7 +10,7 @@ defmodule Xandra.Frame do
   @type t(kind) :: %__MODULE__{kind: kind}
   @type t :: t(kind)
 
-  @request_version 0x03
+  @request_version %{v1: 0x01, v2: 0x02, v3: 0x03, v4: 0x04, v5: 0x05}
 
   @request_opcodes %{
     :startup => 0x01,
@@ -23,7 +23,8 @@ defmodule Xandra.Frame do
     :auth_response => 0x0F
   }
 
-  @response_version 0x83
+  @response_version %{v1: 0x81, v2: 0x82, v3: 0x83, v4: 0x84, v5: 0x85}
+  @protocol_version %{0x81 => :v1, 0x82 => :v2, 0x83 => :v3, 0x84 => :v4, 0x85 => :v5}
 
   @response_opcodes %{
     0x00 => :error,
@@ -49,13 +50,13 @@ defmodule Xandra.Frame do
   end
 
   @spec encode(t(kind), module, nil | module) :: iodata
-  def encode(%__MODULE__{} = frame, _protocol_module, compressor \\ nil)
+  def encode(%__MODULE__{} = frame, protocol_module, compressor \\ nil)
       when is_atom(compressor) do
     %{tracing: tracing?, kind: kind, stream_id: stream_id, body: body} = frame
     body = maybe_compress_body(compressor, body)
 
     [
-      @request_version,
+      @request_version[protocol_module.protocol_version],
       encode_flags(compressor, tracing?),
       <<stream_id::16>>,
       Map.fetch!(@request_opcodes, kind),
@@ -68,20 +69,21 @@ defmodule Xandra.Frame do
   def decode(header, body \\ <<>>, protocol_module, compressor \\ nil)
       when is_binary(body) and is_atom(compressor) do
     <<response_version, flags, _stream_id::16, opcode, _::32>> = header
+    expected_response_version = @response_version[protocol_module.protocol_version]
 
-    if assert_correct_response_version(response_version, protocol_module) do
+    if assert_correct_response_version(response_version, expected_response_version) do
       kind = Map.fetch!(@response_opcodes, opcode)
       body = maybe_decompress_body(flag_set?(flags, _compression = 0x01), compressor, body)
       {:ok, %__MODULE__{kind: kind, body: body}}
     else
       {:error,
-       "you requested protocol v#{protocol_module} " <>
-         "but server answered with protocol v#{inspect(response_version, base: :hex)}"}
+       "you requested protocol #{protocol_module.protocol_version} " <>
+         "but server answered with #{@protocol_version[response_version]}"}
     end
   end
 
-  def assert_correct_response_version(response_version, _protocol_module) do
-    @response_version == response_version
+  def assert_correct_response_version(actual, expected) do
+    actual == expected
   end
 
   defp encode_flags(_compressor = nil, _tracing? = false), do: 0x00
