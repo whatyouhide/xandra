@@ -441,6 +441,12 @@ defmodule Xandra.Cluster do
     %{state | pools: Map.delete(pools, address)}
   end
 
+  # We don't care about changes in the topology if we're not autodiscovering
+  # nodes.
+  defp handle_topology_change(%{autodiscovery: false} = state, _change) do
+    state
+  end
+
   defp handle_topology_change(state, %{effect: "NEW_NODE", address: address}) do
     start_pool(state, address, state.autodiscovered_nodes_port)
   end
