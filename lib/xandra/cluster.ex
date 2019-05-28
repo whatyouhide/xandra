@@ -60,7 +60,7 @@ defmodule Xandra.Cluster do
 
   use GenServer
 
-  alias __MODULE__.{ControlConnection, StatusChange}
+  alias Xandra.Cluster.{ControlConnection, StatusChange, TopologyChange}
   alias Xandra.ConnectionError
 
   require Logger
@@ -323,7 +323,13 @@ defmodule Xandra.Cluster do
   end
 
   def handle_cast({:update, %StatusChange{} = status_change}, %__MODULE__{} = state) do
-    {:noreply, toggle_pool(state, status_change)}
+    state = handle_status_change(state, status_change)
+    {:noreply, state}
+  end
+
+  def handle_cast({:update, %TopologyChange{} = topology_change}, %__MODULE__{} = state) do
+    state = handle_topology_change(state, topology_change)
+    {:noreply, state}
   end
 
   ## Helpers
@@ -367,7 +373,7 @@ defmodule Xandra.Cluster do
     end
   end
 
-  defp toggle_pool(state, %{effect: "UP", address: address}) do
+  defp handle_status_change(state, %{effect: "UP", address: address}) do
     %{pool_supervisor: pool_supervisor, pools: pools} = state
 
     case Supervisor.restart_child(pool_supervisor, address) do
@@ -379,11 +385,27 @@ defmodule Xandra.Cluster do
     end
   end
 
-  defp toggle_pool(state, %{effect: "DOWN", address: address}) do
+  defp handle_status_change(state, %{effect: "DOWN", address: address}) do
     %{pool_supervisor: pool_supervisor, pools: pools} = state
 
-    Supervisor.terminate_child(pool_supervisor, address)
+    _ = Supervisor.terminate_child(pool_supervisor, address)
     %{state | pools: Map.delete(pools, address)}
+  end
+
+  defp handle_topology_change(state, %{effect: "NEW_NODE", address: address}) do
+    start_pool(state, address, state.autodiscovered_nodes_port)
+  end
+
+  defp handle_topology_change(state, %{effect: "REMOVED_NODE", address: address}) do
+    %{pool_supervisor: pool_supervisor, pools: pools} = state
+    _ = Supervisor.terminate_child(pool_supervisor, address)
+    _ = Supervisor.delete_child(pool_supervisor, address)
+    %{state | pools: Map.delete(pools, address)}
+  end
+
+  defp handle_topology_change(state, %{effect: "MOVED_NODE"} = event) do
+    _ = Logger.warn("Ignored TOPOLOGY_CHANGE event: #{inspect(event)}")
+    state
   end
 
   defp select_pool(:random, pools, _node_refs) do

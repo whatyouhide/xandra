@@ -123,7 +123,7 @@ defmodule Xandra.Cluster.ControlConnection do
   defp register_to_events(transport, socket) do
     payload =
       Frame.new(:register)
-      |> Protocol.encode_request(["STATUS_CHANGE"])
+      |> Protocol.encode_request(["STATUS_CHANGE", "TOPOLOGY_CHANGE"])
       |> Frame.encode()
 
     with :ok <- transport.send(socket, payload),
