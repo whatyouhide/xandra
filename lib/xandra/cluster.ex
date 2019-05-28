@@ -134,6 +134,11 @@ defmodule Xandra.Cluster do
     {max_autodiscovered_pools, options} = Keyword.pop(options, :max_autodiscovered_pools)
     {name, options} = Keyword.pop(options, :name)
 
+    if autodiscovery? and load_balancing == :priority do
+      raise ArgumentError,
+            "the :priority load balancing strategy is only supported when :autodiscovery is false"
+    end
+
     state = %__MODULE__{
       options: Keyword.delete(options, :pool),
       load_balancing: load_balancing,
