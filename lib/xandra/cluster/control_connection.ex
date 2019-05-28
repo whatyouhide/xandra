@@ -125,9 +125,9 @@ defmodule Xandra.Cluster.ControlConnection do
   defp report_event(%{cluster: cluster, buffer: buffer} = state) do
     case decode_frame(buffer) do
       {frame, rest} ->
-        status_change = Protocol.decode_response(frame)
-        Logger.debug("Received STATUS_CHANGE event: #{inspect(status_change)}")
-        Xandra.Cluster.update(cluster, status_change)
+        change_event = Protocol.decode_response(frame)
+        Logger.debug("Received event: #{inspect(change_event)}")
+        Xandra.Cluster.update(cluster, change_event)
         report_event(%{state | buffer: rest})
 
       :error ->
