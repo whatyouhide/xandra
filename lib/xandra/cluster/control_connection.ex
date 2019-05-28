@@ -140,8 +140,22 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp maybe_discover_peers(_autodiscovery? = true, transport, socket) do
+    # Discover the peers in the same data center as the node we're connected to.
+    with {:ok, local_info} <- fetch_node_local_info(transport, socket),
+         local_data_center = Map.fetch!(local_info, "data_center"),
+         {:ok, peers} <- discover_peers(transport, socket) do
+      peers =
+        for %{"data_center" => data_center, "peer" => peer} <- peers,
+            data_center == local_data_center,
+            do: peer
+
+      {:ok, peers}
+    end
+  end
+
+  defp fetch_node_local_info(transport, socket) do
     query = %Simple{
-      statement: "SELECT peer FROM system.peers",
+      statement: "SELECT data_center FROM system.local",
       values: [],
       default_consistency: :one
     }
@@ -154,8 +168,27 @@ defmodule Xandra.Cluster.ControlConnection do
     with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket) do
       %Xandra.Page{} = page = Protocol.decode_response(frame, query)
-      peers = Enum.map(page, & &1["peer"])
-      {:ok, peers}
+      [local_info] = Enum.to_list(page)
+      {:ok, local_info}
+    end
+  end
+
+  defp discover_peers(transport, socket) do
+    query = %Simple{
+      statement: "SELECT peer, data_center FROM system.peers",
+      values: [],
+      default_consistency: :one
+    }
+
+    payload =
+      Frame.new(:query)
+      |> Protocol.encode_request(query)
+      |> Frame.encode()
+
+    with :ok <- transport.send(socket, payload),
+         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket) do
+      %Xandra.Page{} = page = Protocol.decode_response(frame, query)
+      {:ok, Enum.to_list(page)}
     end
   end
 

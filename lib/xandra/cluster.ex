@@ -74,7 +74,8 @@ defmodule Xandra.Cluster do
     nodes: ["127.0.0.1"],
     idle_interval: 30_000,
     autodiscovery: true,
-    autodiscovered_nodes_port: @default_port
+    autodiscovered_nodes_port: @default_port,
+    max_autodiscovered_pools: 5
   ]
 
   defstruct [
@@ -83,6 +84,7 @@ defmodule Xandra.Cluster do
     :load_balancing,
     :autodiscovery,
     :autodiscovered_nodes_port,
+    :max_autodiscovered_pools,
     :pool_supervisor,
     pools: %{}
   ]
@@ -129,13 +131,15 @@ defmodule Xandra.Cluster do
     {nodes, options} = Keyword.pop(options, :nodes)
     {autodiscovery?, options} = Keyword.pop(options, :autodiscovery)
     {autodiscovered_nodes_port, options} = Keyword.pop(options, :autodiscovered_nodes_port)
+    {max_autodiscovered_pools, options} = Keyword.pop(options, :max_autodiscovered_pools)
     {name, options} = Keyword.pop(options, :name)
 
     state = %__MODULE__{
       options: Keyword.delete(options, :pool),
       load_balancing: load_balancing,
       autodiscovery: autodiscovery?,
-      autodiscovered_nodes_port: autodiscovered_nodes_port
+      autodiscovered_nodes_port: autodiscovered_nodes_port,
+      max_autodiscovered_pools: max_autodiscovered_pools
     }
 
     nodes = Enum.map(nodes, &parse_node/1)
@@ -303,35 +307,18 @@ defmodule Xandra.Cluster do
 
   def handle_cast({:activate, node_ref, address, port}, %__MODULE__{} = state) do
     _ = Logger.debug("Control connection for #{:inet.ntoa(address)}:#{port} is up")
-    {:noreply, start_pool(state, node_ref, address, port)}
+
+    # Update the node_refs with the actual address of the control connection node.
+    state = update_in(state.node_refs, &List.keystore(&1, node_ref, 0, {node_ref, address}))
+
+    state = start_pool(state, address, port)
+    {:noreply, state}
   end
 
   def handle_cast({:discovered_peers, peers}, %__MODULE__{} = state) do
-    formatted_peers = peers |> Enum.map(&:inet.ntoa/1) |> Enum.intersperse(", ")
-    _ = Logger.debug("Discovered peers: #{formatted_peers}")
-
-    already_connected_nodes =
-      for {_ref, address} when address != nil <- state.node_refs,
-          into: MapSet.new(),
-          do: address
-
-    new_node_refs =
-      for address <- MapSet.difference(MapSet.new(peers), already_connected_nodes) do
-        node_ref = make_ref()
-
-        ControlConnection.start_link(
-          self(),
-          node_ref,
-          address,
-          state.autodiscovered_nodes_port,
-          state.options,
-          state.autodiscovery
-        )
-
-        {node_ref, address}
-      end
-
-    state = update_in(state.node_refs, &(&1 ++ new_node_refs))
+    _ = Logger.debug("Discovered peers: #{inspect(peers)}")
+    port = state.autodiscovered_nodes_port
+    state = Enum.reduce(peers, state, &start_pool(_state = &2, _peer = &1, port))
     {:noreply, state}
   end
 
@@ -351,21 +338,20 @@ defmodule Xandra.Cluster do
     end)
   end
 
-  defp start_pool(state, node_ref, address, port) do
+  defp start_pool(state, address, port) do
     %{
       options: options,
-      node_refs: node_refs,
       pool_supervisor: pool_supervisor,
       pools: pools
     } = state
 
     options = Keyword.merge(options, address: address, port: port)
-    child_spec = Supervisor.child_spec({Xandra, options}, id: {address, port})
+    child_spec = Supervisor.child_spec({Xandra, options}, id: address)
 
     case Supervisor.start_child(pool_supervisor, child_spec) do
       {:ok, pool} ->
-        node_refs = List.keystore(node_refs, node_ref, 0, {node_ref, address})
-        %{state | node_refs: node_refs, pools: Map.put(pools, address, pool)}
+        _ = Logger.debug("Started connection to #{inspect(address)}")
+        %{state | pools: Map.put(pools, address, pool)}
 
       {:error, {:already_started, _pool}} ->
         # TODO: to have a reliable cluster name, we need to bring the name given on
