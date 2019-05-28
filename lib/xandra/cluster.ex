@@ -11,8 +11,9 @@ defmodule Xandra.Cluster do
   This module manages connections to different nodes in a Cassandra cluster.
   Each connection to a node is a `Xandra` connection (so it can also be
   a pool of connections). When a `Xandra.Cluster` connection is started,
-  one `Xandra` connection or pool of connections will be started for each
-  node specified in the `:nodes` option.
+  one `Xandra` pool of connections will be started for each node specified
+  in the `:nodes` option plus for autodiscovered nodes if the `:autodiscovery`
+  option is `true`.
 
   The API provided by this module mirrors the API provided by the `Xandra`
   module. Queries executed through this module will be "routed" to nodes
@@ -20,7 +21,7 @@ defmodule Xandra.Cluster do
   "Load balancing strategies" section below
 
   Note that regardless of the underlying pool, `Xandra.Cluster` will establish
-  one extra connection to each node in the specified list of nodes (used for
+  one extra connection to each node in the specified list of `:nodes` (used for
   internal purposes).
 
   Here is an example of how one could use `Xandra.Cluster` to connect to
@@ -36,6 +37,23 @@ defmodule Xandra.Cluster do
   current machine, plus two extra connections (one per node) used for internal
   purposes.
 
+  ## Autodiscovery
+
+  When the `:autodiscovery` option is `true` (which is the default),
+  `Xandra.Cluster` discovers nodes in the same cluster as the nodes
+  specified in the `:nodes` option. The nodes in `:nodes` act as "seed"
+  nodes. When nodes in the cluster are discovered, a `Xandra` pool of
+  connections is started for each node that is in the **same datacenter**
+  as one of the nodes in `:nodes`. For now, there is no limit on how many
+  nodes in the same datacenter `Xandra.Cluster` discovers and connects to.
+
+  As mentioned before, a "control connection" for internal purposes is established
+  to each node in `:nodes`. These control connections are *not* established for
+  autodiscovered nodes. This means that if you only have one seed node in `:nodes`,
+  there will only be one control connection: if that control connection goes down
+  for some reason, you won't receive cluster change events anymore. This will cause
+  disconnections but will not technically break anything.
+
   ## Load balancing strategies
 
   For now, there are two load balancing "strategies" implemented:
@@ -44,7 +62,8 @@ defmodule Xandra.Cluster do
       execute the query on that node.
 
     * `:priority` - it will choose a node to execute the query according
-      to the order nodes appear in `:nodes`.
+      to the order nodes appear in `:nodes`. Not supported when `:autodiscovery`
+      is `true`.
 
   ## Disconnections and reconnections
 
@@ -74,8 +93,7 @@ defmodule Xandra.Cluster do
     nodes: ["127.0.0.1"],
     idle_interval: 30_000,
     autodiscovery: true,
-    autodiscovered_nodes_port: @default_port,
-    max_autodiscovered_pools: 5
+    autodiscovered_nodes_port: @default_port
   ]
 
   defstruct [
@@ -84,7 +102,6 @@ defmodule Xandra.Cluster do
     :load_balancing,
     :autodiscovery,
     :autodiscovered_nodes_port,
-    :max_autodiscovered_pools,
     :pool_supervisor,
     pools: %{}
   ]
@@ -93,7 +110,8 @@ defmodule Xandra.Cluster do
   Starts a cluster connection.
 
   Note that a cluster connection starts an additional connection for each
-  node in the cluster that is used for monitoring cluster updates.
+  node specified in `:nodes`. Such "control connection" is used for monitoring
+  cluster updates.
 
   ## Options
 
@@ -102,23 +120,51 @@ defmodule Xandra.Cluster do
   options are specific to this function:
 
     * `:load_balancing` - (atom) load balancing "strategy". Either `:random`
-      or `:priority`. See the "Load balancing strategies" section above.
-      Defaults to `:random`.
+      or `:priority`. See the "Load balancing strategies" section in the module
+      documentation. If `:autodiscovery` is `true`, the only supported strategy
+      is `:random`. Defaults to `:random`.
+
+    * `:nodes` - (list of strings) a list of nodes to use as seed nodes
+      when setting up the cluster. The behaviour of this option depends on
+      the `:autodiscovery` option. See the "Autodiscovery" section below.
+      If the `:autodiscovery` option is `false`, the cluster only connects
+      to the nodes in `:nodes` and sets up one additional control connection
+      for each one of these nodes. Defaults to `["127.0.0.1"]`.
+
+    * `:autodiscovery` - (boolean) whether to autodiscover nodes in the
+      cluster. See the "Autodiscovery" section in the module documentation.
+      Defaults to `true`.
+
+    * `:autodiscovered_nodes_port` - (integer) the port to use when connecting
+      to autodiscovered nodes. Cassandra does not advertise the port of nodes
+      when discovering them, so you'll need to specify one explicitly. This might
+      get fixed in future Cassandra versions. Defaults to `9042`.
 
   ## Examples
 
-  Starting a cluster connection and executing a query:
+  Starting a cluster connection to two specific nodes in the cluster:
 
       {:ok, cluster} =
         Xandra.Cluster.start_link(
-          nodes: ["cassandra1.example.net", "cassandra2.example.net"]
+          nodes: ["cassandra1.example.net", "cassandra2.example.net"],
+          autodiscovery: false
+        )
+
+  Starting a pool of five connections to nodes in the same cluster as the given
+  "seed" node:
+
+      {:ok, cluster} =
+        Xandra.Cluster.start_link(
+          autodiscovery: true,
+          nodes: ["cassandra-seed.example.net"]
+          pool_size: 5
         )
 
   Passing options down to each connection:
 
       {:ok, cluster} =
         Xandra.Cluster.start_link(
-          nodes: ["cassandra1.example.net", "cassandra2.example.net"],
+          nodes: ["cassandra.example.net"],
           after_connect: &Xandra.execute!(&1, "USE my_keyspace")
         )
 
@@ -131,7 +177,6 @@ defmodule Xandra.Cluster do
     {nodes, options} = Keyword.pop(options, :nodes)
     {autodiscovery?, options} = Keyword.pop(options, :autodiscovery)
     {autodiscovered_nodes_port, options} = Keyword.pop(options, :autodiscovered_nodes_port)
-    {max_autodiscovered_pools, options} = Keyword.pop(options, :max_autodiscovered_pools)
     {name, options} = Keyword.pop(options, :name)
 
     if autodiscovery? and load_balancing == :priority do
@@ -143,8 +188,7 @@ defmodule Xandra.Cluster do
       options: Keyword.delete(options, :pool),
       load_balancing: load_balancing,
       autodiscovery: autodiscovery?,
-      autodiscovered_nodes_port: autodiscovered_nodes_port,
-      max_autodiscovered_pools: max_autodiscovered_pools
+      autodiscovered_nodes_port: autodiscovered_nodes_port
     }
 
     nodes = Enum.map(nodes, &parse_node/1)
