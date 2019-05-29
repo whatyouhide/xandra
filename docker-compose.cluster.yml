@@ -1,0 +1,34 @@
+version: '3'
+
+services:
+  seed:
+    image: cassandra
+    container_name: seed
+    environment:
+      - HEAP_NEWSIZE=1M
+      - MAX_HEAP_SIZE=200M
+
+  node1:
+    image: cassandra
+    container_name: node1
+    environment:
+      - CASSANDRA_SEEDS=seed
+      - HEAP_NEWSIZE=1M
+      - MAX_HEAP_SIZE=200M
+    depends_on:
+      - seed
+
+  node2:
+    image: cassandra
+    container_name: node2
+    environment:
+      - CASSANDRA_SEEDS=seed
+      - HEAP_NEWSIZE=1M
+      - MAX_HEAP_SIZE=200M
+    depends_on:
+      - seed
+
+  elixir:
+    image: elixir:1.8.1
+    volumes: 
+      - "./:/app"
