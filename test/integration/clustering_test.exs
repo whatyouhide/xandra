@@ -40,7 +40,7 @@ defmodule ClusteringTest do
   end
 
   test "priority load balancing", %{keyspace: keyspace, start_options: start_options} do
-    start_options = [load_balancing: :priority] ++ start_options
+    start_options = Keyword.merge(start_options, load_balancing: :priority, autodiscovery: false)
     {:ok, cluster} = Xandra.Cluster.start_link(start_options)
 
     assert await_connected(cluster, _options = [], &Xandra.execute!(&1, "USE #{keyspace}"))
