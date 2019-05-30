@@ -546,8 +546,7 @@ defmodule DataTypesTest do
     """
 
     addr = {127, 0, 0, 1}
-    # addrv6 = {64935, 43320, 23550, 24486, 0, 0, 0, 49}
-    addrv6 = {"aaaa", "aaaa", "aaaa", "aaaa", "aaaa", "aaaa", "aaaa", "aaaa"}
+    addrv6 = {64935, 43320, 23550, 24486, 0, 0, 0, 49}
 
     Xandra.execute!(conn, statement)
 
