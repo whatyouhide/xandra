@@ -372,14 +372,11 @@ defmodule Xandra.Protocol do
     <<value::32-float>>
   end
 
-  defp encode_value(:inet, {n1, n2, n3, n4})
-       when is_integer(n1) and is_integer(n2) and is_integer(n3) and is_integer(n4) do
+  defp encode_value(:inet, {n1, n2, n3, n4}) do
     <<n1, n2, n3, n4>>
   end
 
-  defp encode_value(:inet, {n1, n2, n3, n4, n5, n6, n7, n8})
-       when is_integer(n1) and is_integer(n2) and is_integer(n3) and is_integer(n4) and
-              is_integer(n5) and is_integer(n6) and is_integer(n7) and is_integer(n8) do
+  defp encode_value(:inet, {n1, n2, n3, n4, n5, n6, n7, n8}) do
     <<n1::16, n2::16, n3::16, n4::16, n5::16, n6::16, n7::16, n8::16>>
   end
 
