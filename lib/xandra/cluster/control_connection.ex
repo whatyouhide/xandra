@@ -175,7 +175,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defp discover_peers(transport, socket) do
     query = %Simple{
-      statement: "SELECT peer, data_center FROM system.peers",
+      statement: "SELECT rpc_address, data_center FROM system.peers",
       values: [],
       default_consistency: :one
     }
