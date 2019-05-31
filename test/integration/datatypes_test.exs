@@ -536,4 +536,36 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "id") == 1
     assert Map.fetch!(row, "total") == 4
   end
+
+  test "inet type", %{conn: conn} do
+    statement = """
+    CREATE TABLE inets
+    (id int PRIMARY KEY,
+     addr inet,
+     addrv6 inet)
+    """
+
+    addr = {127, 0, 0, 1}
+    addrv6 = {64935, 43320, 23550, 24486, 0, 0, 0, 49}
+
+    Xandra.execute!(conn, statement)
+
+    statement = """
+    INSERT INTO inets (id, addr, addrv6) VALUES (?, ?, ?)
+    """
+
+    values = [
+      {"int", 1},
+      {"inet", addr},
+      {"inet", addrv6}
+    ]
+
+    Xandra.execute!(conn, statement, values)
+
+    page = Xandra.execute!(conn, "SELECT * FROM inets WHERE id = 1")
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 1
+    assert Map.fetch!(row, "addr") == addr
+    assert Map.fetch!(row, "addrv6") == addrv6
+  end
 end
