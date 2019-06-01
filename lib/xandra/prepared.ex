@@ -13,15 +13,15 @@ defmodule Xandra.Prepared do
     :protocol_module
   ]
 
-  @opaque t :: %__MODULE__{
-            statement: Xandra.statement(),
-            values: Xandra.values() | nil,
-            id: binary | nil,
-            bound_columns: list | nil,
-            result_columns: list | nil,
-            default_consistency: atom | nil,
-            protocol_module: module | nil
-          }
+  @type t :: %__MODULE__{
+          statement: Xandra.statement(),
+          values: Xandra.values() | nil,
+          id: binary | nil,
+          bound_columns: list | nil,
+          result_columns: list | nil,
+          default_consistency: atom | nil,
+          protocol_module: module | nil
+        }
 
   @doc false
   def rewrite_named_params_to_positional(%__MODULE__{} = prepared, params)

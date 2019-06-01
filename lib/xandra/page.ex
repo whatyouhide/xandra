@@ -34,11 +34,11 @@ defmodule Xandra.Page do
 
   @type paging_state :: binary | nil
 
-  @opaque t :: %__MODULE__{
-            content: list,
-            columns: nonempty_list,
-            paging_state: paging_state
-          }
+  @type t :: %__MODULE__{
+          content: list,
+          columns: nonempty_list,
+          paging_state: paging_state
+        }
 
   @doc false
   @spec more_pages_available?(t) :: boolean

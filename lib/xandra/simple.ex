@@ -3,12 +3,12 @@ defmodule Xandra.Simple do
 
   defstruct [:statement, :values, :default_consistency, :protocol_module]
 
-  @opaque t :: %__MODULE__{
-            statement: Xandra.statement(),
-            values: Xandra.values() | nil,
-            default_consistency: atom() | nil,
-            protocol_module: module() | nil
-          }
+  @type t :: %__MODULE__{
+          statement: Xandra.statement(),
+          values: Xandra.values() | nil,
+          default_consistency: atom() | nil,
+          protocol_module: module() | nil
+        }
 
   defimpl DBConnection.Query do
     alias Xandra.Frame

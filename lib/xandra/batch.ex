@@ -14,12 +14,12 @@ defmodule Xandra.Batch do
 
   @type type :: :logged | :unlogged | :counter
 
-  @opaque t(type) :: %__MODULE__{
-            type: type,
-            queries: [Simple.t() | Prepared.t()],
-            default_consistency: atom() | nil,
-            protocol_module: module() | nil
-          }
+  @type t(type) :: %__MODULE__{
+          type: type,
+          queries: [Simple.t() | Prepared.t()],
+          default_consistency: atom() | nil,
+          protocol_module: module() | nil
+        }
 
   @type t() :: t(type)
 
