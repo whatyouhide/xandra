@@ -227,10 +227,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
         case rest do
           <<body::size(body_length)-bytes, rest::binary>> ->
-            case Frame.decode(header, body, protocol_module) do
-              {:ok, frame} -> {frame, rest}
-              {:error, _} -> :error
-            end
+            {Frame.decode(header, body, protocol_module), rest}
 
           _ ->
             :error

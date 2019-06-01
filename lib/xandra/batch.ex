@@ -18,7 +18,7 @@ defmodule Xandra.Batch do
             type: type,
             queries: [Simple.t() | Prepared.t()],
             default_consistency: atom() | nil,
-            protocol_module: module | nil
+            protocol_module: module() | nil
           }
 
   @type t() :: t(type)

@@ -7,7 +7,7 @@ defmodule Xandra.Simple do
             statement: Xandra.statement(),
             values: Xandra.values() | nil,
             default_consistency: atom() | nil,
-            protocol_module: module | nil
+            protocol_module: module() | nil
           }
 
   defimpl DBConnection.Query do

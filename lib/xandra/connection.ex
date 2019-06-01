@@ -120,8 +120,11 @@ defmodule Xandra.Connection do
 
   @impl true
   def handle_prepare(%Prepared{} = prepared, options, %__MODULE__{socket: socket} = state) do
-    prepared = %{prepared | default_consistency: state.default_consistency}
-    prepared = %{prepared | protocol_module: state.protocol_module}
+    prepared = %{
+      prepared
+      | default_consistency: state.default_consistency,
+        protocol_module: state.protocol_module
+    }
 
     force? = Keyword.get(options, :force, false)
     compressor = assert_valid_compressor(state.compressor, options[:compressor])
@@ -155,13 +158,23 @@ defmodule Xandra.Connection do
   end
 
   def handle_prepare(%Simple{} = simple, _options, state) do
-    simple = %{simple | default_consistency: state.default_consistency}
-    {:ok, %{simple | protocol_module: state.protocol_module}, state}
+    simple = %{
+      simple
+      | default_consistency: state.default_consistency,
+        protocol_module: state.protocol_module
+    }
+
+    {:ok, simple, state}
   end
 
   def handle_prepare(%Batch{} = batch, _options, state) do
-    batch = %{batch | default_consistency: state.default_consistency}
-    {:ok, %{batch | protocol_module: state.protocol_module}, state}
+    batch = %{
+      batch
+      | default_consistency: state.default_consistency,
+        protocol_module: state.protocol_module
+    }
+
+    {:ok, batch, state}
   end
 
   @impl true

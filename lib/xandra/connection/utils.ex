@@ -6,17 +6,17 @@ defmodule Xandra.Connection.Utils do
   @spec recv_frame(:gen_tcp | :ssl, term, module, nil | module) ::
           {:ok, Frame.t()} | {:error, :closed | :inet.posix()}
   def recv_frame(transport, socket, protocol_module, compressor \\ nil)
-      when is_atom(compressor) do
+      when is_atom(protocol_module) and is_atom(compressor) do
     length = Frame.header_length()
 
     with {:ok, header} <- transport.recv(socket, length) do
       case Frame.body_length(header) do
         0 ->
-          Frame.decode(header, protocol_module)
+          {:ok, Frame.decode(header, protocol_module)}
 
         body_length ->
           with {:ok, body} <- transport.recv(socket, body_length),
-               do: Frame.decode(header, body, protocol_module, compressor)
+               do: {:ok, Frame.decode(header, body, protocol_module, compressor)}
       end
     end
   end
@@ -30,15 +30,11 @@ defmodule Xandra.Connection.Utils do
       |> Frame.encode(protocol_module)
 
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- recv_frame(transport, socket, protocol_module, compressor),
-         %{"CQL_VERSION" => _} = response <- protocol_module.decode_response(frame) do
-      {:ok, response}
+         {:ok, %Frame{} = frame} <- recv_frame(transport, socket, protocol_module, compressor) do
+      {:ok, protocol_module.decode_response(frame)}
     else
       {:error, reason} ->
         {:error, ConnectionError.new("request options", reason)}
-
-      %Error{} = error ->
-        {:error, ConnectionError.new("request options", error)}
     end
   end
 
@@ -52,7 +48,7 @@ defmodule Xandra.Connection.Utils do
         compressor \\ nil,
         options \\ []
       )
-      when is_map(requested_options) and is_atom(compressor) do
+      when is_map(requested_options) and is_atom(protocol_module) and is_atom(compressor) do
     # We have to encode the STARTUP frame without compression as in this frame
     # we tell the server which compression algorithm we want to use.
     payload =
@@ -65,6 +61,7 @@ defmodule Xandra.Connection.Utils do
     # compression, this response is already compressed.
     with :ok <- transport.send(socket, payload),
          {:ok, frame} <- recv_frame(transport, socket, protocol_module, compressor) do
+      # TODO: handle :error frames for things like :protocol_violation.
       case frame do
         %Frame{body: <<>>} ->
           :ok
@@ -78,15 +75,6 @@ defmodule Xandra.Connection.Utils do
             compressor,
             options
           )
-
-        %Frame{kind: :error} ->
-          # errors like
-          # %Xandra.Error{
-          #   message: "Invalid message version. Got 4/v4 but previous messages on this connection had version 3/v3",
-          #   reason: :protocol_violation
-          # }
-          error = %Error{} = protocol_module.decode_response(frame)
-          raise error
 
         _ ->
           raise "protocol violation, got unexpected frame: #{inspect(frame)}"
