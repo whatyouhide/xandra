@@ -14,20 +14,17 @@ This driver works exclusively with the Cassandra Query Language v3 (CQL3) and th
 
 This library is in its early stages when it comes to features, but we're already [successfully using it in production at Forza Football][production-use]. Currently, the supported features are:
 
-  * performing queries (including parameterized queries) on the Cassandra database
-  * connection pooling
-  * reconnections in case of connection loss
-  * prepared queries (including a local cache of prepared queries on a per-connection basis)
-  * batch queries
+  * connection pooling with reconnections in case of connection loss
+  * prepared queries (with local cache of prepared queries on a per-connection basis) and batch queries
   * page streaming
   * compression
-  * clustering (random and priority load balancing for now)
+  * clustering (random and priority load balancing for now) with support for autodiscovery of nodes in the cluster (same datacenter only for now)
   * customizable retry strategies for failed queries
   * user-defined types
   * authentication
   * SSL encryption
 
-In the future, we plan to add more features, like more load balancing strategies for clustering. See [the documentation][documentation] for detailed explanation of how the supported features work.
+See [the documentation][documentation] for detailed explanation of how the supported features work.
 
 ## Installation
 
@@ -35,7 +32,7 @@ Add the `:xandra` dependency to your `mix.exs` file:
 
 ```elixir
 def deps() do
-  [{:xandra, "~> 0.10"}]
+  [{:xandra, "~> 0.11"}]
 end
 ```
 
