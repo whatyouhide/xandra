@@ -1,6 +1,10 @@
 defmodule Xandra.Prepared do
   @moduledoc """
   A data structure used to internally represent prepared queries.
+
+  Note that the `t:t/0` type is public because it would cause Dialyzer
+  warnings if it were opaque. However, the `Xandra.Prepared` struct is
+  private API and is not meant to be used directly.
   """
 
   defstruct [

@@ -6,6 +6,9 @@ defmodule Xandra.Batch do
   execute them as a Cassandra `BATCH` query. Batch queries can be executed
   through `Xandra.execute/3` and `Xandra.execute!/3`; see their respective
   documentation for more information.
+
+  Note that the `t/1` type is not documented as it's not meant
+  for public use. If you want to use batches in your typespecs, use `t:t/0`.
   """
   alias Xandra.{Prepared, Simple}
 
@@ -14,6 +17,7 @@ defmodule Xandra.Batch do
 
   @type type :: :logged | :unlogged | :counter
 
+  @typedoc false
   @type t(type) :: %__MODULE__{
           type: type,
           queries: [Simple.t() | Prepared.t()],
