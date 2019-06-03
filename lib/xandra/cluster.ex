@@ -172,6 +172,7 @@ defmodule Xandra.Cluster do
   @spec start_link([Xandra.start_option() | {:load_balancing, atom}]) :: GenServer.on_start()
   def start_link(options) do
     options = Keyword.merge(@default_start_options, options)
+    options = Keyword.put(options, :protocol_module, Xandra.Protocol)
 
     {load_balancing, options} = Keyword.pop(options, :load_balancing, @default_load_balancing)
     {nodes, options} = Keyword.pop(options, :nodes)

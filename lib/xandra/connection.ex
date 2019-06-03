@@ -3,7 +3,7 @@ defmodule Xandra.Connection do
 
   use DBConnection
 
-  alias Xandra.{Batch, ConnectionError, Prepared, Frame, Protocol, Simple}
+  alias Xandra.{Batch, ConnectionError, Prepared, Frame, Simple}
   alias __MODULE__.Utils
 
   @default_timeout 5_000
@@ -16,7 +16,8 @@ defmodule Xandra.Connection do
     :prepared_cache,
     :compressor,
     :default_consistency,
-    :atom_keys?
+    :atom_keys?,
+    :protocol_module
   ]
 
   @impl true
@@ -27,6 +28,7 @@ defmodule Xandra.Connection do
     compressor = Keyword.get(options, :compressor)
     default_consistency = Keyword.fetch!(options, :default_consistency)
     atom_keys? = Keyword.get(options, :atom_keys, false)
+    protocol_module = Keyword.fetch!(options, :protocol_module)
     transport = if(options[:encryption], do: :ssl, else: :gen_tcp)
 
     transport_options =
@@ -43,11 +45,21 @@ defmodule Xandra.Connection do
           prepared_cache: prepared_cache,
           compressor: compressor,
           default_consistency: default_consistency,
-          atom_keys?: atom_keys?
+          atom_keys?: atom_keys?,
+          protocol_module: protocol_module
         }
 
-        with {:ok, supported_options} <- Utils.request_options(transport, socket),
-             :ok <- startup_connection(transport, socket, supported_options, compressor, options) do
+        with {:ok, supported_options} <-
+               Utils.request_options(transport, socket, protocol_module),
+             :ok <-
+               startup_connection(
+                 transport,
+                 socket,
+                 supported_options,
+                 protocol_module,
+                 compressor,
+                 options
+               ) do
           {:ok, state}
         else
           {:error, reason} = error ->
@@ -108,7 +120,11 @@ defmodule Xandra.Connection do
 
   @impl true
   def handle_prepare(%Prepared{} = prepared, options, %__MODULE__{socket: socket} = state) do
-    prepared = %{prepared | default_consistency: state.default_consistency}
+    prepared = %{
+      prepared
+      | default_consistency: state.default_consistency,
+        protocol_module: state.protocol_module
+    }
 
     force? = Keyword.get(options, :force, false)
     compressor = assert_valid_compressor(state.compressor, options[:compressor])
@@ -121,13 +137,14 @@ defmodule Xandra.Connection do
       :error ->
         payload =
           Frame.new(:prepare)
-          |> Protocol.encode_request(prepared)
-          |> Frame.encode(compressor)
+          |> state.protocol_module.encode_request(prepared)
+          |> Frame.encode(state.protocol_module, compressor)
 
         with :ok <- transport.send(socket, payload),
-             {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, state.compressor),
+             {:ok, %Frame{} = frame} <-
+               Utils.recv_frame(transport, socket, state.protocol_module, state.compressor),
              frame = %{frame | atom_keys?: state.atom_keys?},
-             %Prepared{} = prepared <- Protocol.decode_response(frame, prepared) do
+             %Prepared{} = prepared <- state.protocol_module.decode_response(frame, prepared) do
           Prepared.Cache.insert(state.prepared_cache, prepared)
           {:ok, prepared, state}
         else
@@ -141,12 +158,22 @@ defmodule Xandra.Connection do
   end
 
   def handle_prepare(%Simple{} = simple, _options, state) do
-    simple = %{simple | default_consistency: state.default_consistency}
+    simple = %{
+      simple
+      | default_consistency: state.default_consistency,
+        protocol_module: state.protocol_module
+    }
+
     {:ok, simple, state}
   end
 
   def handle_prepare(%Batch{} = batch, _options, state) do
-    batch = %{batch | default_consistency: state.default_consistency}
+    batch = %{
+      batch
+      | default_consistency: state.default_consistency,
+        protocol_module: state.protocol_module
+    }
+
     {:ok, batch, state}
   end
 
@@ -156,7 +183,8 @@ defmodule Xandra.Connection do
     assert_valid_compressor(compressor, options[:compressor])
 
     with :ok <- state.transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- Utils.recv_frame(state.transport, socket, compressor) do
+         {:ok, %Frame{} = frame} <-
+           Utils.recv_frame(state.transport, socket, state.protocol_module, compressor) do
       {:ok, query, %{frame | atom_keys?: atom_keys?}, state}
     else
       {:error, reason} ->
@@ -176,7 +204,7 @@ defmodule Xandra.Connection do
 
   @impl true
   def ping(%__MODULE__{socket: socket, compressor: compressor} = state) do
-    case Utils.request_options(state.transport, socket, compressor) do
+    case Utils.request_options(state.transport, socket, state.protocol_module, compressor) do
       {:ok, _options} ->
         {:ok, state}
 
@@ -194,7 +222,14 @@ defmodule Xandra.Connection do
     Prepared.Cache.lookup(state.prepared_cache, prepared)
   end
 
-  defp startup_connection(transport, socket, supported_options, compressor, options) do
+  defp startup_connection(
+         transport,
+         socket,
+         supported_options,
+         protocol_module,
+         compressor,
+         options
+       ) do
     %{
       "CQL_VERSION" => [cql_version | _],
       "COMPRESSION" => supported_compression_algorithms
@@ -207,7 +242,15 @@ defmodule Xandra.Connection do
 
       if compression_algorithm in supported_compression_algorithms do
         requested_options = Map.put(requested_options, "COMPRESSION", compression_algorithm)
-        Utils.startup_connection(transport, socket, requested_options, compressor, options)
+
+        Utils.startup_connection(
+          transport,
+          socket,
+          requested_options,
+          protocol_module,
+          compressor,
+          options
+        )
       else
         {:error,
          ConnectionError.new(
@@ -216,7 +259,14 @@ defmodule Xandra.Connection do
          )}
       end
     else
-      Utils.startup_connection(transport, socket, requested_options, compressor, options)
+      Utils.startup_connection(
+        transport,
+        socket,
+        requested_options,
+        protocol_module,
+        compressor,
+        options
+      )
     end
   end
 

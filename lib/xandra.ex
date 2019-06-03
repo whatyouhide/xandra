@@ -287,6 +287,7 @@ defmodule Xandra do
       |> convert_nodes_options_to_address_and_port()
       |> Keyword.put(:pool, DBConnection.ConnectionPool)
       |> Keyword.put(:prepared_cache, Prepared.Cache.new())
+      |> Keyword.put(:protocol_module, Xandra.Protocol)
 
     DBConnection.start_link(Connection, options)
   end

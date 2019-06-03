@@ -48,8 +48,9 @@ defmodule Xandra.Frame do
     length
   end
 
-  @spec encode(t(kind), nil | module) :: iodata
-  def encode(%__MODULE__{} = frame, compressor \\ nil) when is_atom(compressor) do
+  @spec encode(t(kind), module, nil | module) :: iodata
+  def encode(%__MODULE__{} = frame, protocol_module, compressor \\ nil)
+      when is_atom(protocol_module) and is_atom(compressor) do
     %{tracing: tracing?, kind: kind, stream_id: stream_id, body: body} = frame
     body = maybe_compress_body(compressor, body)
 
@@ -63,10 +64,11 @@ defmodule Xandra.Frame do
     ]
   end
 
-  @spec decode(binary, binary, nil | module) :: t(kind)
-  def decode(header, body \\ <<>>, compressor \\ nil)
-      when is_binary(body) and is_atom(compressor) do
+  @spec decode(binary, binary, module, nil | module) :: t(kind)
+  def decode(header, body \\ <<>>, protocol_module, compressor \\ nil)
+      when is_binary(body) and is_atom(protocol_module) and is_atom(compressor) do
     <<@response_version, flags, _stream_id::16, opcode, _::32>> = header
+
     kind = Map.fetch!(@response_opcodes, opcode)
     body = maybe_decompress_body(flag_set?(flags, _compression = 0x01), compressor, body)
     %__MODULE__{kind: kind, body: body}
