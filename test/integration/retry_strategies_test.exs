@@ -54,4 +54,31 @@ defmodule Xandra.RetryStrategiesTest do
     :code.delete(InvalidStrategy)
     :code.purge(InvalidStrategy)
   end
+
+  test "retries with Xandra.run/3", %{conn: conn} do
+    defmodule OnceStrategy do
+      @behaviour Xandra.RetryStrategy
+
+      def new(_options), do: :not_retried_yet
+
+      def retry(error, options, :not_retried_yet) do
+        send(self(), {:retrying, error})
+        {:retry, options, :retried}
+      end
+
+      def retry(_error, _options, :retried) do
+        :error
+      end
+    end
+
+    assert {:error, _} =
+             Xandra.run(conn, [retry_strategy: OnceStrategy], fn conn ->
+               Xandra.execute(conn, "USE nonexistent_keyspace", [])
+             end)
+
+    assert_received {:retrying, %Error{reason: :invalid}}
+  after
+    :code.delete(OnceStrategy)
+    :code.purge(OnceStrategy)
+  end
 end

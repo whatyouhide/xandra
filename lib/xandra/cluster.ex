@@ -80,7 +80,7 @@ defmodule Xandra.Cluster do
   use GenServer
 
   alias Xandra.Cluster.{ControlConnection, StatusChange, TopologyChange}
-  alias Xandra.ConnectionError
+  alias Xandra.{ConnectionError, RetryStrategy}
 
   require Logger
 
@@ -266,7 +266,11 @@ defmodule Xandra.Cluster do
   @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), keyword) ::
           {:ok, Xandra.result()} | {:error, Xandra.error()}
   def execute(cluster, query, params, options) do
-    with_conn(cluster, &Xandra.execute(&1, query, params, options))
+    with_conn_and_retrying(cluster, options, &Xandra.execute(&1, query, params, options))
+  end
+
+  defp with_conn_and_retrying(cluster, options, fun) do
+    RetryStrategy.run_with_retrying(options, fn -> with_conn(cluster, fun) end)
   end
 
   @doc """
@@ -313,7 +317,9 @@ defmodule Xandra.Cluster do
   """
   @spec run(cluster, keyword, (Xandra.conn() -> result)) :: result when result: var
   def run(cluster, options \\ [], fun) do
-    with_conn(cluster, &Xandra.run(&1, options, fun))
+    RetryStrategy.run_with_retrying(options, fn ->
+      with_conn(cluster, &Xandra.run(&1, options, fun))
+    end)
   end
 
   defp with_conn(cluster, fun) do
