@@ -80,7 +80,7 @@ defmodule Xandra.Cluster do
   use GenServer
 
   alias Xandra.Cluster.{ControlConnection, StatusChange, TopologyChange}
-  alias Xandra.{ConnectionError, RetryStrategy}
+  alias Xandra.{Batch, ConnectionError, Prepared, RetryStrategy}
 
   require Logger
 
@@ -256,8 +256,18 @@ defmodule Xandra.Cluster do
           {:ok, Xandra.result()} | {:error, Xandra.error()}
   @spec execute(cluster, Xandra.Batch.t(), keyword) ::
           {:ok, Xandra.Void.t()} | {:error, Xandra.error()}
-  def execute(cluster, query, params_or_options \\ []) do
-    with_conn(cluster, &Xandra.execute(&1, query, params_or_options))
+  def execute(cluster, query, params_or_options \\ [])
+
+  def execute(cluster, statement, params) when is_binary(statement) do
+    execute(cluster, statement, params, _options = [])
+  end
+
+  def execute(cluster, %Prepared{} = prepared, params) do
+    execute(cluster, prepared, params, _options = [])
+  end
+
+  def execute(cluster, %Batch{} = batch, options) when is_list(options) do
+    with_conn_and_retrying(cluster, options, &Xandra.execute(&1, batch, options))
   end
 
   @doc """
@@ -267,10 +277,6 @@ defmodule Xandra.Cluster do
           {:ok, Xandra.result()} | {:error, Xandra.error()}
   def execute(cluster, query, params, options) do
     with_conn_and_retrying(cluster, options, &Xandra.execute(&1, query, params, options))
-  end
-
-  defp with_conn_and_retrying(cluster, options, fun) do
-    RetryStrategy.run_with_retrying(options, fn -> with_conn(cluster, fun) end)
   end
 
   @doc """
@@ -317,9 +323,11 @@ defmodule Xandra.Cluster do
   """
   @spec run(cluster, keyword, (Xandra.conn() -> result)) :: result when result: var
   def run(cluster, options \\ [], fun) do
-    RetryStrategy.run_with_retrying(options, fn ->
-      with_conn(cluster, &Xandra.run(&1, options, fun))
-    end)
+    with_conn(cluster, &Xandra.run(&1, options, fun))
+  end
+
+  defp with_conn_and_retrying(cluster, options, fun) do
+    RetryStrategy.run_with_retrying(options, fn -> with_conn(cluster, fun) end)
   end
 
   defp with_conn(cluster, fun) do
