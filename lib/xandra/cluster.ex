@@ -231,6 +231,32 @@ defmodule Xandra.Cluster do
 
   @doc """
   Same as `Xandra.prepare/3`.
+
+  Preparing a query through `Xandra.Cluster` will prepare it only on one node,
+  according to the load balancing strategy chosen in `start_link/1`. To prepare
+  and execute a query on the same node, you could use `run/3`:
+
+      Xandra.Cluster.run(cluster, fn conn ->
+        # "conn" is the pool of connections for a specific node.
+        prepared = Xandra.prepare!(conn, "SELECT * FROM system.local")
+        Xandra.execute!(conn, prepared, _params = [])
+      end)
+
+  Thanks to the prepared query cache, we can always reprepare the query and execute
+  it because after the first time (on each node) the prepared query will be fetched
+  from the cache. However, if a prepared query is unknown on a node, Xandra will
+  prepare it on that node on the fly, so we can simply do this as well:
+
+      prepared = Xandra.Cluster.prepare!(cluster, "SELECT * FROM system.local")
+      Xandra.Cluster.execute!(cluster, prepared, _params = [])
+
+  Note that this goes through the cluster twice, so there's a high chance that
+  the query will be prepared on one node and then executed on another node.
+  This is however useful if you want to use the `:retry_strategy` option in
+  `execute!/4`: in the `run/3` example above, if you use `:retry_strategy` with
+  `Xandra.execute!/3`, the query will be retried on the same pool of connections
+  to the same node. `execute!/4` will retry queries going through the cluster
+  again instead.
   """
   @spec prepare(cluster, Xandra.statement(), keyword) ::
           {:ok, Xandra.Prepared.t()} | {:error, Xandra.error()}
@@ -239,7 +265,10 @@ defmodule Xandra.Cluster do
   end
 
   @doc """
-  Same as `Xandra.prepare!/3`.
+  Same as `prepare/3` but raises in case of errors.
+
+  If the function is successful, the prepared query is returned directly
+  instead of in an `{:ok, prepared}` tuple like in `prepare/3`.
   """
   @spec prepare!(cluster, Xandra.statement(), keyword) :: Xandra.Prepared.t() | no_return
   def prepare!(cluster, statement, options \\ []) do
@@ -250,7 +279,7 @@ defmodule Xandra.Cluster do
   end
 
   @doc """
-  Same as `Xandra.execute/3`.
+  Same as `execute/4` but with optional arguments.
   """
   @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values()) ::
           {:ok, Xandra.result()} | {:error, Xandra.error()}
@@ -271,7 +300,14 @@ defmodule Xandra.Cluster do
   end
 
   @doc """
-  Same as `Xandra.execute/4`.
+  Executes a query on a node in the cluster.
+
+  This function executes a query on a node in the cluster. The node is chosen based
+  on the load balancing strategy given in `start_link/1`.
+
+  Supports the same options as `Xandra.execute/4`. In particular, the `:retry_strategy`
+  option is cluster-aware, meaning that queries are retried on possibly different nodes
+  in the cluster.
   """
   @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), keyword) ::
           {:ok, Xandra.result()} | {:error, Xandra.error()}
@@ -280,7 +316,7 @@ defmodule Xandra.Cluster do
   end
 
   @doc """
-  Same as `Xandra.execute!/3`.
+  Same as `execute/3` but returns the result directly or raises in case of errors.
   """
   @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values()) ::
           Xandra.result() | no_return
@@ -294,7 +330,7 @@ defmodule Xandra.Cluster do
   end
 
   @doc """
-  Same as `Xandra.execute!/4`.
+  Same as `execute/4` but returns the result directly or raises in case of errors.
   """
   @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), keyword) ::
           Xandra.result() | no_return
@@ -306,10 +342,14 @@ defmodule Xandra.Cluster do
   end
 
   @doc """
-  Same as `Xandra.run/3`.
+  Runs a function with a given connection.
 
   The connection that is passed to `fun` is a Xandra connection, not a
   cluster. This means that you should call `Xandra` functions on it.
+  Since the connection is a single connection, it means that it's a connection
+  to a specific node, so you can do things like prepare a query and then execute
+  it because you can be sure it's prepared on the same node where you're
+  executing it.
 
   ## Examples
 
