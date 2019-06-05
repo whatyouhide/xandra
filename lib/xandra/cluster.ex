@@ -216,7 +216,14 @@ defmodule Xandra.Cluster do
   end
 
   @doc """
-  Same as `Xandra.stream_pages!/4`.
+  Returns a stream of pages.
+
+  When streaming pages through a cluster, the streaming is done
+  from a single node, that is, this function just calls out to
+  `Xandra.stream_pages!/4` after choosing a node appropriately.
+
+  All options are forwarded to `Xandra.stream_pages!/4`, including
+  retrying options.
   """
   @spec stream_pages!(
           cluster,
@@ -225,8 +232,8 @@ defmodule Xandra.Cluster do
           keyword
         ) ::
           Enumerable.t()
-  def stream_pages!(conn, query, params, options \\ []) do
-    Xandra.stream_pages!(conn, query, params, options)
+  def stream_pages!(cluster, query, params, options \\ []) do
+    with_conn(cluster, &Xandra.stream_pages!(&1, query, params, options))
   end
 
   @doc """
