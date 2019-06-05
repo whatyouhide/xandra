@@ -814,7 +814,7 @@ defmodule Xandra do
   """
   @spec run(conn, keyword, (conn -> result)) :: result when result: var
   def run(conn, options \\ [], fun) when is_function(fun, 1) do
-    RetryStrategy.run_with_retrying(options, fn -> DBConnection.run(conn, fun, options) end)
+    DBConnection.run(conn, fun, options)
   end
 
   defp reprepare_queries(conn, [%Simple{} | rest], options) do
