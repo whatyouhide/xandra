@@ -154,7 +154,17 @@ defmodule Xandra do
   passed, the outgoing data will not be compressed.
   """
 
-  alias __MODULE__.{Batch, Connection, ConnectionError, Error, Prepared, Page, PageStream, Simple}
+  alias __MODULE__.{
+    Batch,
+    Connection,
+    ConnectionError,
+    Error,
+    Prepared,
+    Page,
+    PageStream,
+    RetryStrategy,
+    Simple
+  }
 
   @type statement :: String.t()
   @type values :: list | map
@@ -856,37 +866,9 @@ defmodule Xandra do
   end
 
   defp execute_with_retrying(conn, query, params, options) do
-    case Keyword.pop(options, :retry_strategy) do
-      {nil, options} ->
-        execute_without_retrying(conn, query, params, options)
-
-      {retry_strategy, options} ->
-        execute_with_retrying(conn, query, params, options, retry_strategy)
-    end
-  end
-
-  defp execute_with_retrying(conn, query, params, options, retry_strategy) do
-    with {:error, reason} <- execute_without_retrying(conn, query, params, options) do
-      {retry_state, options} =
-        Keyword.pop_lazy(options, :retrying_state, fn ->
-          retry_strategy.new(options)
-        end)
-
-      case retry_strategy.retry(reason, options, retry_state) do
-        :error ->
-          {:error, reason}
-
-        {:retry, new_options, new_retry_state} ->
-          new_options = Keyword.put(new_options, :retrying_state, new_retry_state)
-          execute_with_retrying(conn, query, params, new_options, retry_strategy)
-
-        other ->
-          raise ArgumentError,
-                "invalid return value #{inspect(other)} from " <>
-                  "retry strategy #{inspect(retry_strategy)} " <>
-                  "with state #{inspect(retry_state)}"
-      end
-    end
+    RetryStrategy.run_with_retrying(options, fn ->
+      execute_without_retrying(conn, query, params, options)
+    end)
   end
 
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
