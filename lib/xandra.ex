@@ -42,6 +42,9 @@ defmodule Xandra do
 
   ### Types
 
+  For information about how Elixir types translate to Cassandra types and
+  viceversa, see the ["Data types comparison table" page](data-types-comparison-table.html).
+
   Cassandra supports many types of values, and some types have "shades" that
   cannot be represented by Elixir types. For example, in Cassandra an integer
   could be a "bigint" (a 64 bit integer), an "int" (a 32 bit integer), a
