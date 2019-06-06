@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.12.0
+
+* Add a page in the documentation that compares Elixir data types and their Cassandra counterparts.
+* Fix some Dialyzer errors caused by opaque data types.
+* Support cluster-aware retrying through `:retry_strategy` in `Xandra.Cluster.execute/3,4` (in the previous release we would retry queries but only on the same node).
+* Fix `Xandra.Cluster.stream_pages!/4` which was broken in the previous release.
+
+__Breaking changes__:
+
+* Change the format of `inet` values for IPv6. When encoding a IPv6 address, it should be given to Xandra as a 8-element tuple of integers representing byte couples. When IPv6 addresses are returned from Cassandra, they are now returned as 8-element tuples of integers representing byte couples. This is to align Xandra with the usage of IPv6 addresses in Erlang/OTP (see the `:inet.ip_address/0` type).
+* Support autodiscovery of nodes in the same data center in `Xandra.Cluster` with support for the `:random` load balancing strategy only. This also means support for nodes that are added or removed to the cluster (provided they're in the same datacenter). This is a breaking change because autodiscovery is active **by default**. If you want to keep the previous behaviour, pass `autodiscovery: false` to `Xandra.Cluster.start_link/1`.
+
 ## v0.11.0
 
 * Add `Xandra.child_spec/1`.
