@@ -179,6 +179,7 @@ defmodule Xandra do
     Prepared,
     Page,
     PageStream,
+    Protocol,
     RetryStrategy,
     Simple
   }
@@ -188,14 +189,13 @@ defmodule Xandra do
   @type error :: Error.t() | ConnectionError.t()
   @type result :: Xandra.Void.t() | Page.t() | Xandra.SetKeyspace.t() | Xandra.SchemaChange.t()
   @type conn :: DBConnection.conn()
-  @type protocol_version :: :v3 | :v4
 
   @type xandra_start_option ::
           {:nodes, [String.t()]}
           | {:compressor, module}
           | {:authentication, {module, keyword}}
           | {:atom_keys, boolean}
-          | protocol_version()
+          | {:protocol_version, :v3 | :v4}
 
   @type db_connection_start_option :: {atom(), any}
   @type start_option :: xandra_start_option | db_connection_start_option
@@ -206,7 +206,8 @@ defmodule Xandra do
 
   @default_start_options [
     idle_interval: 30_000,
-    default_consistency: :one
+    default_consistency: :one,
+    protocol_version: :v3
   ]
 
   @doc """
@@ -259,8 +260,8 @@ defmodule Xandra do
       in `execute/4`. Can be overridden through the `:consistency` option in
       `execute/4`. Defaults to `:one`.
 
-    * `:protocol_version` - (v3|v4) the version of the Cassandra native protocol to use.
-      Defaults to `:v3`, available are versions `:v3` and `:v4`.
+    * `:protocol_version` - (`:v3` or `:v4`) the version of the Cassandra native
+      protocol to use. Defaults to `:v3`, available are versions `:v3` and `:v4`.
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of five connections, you can use the `:pool_size`
@@ -313,19 +314,15 @@ defmodule Xandra do
   """
   @spec start_link(start_options) :: GenServer.on_start()
   def start_link(options \\ []) when is_list(options) do
-    protocol_module =
-      case Keyword.get(options, :protocol_version, :v3) do
-        :v3 -> Xandra.Protocol.V3
-        :v4 -> Xandra.Protocol.V4
-      end
+    options = Keyword.merge(@default_start_options, options)
+    {protocol_version, options} = Keyword.pop(options, :protocol_version)
 
     options =
-      @default_start_options
-      |> Keyword.merge(options)
+      options
       |> convert_nodes_options_to_address_and_port()
       |> Keyword.put(:pool, DBConnection.ConnectionPool)
       |> Keyword.put(:prepared_cache, Prepared.Cache.new())
-      |> Keyword.put(:protocol_module, protocol_module)
+      |> Keyword.put(:protocol_module, protocol_version_to_module(protocol_version))
 
     DBConnection.start_link(Connection, options)
   end
@@ -1017,4 +1014,11 @@ defmodule Xandra do
         {String.to_charlist(address), @default_port}
     end
   end
+
+  defp protocol_version_to_module(:v3), do: Protocol.V3
+
+  defp protocol_version_to_module(:v4), do: Protocol.V4
+
+  defp protocol_version_to_module(other),
+    do: raise(ArgumentError, "unknown protocol version: #{inspect(other)}")
 end

@@ -80,7 +80,7 @@ defmodule Xandra.Cluster do
   use GenServer
 
   alias Xandra.Cluster.{ControlConnection, StatusChange, TopologyChange}
-  alias Xandra.{Batch, ConnectionError, Prepared, RetryStrategy}
+  alias Xandra.{Batch, ConnectionError, Prepared, Protocol, RetryStrategy}
 
   require Logger
 
@@ -92,6 +92,7 @@ defmodule Xandra.Cluster do
   @default_start_options [
     nodes: ["127.0.0.1"],
     idle_interval: 30_000,
+    protocol_version: :v3,
     autodiscovery: true,
     autodiscovered_nodes_port: @default_port
   ]
@@ -172,15 +173,13 @@ defmodule Xandra.Cluster do
   @spec start_link([Xandra.start_option() | {:load_balancing, atom}]) :: GenServer.on_start()
   def start_link(options) do
     options = Keyword.merge(@default_start_options, options)
-    options = Keyword.put(options, :protocol_module, Xandra.Protocol)
 
-    protocol_module =
-      case Keyword.get(options, :protocol_version, :v3) do
-        :v3 -> Xandra.Protocol.V3
-        :v4 -> Xandra.Protocol.V4
-      end
-
-    options = Keyword.put(options, :protocol_module, protocol_module)
+    options =
+      Keyword.put(
+        options,
+        :protocol_module,
+        protocol_version_to_module(options[:protocol_version])
+      )
 
     {load_balancing, options} = Keyword.pop(options, :load_balancing, @default_load_balancing)
     {nodes, options} = Keyword.pop(options, :nodes)
@@ -559,4 +558,11 @@ defmodule Xandra.Cluster do
         {String.to_charlist(address), @default_port}
     end
   end
+
+  defp protocol_version_to_module(:v3), do: Protocol.V3
+
+  defp protocol_version_to_module(:v4), do: Protocol.V4
+
+  defp protocol_version_to_module(other),
+    do: raise(ArgumentError, "unknown protocol version: #{inspect(other)}")
 end
