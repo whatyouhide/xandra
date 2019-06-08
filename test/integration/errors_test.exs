@@ -18,6 +18,7 @@ defmodule ErrorsTest do
     assert %Error{reason: :invalid} = reason
   end
 
+  @tag :cassandra_specific
   test "function_failure error", %{keyspace: keyspace, start_options: start_options} do
     # This is only supported in native protocol v4.
     start_options = Keyword.put(start_options, :protocol_version, :v4)

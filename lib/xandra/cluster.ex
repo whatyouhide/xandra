@@ -174,6 +174,8 @@ defmodule Xandra.Cluster do
   def start_link(options) do
     options = Keyword.merge(@default_start_options, options)
 
+    # We don't pop the :protocol_version option because we want to
+    # also forward it to the Xandra connections.
     options =
       Keyword.put(
         options,

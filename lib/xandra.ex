@@ -118,7 +118,7 @@ defmodule Xandra do
 
   ### Values
 
-  Xandra supports two special value types: `nil` and `:not_set`. Using `nil` explicitly
+  Xandra supports two special values: `nil` and `:not_set`. Using `nil` explicitly
   inserts a `null` value into the Cassandra table. This is useful to **delete a value** while
   inserting. Note however that explicitly inserting `null` values into Cassandra creates so
   called *tombstones* which negatively affects performance and resource utilisation and is

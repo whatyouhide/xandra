@@ -76,15 +76,6 @@ defmodule Xandra.Connection.Utils do
             options
           )
 
-        # %Frame{kind: :error} ->
-        #   # errors like
-        #   # %Xandra.Error{
-        #   #   message: "Invalid message version. Got 4/v4 but previous messages on this connection had version 3/v3",
-        #   #   reason: :protocol_violation
-        #   # }
-        #   error = %Error{} = protocol_module.decode_response(frame)
-        #   raise error
-
         _ ->
           raise "protocol violation, got unexpected frame: #{inspect(frame)}"
       end
