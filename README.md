@@ -8,7 +8,7 @@
 ![Cover image](http://i.imgur.com/qtbgj00.jpg)
 
 Xandra is a [Cassandra][cassandra] driver built natively in Elixir and focused on speed, simplicity, and robustness.
-This driver works exclusively with the Cassandra Query Language v3 (CQL3) and the native protocol version 3.
+This driver works exclusively with the Cassandra Query Language v3 (CQL3) and the native protocols version 3 and 4.
 
 ## Features
 

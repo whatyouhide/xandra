@@ -170,6 +170,13 @@ defmodule Xandra do
   `:compressor` option should be specified explicitly. When it's specified, the
   given module will be used to compress data. If no `:compressor` option is
   passed, the outgoing data will not be compressed.
+
+  ## Native protocol
+
+  Xandra supports the Cassandra native protocol versions 3 and 4 through the
+  `:protocol_version` option given to `start_link/1`. For now, it's only
+  possible to force a version on the client side (which by default is v3).
+  See `start_link/1`.
   """
 
   alias __MODULE__.{
@@ -262,7 +269,7 @@ defmodule Xandra do
       `execute/4`. Defaults to `:one`.
 
     * `:protocol_version` - (`:v3` or `:v4`) the version of the Cassandra native
-      protocol to use. Defaults to `:v3`, available are versions `:v3` and `:v4`.
+      protocol to use. Defaults to `:v3`.
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of five connections, you can use the `:pool_size`
