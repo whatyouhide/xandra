@@ -36,46 +36,32 @@ defmodule ResultsTest do
     assert Enum.to_list(result) == [%{"figure" => 123}]
   end
 
-  describe "SCHEMA_CHANGE result response" do
-    @describetag protocol_version: :v4
+  test "inspecting Xandra.Page results", %{conn: conn} do
+    Xandra.execute!(conn, "CREATE TABLE users (name text PRIMARY KEY)")
+    Xandra.execute!(conn, "INSERT INTO users (name) VALUES ('Jeff')")
+    %Xandra.Page{} = page = Xandra.execute!(conn, "SELECT * FROM users")
+    assert inspect(page) == ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], more_pages?: false]>)
+  end
 
-    test "with user defined function", %{conn: conn, keyspace: keyspace} do
-      assert {:ok, result} = Xandra.execute(conn, "USE #{keyspace}")
-      assert result == %SetKeyspace{keyspace: String.downcase(keyspace)}
-
-      statement =
-        "CREATE FUNCTION id (x int) CALLED ON NULL INPUT RETURNS int LANGUAGE java AS 'return x;'"
-
-      assert {:ok, result} = Xandra.execute(conn, statement)
-
-      assert result == %SchemaChange{
-               effect: "CREATED",
-               options: %{arguments: ["int"], keyspace: String.downcase(keyspace), subject: "id"},
-               target: "FUNCTION"
-             }
-
-      assert {:ok, result} = Xandra.execute(conn, "DROP FUNCTION id")
-
-      assert result === %SchemaChange{
-               effect: "DROPPED",
-               options: %{arguments: ["int"], keyspace: String.downcase(keyspace), subject: "id"},
-               target: "FUNCTION"
-             }
+  describe "SCHEMA_CHANGE updates since native protocol v4" do
+    setup %{start_options: start_options} do
+      start_options = Keyword.put(start_options, :protocol_version, :v4)
+      {:ok, conn} = Xandra.start_link(start_options)
+      %{conn: conn}
     end
 
-    # udf with arity 2 to test string list decoding
-    test "with user defined arity 2 function", %{conn: conn, keyspace: keyspace} do
+    test "user defined function", %{conn: conn, keyspace: keyspace} do
       assert {:ok, result} = Xandra.execute(conn, "USE #{keyspace}")
       assert result == %SetKeyspace{keyspace: String.downcase(keyspace)}
 
       statement = """
-      CREATE FUNCTION plus (x int, y int) RETURNS NULL ON NULL INPUT
-      RETURNS int LANGUAGE java AS 'return x + y;'
+      CREATE FUNCTION plus (x int, y int)
+      RETURNS NULL ON NULL INPUT
+      RETURNS int
+      LANGUAGE java AS 'return x;'
       """
 
-      assert {:ok, result} = Xandra.execute(conn, statement)
-
-      assert result == %SchemaChange{
+      assert Xandra.execute!(conn, statement) == %SchemaChange{
                effect: "CREATED",
                options: %{
                  arguments: ["int", "int"],
@@ -85,9 +71,9 @@ defmodule ResultsTest do
                target: "FUNCTION"
              }
 
-      assert {:ok, result} = Xandra.execute(conn, "DROP FUNCTION plus")
+      statement = "DROP FUNCTION plus"
 
-      assert result === %SchemaChange{
+      assert Xandra.execute!(conn, statement) === %SchemaChange{
                effect: "DROPPED",
                options: %{
                  arguments: ["int", "int"],
@@ -102,22 +88,20 @@ defmodule ResultsTest do
       assert {:ok, result} = Xandra.execute(conn, "USE #{keyspace}")
       assert result == %SetKeyspace{keyspace: String.downcase(keyspace)}
 
-      sfunc = """
-      CREATE FUNCTION totalState ( state int, val int )
+      Xandra.execute!(conn, """
+      CREATE FUNCTION totalState (state int, val int)
       CALLED ON NULL INPUT
       RETURNS int
       LANGUAGE java AS 'return state + val;'
-      """
+      """)
 
-      statement = """
-      CREATE AGGREGATE total(int)
-      SFUNC totalState
-      STYPE int
-      INITCOND 0;
-      """
-
-      assert {:ok, result} = Xandra.execute(conn, sfunc)
-      assert {:ok, result} = Xandra.execute(conn, statement)
+      result =
+        Xandra.execute!(conn, """
+        CREATE AGGREGATE total(int)
+        SFUNC totalState
+        STYPE int
+        INITCOND 0;
+        """)
 
       assert result == %SchemaChange{
                effect: "CREATED",
@@ -129,12 +113,5 @@ defmodule ResultsTest do
                target: "AGGREGATE"
              }
     end
-  end
-
-  test "inspecting Xandra.Page results", %{conn: conn} do
-    Xandra.execute!(conn, "CREATE TABLE users (name text PRIMARY KEY)")
-    Xandra.execute!(conn, "INSERT INTO users (name) VALUES ('Jeff')")
-    %Xandra.Page{} = page = Xandra.execute!(conn, "SELECT * FROM users")
-    assert inspect(page) == ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], more_pages?: false]>)
   end
 end

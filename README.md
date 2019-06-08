@@ -101,6 +101,13 @@ mix test.scylladb
 
 Use `docker-compose --file docker-compose.scylladb.yml stop` to stop Scylla when done.
 
+By default, tests run for native protocol v3 except for a few specific tests that run
+on native protocol v4. If you want to test the whole suite on native protocol v4, use:
+
+```bash
+CASSANDRA_NATIVE_PROTOCOL=v4 mix test
+```
+
 ## License
 
 Xandra is released under the ISC license, see the [LICENSE](LICENSE) file.

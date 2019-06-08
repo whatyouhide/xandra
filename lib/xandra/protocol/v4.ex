@@ -526,15 +526,6 @@ defmodule Xandra.Protocol.V4 do
     end
   end
 
-  defp decode_error_message(:function_failure, buffer) do
-    decode_string(message <- buffer)
-    decode_string(_keyspace <- buffer)
-    decode_string(_function_name <- buffer)
-    {_arg_types, buffer} = decode_string_list(buffer)
-    <<>> = buffer
-    message
-  end
-
   defp decode_error_message(_reason, buffer) do
     decode_string(message <- buffer)
     _ = buffer

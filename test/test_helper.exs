@@ -1,19 +1,13 @@
-protocol_version =
-  case System.get_env("CASSANDRA_NATIVE_PROTOCOL") || "v3" do
-    "v3" -> :v3
-    "v4" -> :v4
-  end
-
-excluded_protocol_version =
-  case protocol_version do
-    :v3 -> :v4
-    :v4 -> :v3
-  end
-
-ExUnit.start(exclude: [protocol_version: excluded_protocol_version])
+ExUnit.start()
 
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
+
+  protocol_version =
+    case System.get_env("CASSANDRA_NATIVE_PROTOCOL") || "v3" do
+      "v3" -> :v3
+      "v4" -> :v4
+    end
 
   @default_start_options [
     protocol_version: protocol_version,
