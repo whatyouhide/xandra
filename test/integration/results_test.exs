@@ -37,8 +37,6 @@ defmodule ResultsTest do
   end
 
   describe "SCHEMA_CHANGE result response" do
-    # needs `enable_user_defined_functions: true` in cassandra.yml (default: false)
-    @describetag :udf
     @describetag protocol_version: :v4
 
     test "with user defined function", %{conn: conn, keyspace: keyspace} do

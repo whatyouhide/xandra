@@ -1,24 +1,37 @@
-excluded_protocol_version =
+protocol_version =
   case System.get_env("CASSANDRA_NATIVE_PROTOCOL") || "v3" do
-    "v4" -> :v3
-    "v3" -> :v4
+    "v3" -> :v3
+    "v4" -> :v4
   end
 
-ExUnit.start(exclude: [:udf, :slow, protocol_version: excluded_protocol_version])
+excluded_protocol_version =
+  case protocol_version do
+    :v3 -> :v4
+    :v4 -> :v3
+  end
+
+ExUnit.start(exclude: [protocol_version: excluded_protocol_version])
 
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
 
+  @default_start_options [
+    protocol_version: protocol_version,
+    show_sensitive_data_on_connection_error: true
+  ]
+
   using options do
     start_options = Keyword.get(options, :start_options, [])
 
-    quote bind_quoted: [start_options: start_options, case_template: __MODULE__] do
+    quote bind_quoted: [
+            start_options: start_options,
+            case_template: __MODULE__,
+            default_start_options: @default_start_options
+          ] do
       setup_all do
         keyspace = "xandra_test_" <> String.replace(inspect(__MODULE__), ".", "")
 
-        start_options =
-          Keyword.merge(unquote(start_options), show_sensitive_data_on_connection_error: true)
-
+        start_options = Keyword.merge(unquote(default_start_options), unquote(start_options))
         case_template = unquote(case_template)
 
         case_template.setup_keyspace(keyspace, start_options)

@@ -81,9 +81,13 @@ defmodule Xandra.Frame do
     # because we don't know how to deal with the mismatch.
     assert_response_version_matches_request(response_version, protocol_module)
 
+    compression? = flag_set?(flags, _compression = 0x01)
+    warning? = flag_set?(flags, _warning? = 0x08)
+
     kind = Map.fetch!(@response_opcodes, opcode)
-    body = maybe_decompress_body(flag_set?(flags, _compression = 0x01), compressor, body)
-    %__MODULE__{kind: kind, body: body}
+    body = maybe_decompress_body(compression?, compressor, body)
+
+    %__MODULE__{kind: kind, body: body, warning: warning?}
   end
 
   defp assert_response_version_matches_request(response_version, protocol_module) do
@@ -92,14 +96,9 @@ defmodule Xandra.Frame do
         :ok
 
       other ->
-        raise RuntimeError,
-              "response version #{inspect(other, base: :hex)} doesn't match the " <>
+        raise "response version #{inspect(other, base: :hex)} doesn't match the " <>
                 "requested protocol (#{inspect(protocol_module)})"
     end
-  end
-
-  def assert_correct_response_version(actual, expected) do
-    actual == expected
   end
 
   defp encode_flags(_compressor = nil, _tracing? = false), do: 0x00

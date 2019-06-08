@@ -590,11 +590,11 @@ defmodule Xandra.Protocol.V4 do
   end
 
   # We decode to consume the warning from the body but we ignore the result
-  defp decode_warnings(body, false) do
+  defp decode_warnings(body, _warning? = false) do
     body
   end
 
-  defp decode_warnings(body, true) do
+  defp decode_warnings(body, _warning? = true) do
     {_warnings, body} = decode_string_list(body)
     body
   end
