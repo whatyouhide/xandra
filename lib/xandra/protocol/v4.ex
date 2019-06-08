@@ -309,7 +309,7 @@ defmodule Xandra.Protocol.V4 do
     <<-1::32>>
   end
 
-  defp encode_query_value(_type, :unset) do
+  defp encode_query_value(_type, :not_set) do
     <<-2::32>>
   end
 

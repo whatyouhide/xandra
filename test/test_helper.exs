@@ -46,11 +46,9 @@ defmodule XandraTest.IntegrationCase do
   end
 
   setup %{keyspace: keyspace, start_options: start_options} do
-    protocol_version = (System.get_env("CASSANDRA_NATIVE_PROTOCOL") || "v3") |> String.to_atom()
-    start_options = Keyword.put(start_options, :protocol_version, protocol_version)
     {:ok, conn} = Xandra.start_link(start_options)
     Xandra.execute!(conn, "USE #{keyspace}")
-    %{conn: conn, protocol_version: protocol_version}
+    %{conn: conn}
   end
 
   def setup_keyspace(keyspace, start_options) do
