@@ -116,6 +116,21 @@ defmodule Xandra do
       profile
       #=> %{"username" => "bperry", "full_name" => %{"first_name" => "Britta", "last_name" => "Perry"}}
 
+  ### Values
+
+  Xandra supports two special values: `nil` and `:not_set`. Using `nil` explicitly
+  inserts a `null` value into the Cassandra table. This is useful to **delete a value** while
+  inserting. Note however that explicitly inserting `null` values into Cassandra creates so
+  called *tombstones* which negatively affects performance and resource utilisation and is
+  thus usually not recommended.
+
+  The `:not_set` value is a special value that allows to leave the value of a parametrized query
+  *unset*, telling Cassandra not to insert anything for the given field. In contrast to explicit
+  `null` values, no tombstone is created for this field. This is useful for prepared queries with
+  optional fields. The `:not_set` value requires Cassandra native protocol v4, available since
+  Cassandra `2.2.x`. You can force the protocol version to v4 with the `:protocol_version`
+  option.
+
   ## Reconnections
 
   Thanks to the `DBConnection` library, Xandra is able to handle connection
@@ -155,6 +170,13 @@ defmodule Xandra do
   `:compressor` option should be specified explicitly. When it's specified, the
   given module will be used to compress data. If no `:compressor` option is
   passed, the outgoing data will not be compressed.
+
+  ## Native protocol
+
+  Xandra supports the Cassandra native protocol versions 3 and 4 through the
+  `:protocol_version` option given to `start_link/1`. For now, it's only
+  possible to force a version on the client side (which by default is v3).
+  See `start_link/1`.
   """
 
   alias __MODULE__.{
@@ -165,6 +187,7 @@ defmodule Xandra do
     Prepared,
     Page,
     PageStream,
+    Protocol,
     RetryStrategy,
     Simple
   }
@@ -180,6 +203,7 @@ defmodule Xandra do
           | {:compressor, module}
           | {:authentication, {module, keyword}}
           | {:atom_keys, boolean}
+          | {:protocol_version, :v3 | :v4}
 
   @type db_connection_start_option :: {atom(), any}
   @type start_option :: xandra_start_option | db_connection_start_option
@@ -190,7 +214,8 @@ defmodule Xandra do
 
   @default_start_options [
     idle_interval: 30_000,
-    default_consistency: :one
+    default_consistency: :one,
+    protocol_version: :v3
   ]
 
   @doc """
@@ -243,6 +268,9 @@ defmodule Xandra do
       in `execute/4`. Can be overridden through the `:consistency` option in
       `execute/4`. Defaults to `:one`.
 
+    * `:protocol_version` - (`:v3` or `:v4`) the version of the Cassandra native
+      protocol to use. Defaults to `:v3`.
+
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of five connections, you can use the `:pool_size`
   option:
@@ -294,13 +322,15 @@ defmodule Xandra do
   """
   @spec start_link(start_options) :: GenServer.on_start()
   def start_link(options \\ []) when is_list(options) do
+    options = Keyword.merge(@default_start_options, options)
+    {protocol_version, options} = Keyword.pop(options, :protocol_version)
+
     options =
-      @default_start_options
-      |> Keyword.merge(options)
+      options
       |> convert_nodes_options_to_address_and_port()
       |> Keyword.put(:pool, DBConnection.ConnectionPool)
       |> Keyword.put(:prepared_cache, Prepared.Cache.new())
-      |> Keyword.put(:protocol_module, Xandra.Protocol)
+      |> Keyword.put(:protocol_module, protocol_version_to_module(protocol_version))
 
     DBConnection.start_link(Connection, options)
   end
@@ -992,4 +1022,11 @@ defmodule Xandra do
         {String.to_charlist(address), @default_port}
     end
   end
+
+  defp protocol_version_to_module(:v3), do: Protocol.V3
+
+  defp protocol_version_to_module(:v4), do: Protocol.V4
+
+  defp protocol_version_to_module(other),
+    do: raise(ArgumentError, "unknown protocol version: #{inspect(other)}")
 end

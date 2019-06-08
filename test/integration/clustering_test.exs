@@ -31,7 +31,7 @@ defmodule ClusteringTest do
 
         assert await_connected(cluster, _options = [], &Xandra.execute!(&1, statement))
 
-        Process.sleep(100)
+        Process.sleep(250)
       end)
 
     assert log =~ "received request to start another connection pool to the same address"

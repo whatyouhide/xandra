@@ -1,4 +1,4 @@
-defmodule Xandra.Protocol do
+defmodule Xandra.Protocol.V4 do
   @moduledoc false
 
   use Bitwise
@@ -309,6 +309,10 @@ defmodule Xandra.Protocol do
     <<-1::32>>
   end
 
+  defp encode_query_value(_type, :not_set) do
+    <<-2::32>>
+  end
+
   defp encode_query_value(type, value) do
     acc = encode_value(type, value)
     [<<IO.iodata_length(acc)::32>>, acc]
@@ -506,6 +510,8 @@ defmodule Xandra.Protocol do
     0x1003 => :truncate_failure,
     0x1100 => :write_timeout,
     0x1200 => :read_timeout,
+    0x1300 => :read_failure,
+    0x1400 => :function_failure,
     0x2000 => :invalid_syntax,
     0x2100 => :unauthorized,
     0x2200 => :invalid,
@@ -533,7 +539,8 @@ defmodule Xandra.Protocol do
           Xandra.result() | Prepared.t()
   def decode_response(frame, query \\ nil, options \\ [])
 
-  def decode_response(%Frame{kind: :error, body: body}, _query, _options) do
+  def decode_response(%Frame{kind: :error, body: body, warning: warning?}, _query, _options) do
+    body = decode_warnings(body, warning?)
     {reason, buffer} = decode_error_reason(body)
     Error.new(reason, decode_error_message(reason, buffer))
   end
@@ -564,12 +571,23 @@ defmodule Xandra.Protocol do
   end
 
   def decode_response(
-        %Frame{kind: :result, body: body, atom_keys?: atom_keys?},
+        %Frame{kind: :result, body: body, atom_keys?: atom_keys?, warning: warning?},
         %kind{} = query,
         options
       )
       when kind in [Simple, Prepared, Batch] do
+    body = decode_warnings(body, warning?)
     decode_result_response(body, query, Keyword.put(options, :atom_keys?, atom_keys?))
+  end
+
+  # We decode to consume the warning from the body but we ignore the result
+  defp decode_warnings(body, _warning? = false) do
+    body
+  end
+
+  defp decode_warnings(body, _warning? = true) do
+    {_warnings, body} = decode_string_list(body)
+    body
   end
 
   defp decode_inet(<<size, data::size(size)-bytes, buffer::bits>>) do
@@ -606,7 +624,7 @@ defmodule Xandra.Protocol do
        ) do
     atom_keys? = Keyword.fetch!(options, :atom_keys?)
     decode_string(id <- buffer)
-    {%{columns: bound_columns}, buffer} = decode_metadata(buffer, %Page{}, atom_keys?)
+    {%{columns: bound_columns}, buffer} = decode_metadata_prepared(buffer, %Page{}, atom_keys?)
     {%{columns: result_columns}, <<>>} = decode_metadata(buffer, %Page{}, atom_keys?)
     %{prepared | id: id, bound_columns: bound_columns, result_columns: result_columns}
   end
@@ -673,6 +691,41 @@ defmodule Xandra.Protocol do
     %{keyspace: keyspace, subject: subject}
   end
 
+  defp decode_change_options(<<buffer::bits>>, target) when target in ["FUNCTION", "AGGREGATE"] do
+    decode_string(keyspace <- buffer)
+    decode_string(subject <- buffer)
+    {values, buffer} = decode_string_list(buffer)
+    <<>> = buffer
+    %{keyspace: keyspace, subject: subject, arguments: values}
+  end
+
+  defp decode_metadata_prepared(
+         <<flags::4-bytes, column_count::32-signed, pk_count::32-signed, buffer::bits>>,
+         page,
+         atom_keys?
+       ) do
+    <<_::31, global_table_spec::1>> = flags
+
+    # partition key bind indices are ignored as we do not support token-aware routing
+    {_indices, buffer} = decode_pk_index(buffer, pk_count, [])
+
+    cond do
+      global_table_spec == 1 ->
+        decode_string(keyspace <- buffer)
+        decode_string(table <- buffer)
+
+        {columns, buffer} =
+          decode_columns(buffer, column_count, {keyspace, table}, atom_keys?, [])
+
+        {%{page | columns: columns}, buffer}
+
+      true ->
+        {columns, buffer} = decode_columns(buffer, column_count, nil, atom_keys?, [])
+        {%{page | columns: columns}, buffer}
+    end
+  end
+
+  # metadate format from the "Rows" result response
   defp decode_metadata(
          <<flags::4-bytes, column_count::32-signed, buffer::bits>>,
          page,
@@ -698,6 +751,15 @@ defmodule Xandra.Protocol do
         {columns, buffer} = decode_columns(buffer, column_count, nil, atom_keys?, [])
         {%{page | columns: columns}, buffer}
     end
+  end
+
+  # pk = partition key
+  def decode_pk_index(buffer, 0, acc) do
+    {Enum.reverse(acc), buffer}
+  end
+
+  def decode_pk_index(<<index::16-unsigned, buffer::bits>>, pk_count, acc) do
+    decode_pk_index(buffer, pk_count - 1, [index | acc])
   end
 
   defp decode_paging_state(<<buffer::bits>>, page, 0) do
@@ -916,11 +978,6 @@ defmodule Xandra.Protocol do
     decode_columns(buffer, column_count - 1, table_spec, atom_keys?, [entry | acc])
   end
 
-  defp decode_type(<<0x0000::16, buffer::bits>>) do
-    decode_string(class <- buffer)
-    {custom_type_to_native(class), buffer}
-  end
-
   defp decode_type(<<0x0001::16, buffer::bits>>) do
     {:ascii, buffer}
   end
@@ -1022,23 +1079,6 @@ defmodule Xandra.Protocol do
 
   defp decode_type(<<0x0031::16, count::16, buffer::bits>>) do
     decode_type_tuple(buffer, count, [])
-  end
-
-  custom_types = %{
-    "org.apache.cassandra.db.marshal.SimpleDateType" => :date,
-    "org.apache.cassandra.db.marshal.ShortType" => :smallint,
-    "org.apache.cassandra.db.marshal.ByteType" => :tinyint,
-    "org.apache.cassandra.db.marshal.TimeType" => :time
-  }
-
-  for {class, type} <- custom_types do
-    defp custom_type_to_native(unquote(class)) do
-      unquote(type)
-    end
-  end
-
-  defp custom_type_to_native(class) do
-    raise "cannot decode custom type #{inspect(class)}"
   end
 
   defp decode_type_udt(<<buffer::bits>>, 0, acc) do

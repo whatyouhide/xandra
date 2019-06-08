@@ -1,16 +1,21 @@
 defmodule Xandra.Frame do
   @moduledoc false
 
-  defstruct [:kind, :body, stream_id: 0, tracing: false, atom_keys?: false]
+  defstruct [:kind, :body, stream_id: 0, tracing: false, warning: false, atom_keys?: false]
 
   use Bitwise
+
+  alias Xandra.Protocol
 
   @type kind :: :startup | :options | :query | :prepare | :execute | :batch
 
   @type t(kind) :: %__MODULE__{kind: kind}
   @type t :: t(kind)
 
-  @request_version 0x03
+  @request_versions %{
+    Protocol.V3 => 0x03,
+    Protocol.V4 => 0x04
+  }
 
   @request_opcodes %{
     :startup => 0x01,
@@ -23,7 +28,10 @@ defmodule Xandra.Frame do
     :auth_response => 0x0F
   }
 
-  @response_version 0x83
+  @response_versions %{
+    Protocol.V3 => 0x83,
+    Protocol.V4 => 0x84
+  }
 
   @response_opcodes %{
     0x00 => :error,
@@ -55,7 +63,7 @@ defmodule Xandra.Frame do
     body = maybe_compress_body(compressor, body)
 
     [
-      @request_version,
+      Map.fetch!(@request_versions, protocol_module),
       encode_flags(compressor, tracing?),
       <<stream_id::16>>,
       Map.fetch!(@request_opcodes, kind),
@@ -66,12 +74,31 @@ defmodule Xandra.Frame do
 
   @spec decode(binary, binary, module, nil | module) :: t(kind)
   def decode(header, body \\ <<>>, protocol_module, compressor \\ nil)
-      when is_binary(body) and is_atom(protocol_module) and is_atom(compressor) do
-    <<@response_version, flags, _stream_id::16, opcode, _::32>> = header
+      when is_binary(body) and is_atom(compressor) do
+    <<response_version, flags, _stream_id::16, opcode, _::32>> = header
+
+    # For now, raise if the response version doens't match the requested protocol
+    # because we don't know how to deal with the mismatch.
+    assert_response_version_matches_request(response_version, protocol_module)
+
+    compression? = flag_set?(flags, _compression = 0x01)
+    warning? = flag_set?(flags, _warning? = 0x08)
 
     kind = Map.fetch!(@response_opcodes, opcode)
-    body = maybe_decompress_body(flag_set?(flags, _compression = 0x01), compressor, body)
-    %__MODULE__{kind: kind, body: body}
+    body = maybe_decompress_body(compression?, compressor, body)
+
+    %__MODULE__{kind: kind, body: body, warning: warning?}
+  end
+
+  defp assert_response_version_matches_request(response_version, protocol_module) do
+    case Map.fetch!(@response_versions, protocol_module) do
+      ^response_version ->
+        :ok
+
+      other ->
+        raise "response version #{inspect(other, base: :hex)} doesn't match the " <>
+                "requested protocol (#{inspect(protocol_module)})"
+    end
   end
 
   defp encode_flags(_compressor = nil, _tracing? = false), do: 0x00

@@ -18,7 +18,9 @@ jobs:
       before_script:
         - docker-compose up -d
         - ./test/docker/health-check-services.sh
-      env: CASSANDRA_VERSION=3
+      env:
+        - CASSANDRA_VERSION=3
+        - CASSANDRA_NATIVE_PROTOCOL=v3
 
     - <<: *test
       elixir: '1.6'
@@ -27,6 +29,11 @@ jobs:
 
     - <<: *test
       env: CASSANDRA_VERSION=2.2
+
+    - <<: *test
+      env:
+        - CASSANDRA_VERSION=3
+        - CASSANDRA_NATIVE_PROTOCOL=v4
 
     - &test-scylla
       stage: test scylla
@@ -40,6 +47,11 @@ jobs:
       elixir: '1.6'
       otp_release: '19.3'
       env: SCYLLA_VERSION=2.3.0
+
+    - <<: *test-scylla
+      env:
+        - SCYLLA_VERSION=2.3.0
+        - CASSANDRA_NATIVE_PROTOCOL=v4
 
     - <<: *test-scylla
       env: SCYLLA_VERSION=2.0.0

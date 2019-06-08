@@ -8,7 +8,7 @@
 ![Cover image](http://i.imgur.com/qtbgj00.jpg)
 
 Xandra is a [Cassandra][cassandra] driver built natively in Elixir and focused on speed, simplicity, and robustness.
-This driver works exclusively with the Cassandra Query Language v3 (CQL3) and the native protocol version 3.
+This driver works exclusively with the Cassandra Query Language v3 (CQL3) and the native protocol versions 3 and 4.
 
 ## Features
 
@@ -100,6 +100,13 @@ mix test.scylladb
 ```
 
 Use `docker-compose --file docker-compose.scylladb.yml stop` to stop Scylla when done.
+
+By default, tests run for native protocol v3 except for a few specific tests that run
+on native protocol v4. If you want to test the whole suite on native protocol v4, use:
+
+```bash
+CASSANDRA_NATIVE_PROTOCOL=v4 mix test
+```
 
 ## License
 

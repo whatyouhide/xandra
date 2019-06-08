@@ -42,4 +42,78 @@ defmodule ResultsTest do
     %Xandra.Page{} = page = Xandra.execute!(conn, "SELECT * FROM users")
     assert inspect(page) == ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], more_pages?: false]>)
   end
+
+  describe "SCHEMA_CHANGE updates since native protocol v4" do
+    @describetag :cassandra_specific
+
+    setup %{start_options: start_options} do
+      start_options = Keyword.put(start_options, :protocol_version, :v4)
+      {:ok, conn} = Xandra.start_link(start_options)
+      %{conn: conn}
+    end
+
+    test "user defined function", %{conn: conn, keyspace: keyspace} do
+      assert {:ok, result} = Xandra.execute(conn, "USE #{keyspace}")
+      assert result == %SetKeyspace{keyspace: String.downcase(keyspace)}
+
+      statement = """
+      CREATE FUNCTION plus (x int, y int)
+      RETURNS NULL ON NULL INPUT
+      RETURNS int
+      LANGUAGE java AS 'return x;'
+      """
+
+      assert Xandra.execute!(conn, statement) == %SchemaChange{
+               effect: "CREATED",
+               options: %{
+                 arguments: ["int", "int"],
+                 keyspace: String.downcase(keyspace),
+                 subject: "plus"
+               },
+               target: "FUNCTION"
+             }
+
+      statement = "DROP FUNCTION plus"
+
+      assert Xandra.execute!(conn, statement) === %SchemaChange{
+               effect: "DROPPED",
+               options: %{
+                 arguments: ["int", "int"],
+                 keyspace: String.downcase(keyspace),
+                 subject: "plus"
+               },
+               target: "FUNCTION"
+             }
+    end
+
+    test "with user defined aggregate", %{conn: conn, keyspace: keyspace} do
+      assert {:ok, result} = Xandra.execute(conn, "USE #{keyspace}")
+      assert result == %SetKeyspace{keyspace: String.downcase(keyspace)}
+
+      Xandra.execute!(conn, """
+      CREATE FUNCTION totalState (state int, val int)
+      CALLED ON NULL INPUT
+      RETURNS int
+      LANGUAGE java AS 'return state + val;'
+      """)
+
+      result =
+        Xandra.execute!(conn, """
+        CREATE AGGREGATE total(int)
+        SFUNC totalState
+        STYPE int
+        INITCOND 0;
+        """)
+
+      assert result == %SchemaChange{
+               effect: "CREATED",
+               options: %{
+                 arguments: ["int"],
+                 keyspace: String.downcase(keyspace),
+                 subject: "total"
+               },
+               target: "AGGREGATE"
+             }
+    end
+  end
 end
