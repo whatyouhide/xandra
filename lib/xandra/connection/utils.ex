@@ -27,7 +27,7 @@ defmodule Xandra.Connection.Utils do
     payload =
       Frame.new(:options)
       |> protocol_module.encode_request(nil)
-      |> Frame.encode(protocol_module)
+      |> Frame.encode(protocol_module, _frame_options = [])
 
     with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <- recv_frame(transport, socket, protocol_module, compressor) do
@@ -54,7 +54,7 @@ defmodule Xandra.Connection.Utils do
     payload =
       Frame.new(:startup)
       |> protocol_module.encode_request(requested_options)
-      |> Frame.encode(protocol_module)
+      |> Frame.encode(protocol_module, _frame_options = [])
 
     # However, we need to pass the compressor module around when we
     # receive the response to this frame because if we said we want to use
@@ -96,7 +96,7 @@ defmodule Xandra.Connection.Utils do
     payload =
       Frame.new(:auth_response)
       |> protocol_module.encode_request(requested_options, options)
-      |> Frame.encode(protocol_module)
+      |> Frame.encode(protocol_module, _frame_options = [])
 
     with :ok <- transport.send(socket, payload),
          {:ok, frame} <- recv_frame(transport, socket, protocol_module, compressor) do

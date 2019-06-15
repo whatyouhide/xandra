@@ -138,7 +138,7 @@ defmodule Xandra.Connection do
         payload =
           Frame.new(:prepare)
           |> state.protocol_module.encode_request(prepared)
-          |> Frame.encode(state.protocol_module, compressor)
+          |> Frame.encode(state.protocol_module, compressor: compressor)
 
         with :ok <- transport.send(socket, payload),
              {:ok, %Frame{} = frame} <-

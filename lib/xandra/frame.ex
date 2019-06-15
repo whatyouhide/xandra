@@ -56,9 +56,10 @@ defmodule Xandra.Frame do
     length
   end
 
-  @spec encode(t(kind), module, nil | module) :: iodata
-  def encode(%__MODULE__{} = frame, protocol_module, compressor \\ nil)
-      when is_atom(protocol_module) and is_atom(compressor) do
+  @spec encode(t(kind), module, keyword) :: iodata
+  def encode(%__MODULE__{} = frame, protocol_module, options \\ [])
+      when is_atom(protocol_module) and is_list(options) do
+    compressor = options[:compressor]
     %{tracing: tracing?, kind: kind, stream_id: stream_id, body: body} = frame
     body = maybe_compress_body(compressor, body)
 
