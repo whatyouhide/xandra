@@ -776,11 +776,13 @@ defmodule Xandra do
 
   def execute(conn, statement, params, options) when is_binary(statement) do
     query = %Simple{statement: statement}
-    execute_with_retrying(conn, query, params, validate_paging_state(options))
+    assert_valid_paging_state(options)
+    execute_with_retrying(conn, query, params, options)
   end
 
   def execute(conn, %Prepared{} = prepared, params, options) do
-    execute_with_retrying(conn, prepared, params, validate_paging_state(options))
+    assert_valid_paging_state(options)
+    execute_with_retrying(conn, prepared, params, options)
   end
 
   @doc """
@@ -864,7 +866,7 @@ defmodule Xandra do
     :ok
   end
 
-  defp validate_paging_state(options) do
+  defp assert_valid_paging_state(options) do
     case Keyword.fetch(options, :paging_state) do
       {:ok, nil} ->
         raise ArgumentError, "no more pages are available"
@@ -875,26 +877,7 @@ defmodule Xandra do
                 "got: #{inspect(value)}"
 
       _other ->
-        maybe_put_paging_state(options)
-    end
-  end
-
-  defp maybe_put_paging_state(options) do
-    case Keyword.pop(options, :cursor) do
-      {%Page{paging_state: nil}, _options} ->
-        raise ArgumentError, "no more pages are available"
-
-      {%Page{paging_state: paging_state}, options} ->
-        IO.warn("the :cursor option is deprecated, please use :paging_state instead")
-        Keyword.put(options, :paging_state, paging_state)
-
-      {nil, options} ->
-        options
-
-      {other, _options} ->
-        raise ArgumentError,
-              "expected a Xandra.Page struct as the value of the :cursor option, " <>
-                "got: #{inspect(other)}"
+        :ok
     end
   end
 
