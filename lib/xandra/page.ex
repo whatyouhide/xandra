@@ -40,17 +40,6 @@ defmodule Xandra.Page do
           paging_state: paging_state
         }
 
-  @doc false
-  @spec more_pages_available?(t) :: boolean
-  def more_pages_available?(%__MODULE__{paging_state: paging_state}) do
-    IO.warn(
-      "Xandra.Page.more_pages_available?/1 is deprecated, " <>
-        "please use \"page.paging_state != nil\" instead"
-    )
-
-    paging_state != nil
-  end
-
   defimpl Enumerable do
     def reduce(%{content: content, columns: columns}, acc, fun) do
       reduce(content, columns, acc, fun)
