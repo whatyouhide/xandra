@@ -55,9 +55,9 @@ defmodule Xandra.Prepared do
     end
 
     def encode(prepared, values, options) when is_list(values) do
-      Frame.new(:execute)
+      Frame.new(:execute, Keyword.take(options, [:compressor]))
       |> prepared.protocol_module.encode_request(%{prepared | values: values}, options)
-      |> Frame.encode(prepared.protocol_module, options[:compressor])
+      |> Frame.encode(prepared.protocol_module)
     end
 
     def decode(prepared, %Frame{} = frame, options) do
