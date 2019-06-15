@@ -137,7 +137,7 @@ defmodule Xandra.Cluster.ControlConnection do
     payload =
       Frame.new(:register)
       |> protocol_module.encode_request(["STATUS_CHANGE", "TOPOLOGY_CHANGE"])
-      |> Frame.encode(protocol_module, _frame_options = [])
+      |> Frame.encode(protocol_module)
 
     with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, protocol_module) do
@@ -176,7 +176,7 @@ defmodule Xandra.Cluster.ControlConnection do
     payload =
       Frame.new(:query)
       |> protocol_module.encode_request(query)
-      |> Frame.encode(protocol_module, _frame_options = [])
+      |> Frame.encode(protocol_module)
 
     with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, protocol_module) do
@@ -196,7 +196,7 @@ defmodule Xandra.Cluster.ControlConnection do
     payload =
       Frame.new(:query)
       |> protocol_module.encode_request(query)
-      |> Frame.encode(protocol_module, _frame_options = [])
+      |> Frame.encode(protocol_module)
 
     with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, protocol_module) do

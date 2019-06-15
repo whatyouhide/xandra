@@ -1,7 +1,15 @@
 defmodule Xandra.Frame do
   @moduledoc false
 
-  defstruct [:kind, :body, stream_id: 0, tracing: false, warning: false, atom_keys?: false]
+  defstruct [
+    :kind,
+    :body,
+    stream_id: 0,
+    compressor: nil,
+    tracing: false,
+    warning: false,
+    atom_keys?: false
+  ]
 
   use Bitwise
 
@@ -43,9 +51,9 @@ defmodule Xandra.Frame do
     0x10 => :auth_success
   }
 
-  @spec new(kind) :: t(kind) when kind: var
-  def new(kind) do
-    %__MODULE__{kind: kind}
+  @spec new(kind, keyword) :: t(kind) when kind: var
+  def new(kind, options \\ []) do
+    %__MODULE__{kind: kind, compressor: options[:compressor]}
   end
 
   @spec header_length() :: 9
@@ -56,11 +64,16 @@ defmodule Xandra.Frame do
     length
   end
 
-  @spec encode(t(kind), module, keyword) :: iodata
-  def encode(%__MODULE__{} = frame, protocol_module, options \\ [])
-      when is_atom(protocol_module) and is_list(options) do
-    compressor = options[:compressor]
-    %{tracing: tracing?, kind: kind, stream_id: stream_id, body: body} = frame
+  @spec encode(t(kind), module) :: iodata
+  def encode(%__MODULE__{} = frame, protocol_module) when is_atom(protocol_module) do
+    %{
+      compressor: compressor,
+      tracing: tracing?,
+      kind: kind,
+      stream_id: stream_id,
+      body: body
+    } = frame
+
     body = maybe_compress_body(compressor, body)
 
     [
@@ -88,7 +101,7 @@ defmodule Xandra.Frame do
     kind = Map.fetch!(@response_opcodes, opcode)
     body = maybe_decompress_body(compression?, compressor, body)
 
-    %__MODULE__{kind: kind, body: body, warning: warning?}
+    %__MODULE__{kind: kind, body: body, warning: warning?, compressor: compressor}
   end
 
   defp assert_response_version_matches_request(response_version, protocol_module) do
