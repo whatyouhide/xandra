@@ -30,14 +30,15 @@ defmodule Xandra.Page do
 
   """
 
-  defstruct [:content, :columns, :paging_state]
+  defstruct [:content, :columns, :paging_state, :tracing_id]
 
   @type paging_state :: binary | nil
 
   @type t :: %__MODULE__{
           content: list,
           columns: nonempty_list,
-          paging_state: paging_state
+          paging_state: paging_state,
+          tracing_id: binary | nil
         }
 
   defimpl Enumerable do
@@ -81,6 +82,7 @@ defmodule Xandra.Page do
     def inspect(page, options) do
       properties = [
         rows: Enum.to_list(page),
+        tracing_id: page.tracing_id,
         more_pages?: page.paging_state != nil
       ]
 

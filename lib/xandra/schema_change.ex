@@ -20,11 +20,12 @@ defmodule Xandra.SchemaChange do
 
   """
 
-  defstruct [:effect, :target, :options]
+  defstruct [:effect, :target, :options, :tracing_id]
 
   @type t :: %__MODULE__{
           effect: String.t(),
           target: String.t(),
-          options: map
+          options: map,
+          tracing_id: binary | nil
         }
 end

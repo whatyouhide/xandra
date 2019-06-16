@@ -14,7 +14,8 @@ defmodule Xandra.Prepared do
     :bound_columns,
     :result_columns,
     :default_consistency,
-    :protocol_module
+    :protocol_module,
+    :tracing_id
   ]
 
   @type t :: %__MODULE__{
@@ -24,7 +25,8 @@ defmodule Xandra.Prepared do
           bound_columns: list | nil,
           result_columns: list | nil,
           default_consistency: atom | nil,
-          protocol_module: module | nil
+          protocol_module: module | nil,
+          tracing_id: binary | nil
         }
 
   @doc false
@@ -73,7 +75,12 @@ defmodule Xandra.Prepared do
     import Inspect.Algebra
 
     def inspect(prepared, options) do
-      concat(["#Xandra.Prepared<", to_doc(prepared.statement, options), ">"])
+      properties = [
+        statement: prepared.statement,
+        tracing_id: prepared.tracing_id
+      ]
+
+      concat(["#Xandra.Prepared<", to_doc(properties, options), ">"])
     end
   end
 end

@@ -6,9 +6,10 @@ defmodule Xandra.SetKeyspace do
   was set through the executed `USE` query.
   """
 
-  defstruct [:keyspace]
+  defstruct [:keyspace, :tracing_id]
 
   @type t :: %__MODULE__{
-          keyspace: String.t()
+          keyspace: String.t(),
+          tracing_id: binary() | nil
         }
 end

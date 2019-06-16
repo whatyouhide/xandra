@@ -26,6 +26,12 @@ defmodule Xandra.Protocol.V3 do
     end
   end
 
+  defmacrop decode_uuid({:<-, _, [value, buffer]}) do
+    quote do
+      <<unquote(value)::16-bytes, unquote(buffer)::bits>> = unquote(buffer)
+    end
+  end
+
   defmacrop decode_value({:<-, _, [value, buffer]}, type, do: block) do
     quote do
       <<size::32-signed, unquote(buffer)::bits>> = unquote(buffer)
@@ -564,12 +570,13 @@ defmodule Xandra.Protocol.V3 do
   end
 
   def decode_response(
-        %Frame{kind: :result, body: body, atom_keys?: atom_keys?},
+        %Frame{kind: :result, body: body, tracing: tracing?, atom_keys?: atom_keys?},
         %kind{} = query,
         options
       )
       when kind in [Simple, Prepared, Batch] do
-    decode_result_response(body, query, Keyword.put(options, :atom_keys?, atom_keys?))
+    {body, tracing_id} = decode_tracing_id(body, tracing?)
+    decode_result_response(body, query, tracing_id, Keyword.put(options, :atom_keys?, atom_keys?))
   end
 
   defp decode_inet(<<size, data::size(size)-bytes, buffer::bits>>) do
@@ -578,45 +585,62 @@ defmodule Xandra.Protocol.V3 do
     {address, port, buffer}
   end
 
+  defp decode_tracing_id(body, _tracing? = false) do
+    {body, _tracing_id = nil}
+  end
+
+  defp decode_tracing_id(body, _tracing? = true) do
+    decode_uuid(tracing_id <- body)
+    {body, tracing_id}
+  end
+
   # Void
-  defp decode_result_response(<<0x0001::32-signed>>, _query, _options) do
-    %Xandra.Void{}
+  defp decode_result_response(<<0x0001::32-signed>>, _query, tracing_id, _options) do
+    %Xandra.Void{tracing_id: tracing_id}
   end
 
   # Page
-  defp decode_result_response(<<0x0002::32-signed, buffer::bits>>, query, options) do
+  defp decode_result_response(<<0x0002::32-signed, buffer::bits>>, query, tracing_id, options) do
     page = new_page(query)
     {page, buffer} = decode_metadata(buffer, page, Keyword.fetch!(options, :atom_keys?))
     columns = rewrite_column_types(page.columns, options)
-    %{page | content: decode_page_content(buffer, columns)}
+    %{page | content: decode_page_content(buffer, columns), tracing_id: tracing_id}
   end
 
   # SetKeyspace
-  defp decode_result_response(<<0x0003::32-signed, buffer::bits>>, _query, _options) do
+  defp decode_result_response(<<0x0003::32-signed, buffer::bits>>, _query, tracing_id, _options) do
     decode_string(keyspace <- buffer)
     <<>> = buffer
-    %Xandra.SetKeyspace{keyspace: keyspace}
+    %Xandra.SetKeyspace{keyspace: keyspace, tracing_id: tracing_id}
   end
 
   # Prepared
   defp decode_result_response(
          <<0x0004::32-signed, buffer::bits>>,
          %Prepared{} = prepared,
+         tracing_id,
          options
        ) do
     atom_keys? = Keyword.fetch!(options, :atom_keys?)
     decode_string(id <- buffer)
     {%{columns: bound_columns}, buffer} = decode_metadata(buffer, %Page{}, atom_keys?)
     {%{columns: result_columns}, <<>>} = decode_metadata(buffer, %Page{}, atom_keys?)
-    %{prepared | id: id, bound_columns: bound_columns, result_columns: result_columns}
+
+    %{
+      prepared
+      | id: id,
+        bound_columns: bound_columns,
+        result_columns: result_columns,
+        tracing_id: tracing_id
+    }
   end
 
   # SchemaChange
-  defp decode_result_response(<<0x0005::32-signed, buffer::bits>>, _query, _options) do
+  defp decode_result_response(<<0x0005::32-signed, buffer::bits>>, _query, tracing_id, _options) do
     decode_string(effect <- buffer)
     decode_string(target <- buffer)
     options = decode_change_options(buffer, target)
-    %Xandra.SchemaChange{effect: effect, target: target, options: options}
+    %Xandra.SchemaChange{effect: effect, target: target, options: options, tracing_id: tracing_id}
   end
 
   # Since SELECT statements are not allowed in BATCH queries, there's no need to

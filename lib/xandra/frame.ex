@@ -68,7 +68,11 @@ defmodule Xandra.Frame do
 
   @spec new(kind, keyword) :: t(kind) when kind: var
   def new(kind, options \\ []) do
-    %__MODULE__{kind: kind, compressor: options[:compressor]}
+    %__MODULE__{
+      kind: kind,
+      compressor: Keyword.get(options, :compressor),
+      tracing: Keyword.get(options, :tracing, false)
+    }
   end
 
   @spec header_length() :: 9
@@ -111,12 +115,19 @@ defmodule Xandra.Frame do
     assert_response_version_matches_request(response_version, protocol_module)
 
     compression? = flag_set?(flags, _compression = 0x01)
+    tracing? = flag_set?(flags, _tracing = 0x02)
     warning? = flag_set?(flags, _warning? = 0x08)
 
     kind = Map.fetch!(@response_opcodes, opcode)
     body = maybe_decompress_body(compression?, compressor, body)
 
-    %__MODULE__{kind: kind, body: body, warning: warning?, compressor: compressor}
+    %__MODULE__{
+      kind: kind,
+      body: body,
+      tracing: tracing?,
+      warning: warning?,
+      compressor: compressor
+    }
   end
 
   defp assert_response_version_matches_request(response_version, protocol_module) do

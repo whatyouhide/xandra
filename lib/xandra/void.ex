@@ -6,7 +6,7 @@ defmodule Xandra.Void do
   `DELETE`.
   """
 
-  defstruct []
+  defstruct [:tracing_id]
 
-  @type t :: %__MODULE__{}
+  @type t :: %__MODULE__{tracing_id: binary | nil}
 end
