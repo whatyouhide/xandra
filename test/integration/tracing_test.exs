@@ -64,10 +64,8 @@ defmodule TracingTest do
     result = Xandra.execute!(conn, "USE system", [], tracing: true)
 
     statement = "SELECT * FROM system_traces.events WHERE session_id = ?"
-    trace_events_page = Xandra.execute!(conn, statement, [{"uuid", result.tracing_id}])
 
-    assert [parsing_event, preparing_event] = Enum.to_list(trace_events_page)
-    assert parsing_event["activity"] == "Parsing USE system"
-    assert preparing_event["activity"] == "Preparing statement"
+    assert {:ok, _trace_events_page} =
+             Xandra.execute!(conn, statement, [{"uuid", result.tracing_id}])
   end
 end
