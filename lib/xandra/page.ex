@@ -15,10 +15,13 @@ defmodule Xandra.Page do
 
   The following fields are public and can be accessed or relied on:
 
-    * `paging_state` - the current paging state. Its value can be used to check
+    * `:paging_state` - the current paging state. Its value can be used to check
       whether more pages are available to fetch after the given page.
       This is useful when implementing manual paging.
       See also the documentation for `Xandra.execute/4`.
+
+    * `:tracing_id` - the tracing ID (as a UUID binary) if tracing was enabled,
+      or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
 
   ## Examples
 
