@@ -297,10 +297,12 @@ defmodule Xandra.Cluster do
   @doc """
   Same as `execute/4` but with optional arguments.
   """
-  @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values()) ::
-          {:ok, Xandra.result()} | {:error, Xandra.error()}
-  @spec execute(cluster, Xandra.Batch.t(), keyword) ::
-          {:ok, Xandra.Void.t()} | {:error, Xandra.error()}
+  @spec execute(
+          cluster,
+          Xandra.Batch.t() | Xandra.statement() | Xandra.Prepared.t(),
+          keyword | Xandra.values()
+        ) ::
+          {:ok, Xandra.result() | Xandra.Void.t()} | {:error, Xandra.error()}
   def execute(cluster, query, params_or_options \\ [])
 
   def execute(cluster, statement, params) when is_binary(statement) do
@@ -334,10 +336,12 @@ defmodule Xandra.Cluster do
   @doc """
   Same as `execute/3` but returns the result directly or raises in case of errors.
   """
-  @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values()) ::
-          Xandra.result() | no_return
-  @spec execute(cluster, Xandra.Batch.t(), keyword) ::
-          Xandra.Void.t() | no_return
+  @spec execute!(
+          cluster,
+          Xandra.Batch.t() | Xandra.statement() | Xandra.Prepared.t(),
+          keyword | Xandra.values()
+        ) ::
+          Xandra.result() | Xandra.Void.t() | no_return
   def execute!(cluster, query, params_or_options \\ []) do
     case execute(cluster, query, params_or_options) do
       {:ok, result} -> result
@@ -348,7 +352,7 @@ defmodule Xandra.Cluster do
   @doc """
   Same as `execute/4` but returns the result directly or raises in case of errors.
   """
-  @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), keyword) ::
+  @spec execute!(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), keyword) ::
           Xandra.result() | no_return
   def execute!(cluster, query, params, options) do
     case execute(cluster, query, params, options) do
