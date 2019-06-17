@@ -66,6 +66,6 @@ defmodule TracingTest do
     statement = "SELECT * FROM system_traces.events WHERE session_id = ?"
 
     assert {:ok, _trace_events_page} =
-             Xandra.execute!(conn, statement, [{"uuid", result.tracing_id}])
+             Xandra.execute(conn, statement, [{"uuid", result.tracing_id}])
   end
 end
