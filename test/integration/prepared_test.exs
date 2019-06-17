@@ -63,7 +63,9 @@ defmodule PreparedTest do
 
   test "inspecting prepared queries", %{conn: conn} do
     prepared = Xandra.prepare!(conn, "SELECT * FROM users")
-    assert inspect(prepared) == ~s(#Xandra.Prepared<"SELECT * FROM users">)
+
+    assert inspect(prepared) ==
+             ~s(#Xandra.Prepared<[statement: "SELECT * FROM users", tracing_id: nil]>)
   end
 
   test "missing named params raise an error", %{conn: conn} do

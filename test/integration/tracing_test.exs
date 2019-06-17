@@ -46,7 +46,6 @@ defmodule TracingTest do
     end
   end
 
-  @tag :focus
   test "tracing enabled when executing simple, prepared, and batch queryes",
        %{conn: conn, keyspace: keyspace} do
     result = Xandra.execute!(conn, "USE system", [], tracing: true)
