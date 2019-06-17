@@ -135,8 +135,11 @@ defmodule Xandra.Connection do
         {:ok, prepared, state}
 
       :error ->
+        frame_options =
+          options |> Keyword.take([:tracing]) |> Keyword.put(:compressor, compressor)
+
         payload =
-          Frame.new(:prepare, compressor: compressor)
+          Frame.new(:prepare, frame_options)
           |> state.protocol_module.encode_request(prepared)
           |> Frame.encode(state.protocol_module)
 
