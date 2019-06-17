@@ -40,7 +40,9 @@ defmodule ResultsTest do
     Xandra.execute!(conn, "CREATE TABLE users (name text PRIMARY KEY)")
     Xandra.execute!(conn, "INSERT INTO users (name) VALUES ('Jeff')")
     %Xandra.Page{} = page = Xandra.execute!(conn, "SELECT * FROM users")
-    assert inspect(page) == ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], more_pages?: false]>)
+
+    assert inspect(page) ==
+             ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], tracing_id: nil, more_pages?: false]>)
   end
 
   describe "SCHEMA_CHANGE updates since native protocol v4" do

@@ -18,13 +18,17 @@ defmodule Xandra.SchemaChange do
         keyspace where the change happened and `subject` is the name of what
         changed (so the name of the changed table or type)
 
+    * `:tracing_id` - the tracing ID (as a UUID binary) if tracing was enabled,
+      or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
+
   """
 
-  defstruct [:effect, :target, :options]
+  defstruct [:effect, :target, :options, :tracing_id]
 
   @type t :: %__MODULE__{
           effect: String.t(),
           target: String.t(),
-          options: map
+          options: map,
+          tracing_id: binary | nil
         }
 end

@@ -435,6 +435,10 @@ defmodule Xandra do
       decompress data. See the "Compression" section in the module
       documentation. By default, this option is not present.
 
+    * `:tracing` - (boolean) turn on tracing for the preparation of the
+      given query and sets the `tracing_id` field in the returned prepared
+      query. See the "Tracing" option in `execute/4`. Defaults to `false`.
+
   ## Prepared queries cache
 
   Since Cassandra prepares queries on a per-node basis (and not on a
@@ -642,6 +646,10 @@ defmodule Xandra do
       section in the module documentation. By default, this option is not
       present.
 
+    * `:tracing` - (boolean) turns on tracing for the given query and sets the
+      `tracing_id` field on the result of the query. See the "Tracing" section
+      below. Defaults to `false`.
+
     * `:date_format` - (`:date` or `:integer`) controls the format in which
       dates are returned. When set to `:integer` the returned value is
       a number of days from the Unix epoch, a date struct otherwise.
@@ -769,6 +777,29 @@ defmodule Xandra do
   to use `stream_pages!/4`. Also note that if the `:paging_state` option is set to `nil`,
   meaning there are no more pages to fetch, an `ArgumentError` exception will be raised;
   be sure to check for this with `page.paging_state != nil`.
+
+  ## Tracing
+
+  Cassandra supports [tracing queries](https://docs.datastax.com/en/cql/3.3/cql/cql_reference/cqlshTracing.html).
+  If you set the `:tracing` option to `true`, the executed query will be traced.
+  This means that a tracing ID (a binary UUID) will be set in the response of the query
+  and that Cassandra will write relevant tracing events to tracing-related tables in the
+  `system_traces` keyspace.
+
+  In Xandra, all response structs contain an accessible `tracing_id` field that is set
+  to `nil` except for when tracing is enabled. In those cases, `tracing_id` is a binary
+  UUID that you can use to select events from the traces tables.
+
+  For example:
+
+      {:ok, page} = Xandra.execute(conn, "SELECT * FROM users", [], tracing: true)
+
+      statement = "SELECT * FROM system_traces.events WHERE session_id = ?"
+      {:ok, trace_events_page} = Xandra.execute(conn, statement, [{"uuid", page.tracing_id}])
+
+  Note that tracing is an expensive operation for Cassandra that puts load on
+  executing queries. This is why this option is only supported *per-query* in
+  `execute/4` instead of connection-wide.
   """
   @spec execute(conn, statement | Prepared.t(), values, keyword) ::
           {:ok, result} | {:error, error}

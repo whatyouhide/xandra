@@ -2,9 +2,13 @@ defmodule Xandra.Prepared do
   @moduledoc """
   A data structure used to internally represent prepared queries.
 
-  Note that the `t:t/0` type is public because it would cause Dialyzer
-  warnings if it were opaque. However, the `Xandra.Prepared` struct is
-  private API and is not meant to be used directly.
+  These are the publicly accessible fields of this struct:
+
+    * `:tracing_id` - the tracing ID (as a UUID binary) if tracing was enabled,
+      or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
+
+  All other fields are documented in `t:t/0` to avoid Dialyzer warnings,
+  but are not meant to be used by users.
   """
 
   defstruct [
@@ -14,7 +18,8 @@ defmodule Xandra.Prepared do
     :bound_columns,
     :result_columns,
     :default_consistency,
-    :protocol_module
+    :protocol_module,
+    :tracing_id
   ]
 
   @type t :: %__MODULE__{
@@ -24,7 +29,8 @@ defmodule Xandra.Prepared do
           bound_columns: list | nil,
           result_columns: list | nil,
           default_consistency: atom | nil,
-          protocol_module: module | nil
+          protocol_module: module | nil,
+          tracing_id: binary | nil
         }
 
   @doc false
@@ -55,7 +61,7 @@ defmodule Xandra.Prepared do
     end
 
     def encode(prepared, values, options) when is_list(values) do
-      Frame.new(:execute, Keyword.take(options, [:compressor]))
+      Frame.new(:execute, Keyword.take(options, [:compressor, :tracing]))
       |> prepared.protocol_module.encode_request(%{prepared | values: values}, options)
       |> Frame.encode(prepared.protocol_module)
     end
@@ -73,7 +79,12 @@ defmodule Xandra.Prepared do
     import Inspect.Algebra
 
     def inspect(prepared, options) do
-      concat(["#Xandra.Prepared<", to_doc(prepared.statement, options), ">"])
+      properties = [
+        statement: prepared.statement,
+        tracing_id: prepared.tracing_id
+      ]
+
+      concat(["#Xandra.Prepared<", to_doc(properties, options), ">"])
     end
   end
 end
