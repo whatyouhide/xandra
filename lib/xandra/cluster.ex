@@ -334,9 +334,9 @@ defmodule Xandra.Cluster do
   @doc """
   Same as `execute/3` but returns the result directly or raises in case of errors.
   """
-  @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values()) ::
+  @spec execute!(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values()) ::
           Xandra.result() | no_return
-  @spec execute(cluster, Xandra.Batch.t(), keyword) ::
+  @spec execute!(cluster, Xandra.Batch.t(), keyword) ::
           Xandra.Void.t() | no_return
   def execute!(cluster, query, params_or_options \\ []) do
     case execute(cluster, query, params_or_options) do

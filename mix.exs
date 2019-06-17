@@ -20,6 +20,9 @@ defmodule Xandra.Mixfile do
       aliases: ["test.scylladb": "test --exclude encryption --exclude cassandra_specific"],
       preferred_cli_env: ["test.scylladb": :test],
 
+      # Dialyzer
+      dialyzer: [flags: [:no_contracts]],
+
       # Hex
       package: package(),
       description: @description,

@@ -15,7 +15,22 @@ defmodule Xandra.Frame do
 
   alias Xandra.Protocol
 
-  @type kind :: :startup | :options | :query | :prepare | :execute | :batch
+  @type kind ::
+          :startup
+          | :options
+          | :query
+          | :prepare
+          | :execute
+          | :register
+          | :batch
+          | :auth_response
+          | :error
+          | :ready
+          | :authenticate
+          | :supported
+          | :result
+          | :event
+          | :auth_success
 
   @type t(kind) :: %__MODULE__{kind: kind}
   @type t :: t(kind)
