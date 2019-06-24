@@ -294,6 +294,22 @@ defmodule DataTypesTest do
     assert [row] = Enum.to_list(page)
     assert Map.fetch!(row, "id") == 2
     assert Map.fetch!(row, "decimal") == decimal_as_tuple
+
+    # -5.0
+    negative_decimal = Decimal.new("-5.0")
+
+    values = [
+      {"int", 3},
+      {"decimal", negative_decimal}
+    ]
+
+    Xandra.execute!(conn, statement, values)
+
+    page = Xandra.execute!(conn, "SELECT * FROM decs WHERE id = 3", [], decimal_format: :decimal)
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "id") == 3
+    assert Map.fetch!(row, "decimal") == Decimal.new("-5.0")
+    assert row |> Map.fetch!("decimal") |> Decimal.negative?()
   end
 
   test "uuid/timeuuid types with format", %{conn: conn} do

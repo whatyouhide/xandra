@@ -898,7 +898,7 @@ defmodule Xandra.Protocol.V4 do
         # Avoid compilation warnings by using a dynamic module name.
         decimal_mod = Decimal
         sign = if(value >= 0, do: 1, else: -1)
-        decimal_mod.new(sign, _coefficient = value, _exponent = -scale)
+        decimal_mod.new(sign, _coefficient = abs(value), _exponent = -scale)
     end
   end
 
