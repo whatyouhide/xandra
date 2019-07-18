@@ -21,7 +21,7 @@ __Breaking changes__:
 
 __Breaking changes__:
 
-* Add the `:uuid_format` and `:timeuuid_format` options to return UUIDs as binaries or human-readable strings. This is a breaking change because the by default it is set to `:string`. If you want to keep the previous behaviour, pass `uuid_format: :binary` or `timeuuid_format: :binary` to `Xandra.execute/3/4`.
+* Add the `:uuid_format` and `:timeuuid_format` options to return UUIDs as binaries or human-readable strings. This is a breaking change because the default changed to `:string`. If you want to keep the previous behaviour, pass `uuid_format: :binary` or `timeuuid_format: :binary` to `Xandra.execute/3/4`.
 * Remove support for the `:pool` option in Xandra. Now the pool of connections is always a pool with size configurable by `:pool_size`.
 * Add `Xandra.Cluster` as a separate module with an API that mirrors `Xandra`, instead of as a DBConnection pool.
 * Bump the Elixir requirement to ~> 1.6.
