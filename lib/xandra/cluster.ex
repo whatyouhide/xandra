@@ -442,6 +442,11 @@ defmodule Xandra.Cluster do
     {:noreply, state}
   end
 
+  def handle_cast({:update, {:control_connection_established, address}}, %__MODULE__{} = state) do
+    state = restart_pool(state, address)
+    {:noreply, state}
+  end
+
   def handle_cast({:update, %StatusChange{} = status_change}, %__MODULE__{} = state) do
     state = handle_status_change(state, status_change)
     {:noreply, state}
@@ -493,7 +498,7 @@ defmodule Xandra.Cluster do
     end
   end
 
-  defp handle_status_change(state, %{effect: "UP", address: address}) do
+  defp restart_pool(state, address) do
     %{pool_supervisor: pool_supervisor, pools: pools} = state
 
     case Supervisor.restart_child(pool_supervisor, address) do
@@ -503,6 +508,10 @@ defmodule Xandra.Cluster do
       {:ok, pool} ->
         %{state | pools: Map.put(pools, address, pool)}
     end
+  end
+
+  defp handle_status_change(state, %{effect: "UP", address: address}) do
+    restart_pool(state, address)
   end
 
   defp handle_status_change(state, %{effect: "DOWN", address: address}) do

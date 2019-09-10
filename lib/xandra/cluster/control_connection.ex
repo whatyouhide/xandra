@@ -113,8 +113,7 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp report_active(%{new: false, cluster: cluster, address: address} = state) do
-    status_change = %Xandra.Cluster.StatusChange{effect: "UP", address: address}
-    Xandra.Cluster.update(cluster, status_change)
+    Xandra.Cluster.update(cluster, {:control_connection_established, address})
     {:ok, state}
   end
 
