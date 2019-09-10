@@ -112,7 +112,8 @@ defmodule Xandra.Cluster.ControlConnection do
     {:connect, :reconnect, %{state | socket: nil, buffer: <<>>}}
   end
 
-  defp report_active(%{new: false} = state) do
+  defp report_active(%{new: false, cluster: cluster, address: address} = state) do
+    Xandra.Cluster.update(cluster, {:control_connection_established, address})
     {:ok, state}
   end
 
