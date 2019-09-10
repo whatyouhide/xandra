@@ -469,7 +469,22 @@ defmodule Xandra do
   """
   @spec prepare(conn, statement, keyword) :: {:ok, Prepared.t()} | {:error, error}
   def prepare(conn, statement, options \\ []) when is_binary(statement) do
-    DBConnection.prepare(conn, %Prepared{statement: statement}, options)
+    start = System.monotonic_time()
+
+    result = DBConnection.prepare(conn, %Prepared{statement: statement}, options)
+
+    duration = System.monotonic_time() - start
+
+    measurements = %{duration: duration}
+    metadata = %{statement: statement, result: result}
+
+    :telemetry.execute(
+      [:xandra, :prepare],
+      measurements,
+      metadata
+    )
+
+    result
   end
 
   @doc """
@@ -913,10 +928,44 @@ defmodule Xandra do
   end
 
   defp execute_with_retrying(conn, query, params, options) do
-    RetryStrategy.run_with_retrying(options, fn ->
-      execute_without_retrying(conn, query, params, options)
-    end)
+    start = System.monotonic_time()
+
+    result =
+      RetryStrategy.run_with_retrying(options, fn ->
+        execute_without_retrying(conn, query, params, options)
+      end)
+
+    duration = System.monotonic_time() - start
+
+    measurements = %{duration: duration}
+    metadata = %{queries: prepare_queries(query), result: result}
+
+    :telemetry.execute(
+      [:xandra, :query],
+      measurements,
+      metadata
+    )
+
+    result
   end
+
+  defp prepare_queries(%Xandra.Simple{} = query) do
+    [prepare_query_metadata(query)]
+  end
+
+  defp prepare_queries(%Xandra.Prepared{} = query) do
+    [prepare_query_metadata(query)]
+  end
+
+  defp prepare_queries(%Xandra.Batch{} = query) do
+    Enum.map(query.queries, &prepare_query_metadata/1)
+  end
+
+  defp prepare_query_metadata({statement, values}), do: {statement, values, nil}
+  defp prepare_query_metadata(%Xandra.Simple{} = query), do: {query.statement, query.values, nil}
+
+  defp prepare_query_metadata(%Xandra.Prepared{} = query),
+    do: {query.statement, query.values, query.tracing_id}
 
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
     run(conn, options, fn conn ->

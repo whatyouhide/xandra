@@ -58,7 +58,8 @@ defmodule Xandra.Mixfile do
       {:decimal, "~> 1.7", optional: true},
       {:snappy, github: "skunkwerks/snappy-erlang-nif", only: [:dev, :test]},
       {:ex_doc, "~> 0.20", only: :dev},
-      {:dialyxir, "~> 1.0.0-rc.6", only: :dev, runtime: false}
+      {:dialyxir, "~> 1.0.0-rc.6", only: :dev, runtime: false},
+      {:telemetry, "~> 0.4"}
     ]
   end
 end
