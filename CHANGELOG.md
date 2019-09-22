@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.13.0
+
+* Add support for Cassandra native protocol v4. By default, we'll use v3, but you can pass in a `:protocol_version` when starting a connection to force protocol v4. Protocol v4 introduces the `:not_set` value. See the documentation of the `Xandra` module.
+* Add support for tracing on a per-query basis. If `:tracing` is set to `true`, then a tracing ID will be returned with the Cassandra response. See the documentation for more information.
+* Fix a bug with decoding `Decimal` values.
+* Fix a bug with `Xandra.Cluster` where, in cases of clusters with a single node, the connection wouldn't reconnect to the node in case of disconnections.
+
+__Breaking changes__:
+
+* Remove `Xandra.Page.more_pages_available?/1`. This was hard-deprecated in previous versions.
+* Remove the `:cursor` option for queries. This was hard-deprecated in previous versions.
+
+
 ## v0.12.0
 
 * Add a page in the documentation that compares Elixir data types and their Cassandra counterparts.
