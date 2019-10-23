@@ -68,7 +68,7 @@ defmodule Xandra.Batch do
       Xandra.execute!(conn, batch)
 
   """
-  @spec add(t, Xandra.statement() | Prepared.t(), [term]) :: t
+  @spec add(t, Xandra.statement() | Prepared.t(), Xandra.values()) :: t
   def add(batch, query, values \\ [])
 
   def add(%__MODULE__{} = batch, statement, values)
