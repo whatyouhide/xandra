@@ -36,6 +36,9 @@ defmodule Xandra.Connection do
       |> Keyword.get(:transport_options, [])
       |> Keyword.merge(@forced_transport_options)
 
+    # Set the logger metadata for the whole process.
+    :ok = Logger.metadata(xandra_address: address, xandra_port: port)
+
     case transport.connect(address, port, transport_options, @default_timeout) do
       {:ok, socket} ->
         state = %__MODULE__{
