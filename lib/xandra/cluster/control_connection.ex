@@ -22,6 +22,7 @@ defmodule Xandra.Cluster.ControlConnection do
     :options,
     :autodiscovery,
     :protocol_module,
+    :peername,
     new: true,
     buffer: <<>>
   ]
@@ -112,15 +113,15 @@ defmodule Xandra.Cluster.ControlConnection do
     {:connect, :reconnect, %{state | socket: nil, buffer: <<>>}}
   end
 
-  defp report_active(%{new: false, cluster: cluster, address: address} = state) do
-    Xandra.Cluster.update(cluster, {:control_connection_established, address})
+  defp report_active(%{new: false, cluster: cluster, peername: peername} = state) do
+    Xandra.Cluster.update(cluster, {:control_connection_established, peername})
     {:ok, state}
   end
 
   defp report_active(%{new: true, cluster: cluster, node_ref: node_ref, socket: socket} = state) do
     with {:ok, {address, port}} <- inet_mod(state.transport).peername(socket) do
       Xandra.Cluster.activate(cluster, node_ref, address, port)
-      {:ok, %{state | new: false, address: address}}
+      {:ok, %{state | new: false, peername: address}}
     end
   end
 
