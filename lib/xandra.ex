@@ -177,6 +177,12 @@ defmodule Xandra do
   `:protocol_version` option given to `start_link/1`. For now, it's only
   possible to force a version on the client side (which by default is v3).
   See `start_link/1`.
+
+  ## Logging
+
+  Xandra connections log a few events like disconnections or connection failures.
+  Logs contain the `:xandra_address` and `:xandra_port` metadata that you can
+  choose to log if desired.
   """
 
   alias __MODULE__.{
