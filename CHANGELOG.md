@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.13.1
+
+* Fix the spec for `Xandra.Batch.add/3`.
+* Reconnect to the control connection using the full address (and not the IP of the peername) in `Xandra.Cluster`.
+* Set the `:xandra_address` and `:xandra_port` metadata in logs for Xandra connections.
+
 ## v0.13.0
 
 * Add support for Cassandra native protocol v4. By default, we'll use v3, but you can pass in a `:protocol_version` when starting a connection to force protocol v4. Protocol v4 introduces the `:not_set` value. See the documentation of the `Xandra` module.
