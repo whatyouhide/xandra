@@ -21,7 +21,12 @@ defmodule XandraTest.IntegrationCase do
             default_start_options: @default_start_options
           ] do
       setup_all do
-        keyspace = "xandra_test_" <> String.replace(inspect(__MODULE__), ".", "")
+        module_suffix =
+          inspect(__MODULE__)
+          |> String.replace(".", "")
+          |> String.downcase()
+
+        keyspace = "xandra_test_" <> module_suffix
 
         start_options = Keyword.merge(unquote(default_start_options), unquote(start_options))
         case_template = unquote(case_template)
