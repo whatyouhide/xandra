@@ -3,7 +3,7 @@ defmodule Xandra.Connection do
 
   use DBConnection
 
-  alias Xandra.{Batch, ConnectionError, Prepared, Frame, Simple}
+  alias Xandra.{Batch, ConnectionError, Prepared, Frame, Simple, SetKeyspace}
   alias __MODULE__.Utils
 
   @default_timeout 5_000
@@ -17,7 +17,8 @@ defmodule Xandra.Connection do
     :compressor,
     :default_consistency,
     :atom_keys?,
-    :protocol_module
+    :protocol_module,
+    :current_keyspace
   ]
 
   @impl true
@@ -49,7 +50,8 @@ defmodule Xandra.Connection do
           compressor: compressor,
           default_consistency: default_consistency,
           atom_keys?: atom_keys?,
-          protocol_module: protocol_module
+          protocol_module: protocol_module,
+          current_keyspace: nil
         }
 
         with {:ok, supported_options} <-
@@ -121,7 +123,8 @@ defmodule Xandra.Connection do
     prepared = %{
       prepared
       | default_consistency: state.default_consistency,
-        protocol_module: state.protocol_module
+        protocol_module: state.protocol_module,
+        keyspace: state.current_keyspace
     }
 
     force? = Keyword.fetch!(options, :force)
@@ -185,9 +188,15 @@ defmodule Xandra.Connection do
 
     with :ok <- state.transport.send(socket, payload),
          {:ok, %Frame{} = frame} <-
-           Utils.recv_frame(state.transport, socket, state.protocol_module, compressor) do
-      {:ok, query, %{frame | atom_keys?: atom_keys?}, state}
+           Utils.recv_frame(state.transport, socket, state.protocol_module, compressor),
+         frame = %{frame | atom_keys?: atom_keys?},
+         %SetKeyspace{keyspace: keyspace} = response <-
+           state.protocol_module.decode_response(frame, query, options) do
+      {:ok, query, response, %{state | current_keyspace: keyspace}}
     else
+      %_{} = response ->
+        {:ok, query, response, state}
+
       {:error, reason} ->
         {:disconnect, ConnectionError.new("execute", reason), state}
     end
