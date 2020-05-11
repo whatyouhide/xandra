@@ -886,7 +886,7 @@ defmodule Xandra do
   """
   @spec run(conn, keyword, (conn -> result)) :: result when result: var
   def run(conn, options \\ [], fun) when is_function(fun, 1) do
-    safe_call(fn ->DBConnection.run(conn, fun, options) end)
+    safe_call(fn -> DBConnection.run(conn, fun, options) end)
   end
 
   defp reprepare_queries(conn, [%Simple{} | rest], options) do
@@ -963,12 +963,14 @@ defmodule Xandra do
         {:ok, _query, %Error{reason: :unprepared}} ->
           # We can ignore the newly returned prepared query since it will have the
           # same id of the query we are repreparing.
-          case safe_call(fn -> DBConnection.prepare_execute(
-                 conn,
-                 prepared,
-                 params,
-                 Keyword.put(options, :force, true)
-               ) end) do
+          case safe_call(fn ->
+                 DBConnection.prepare_execute(
+                   conn,
+                   prepared,
+                   params,
+                   Keyword.put(options, :force, true)
+                 )
+               end) do
             {:ok, _prepared, %Error{} = error} ->
               {:error, error}
 
