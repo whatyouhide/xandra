@@ -475,7 +475,7 @@ defmodule Xandra do
   """
   @spec prepare(conn, statement, keyword) :: {:ok, Prepared.t()} | {:error, error}
   def prepare(conn, statement, options \\ []) when is_binary(statement) do
-    DBConnection.prepare(conn, %Prepared{statement: statement}, options)
+    safe_call(fn -> DBConnection.prepare(conn, %Prepared{statement: statement}, options) end)
   end
 
   @doc """
@@ -886,7 +886,7 @@ defmodule Xandra do
   """
   @spec run(conn, keyword, (conn -> result)) :: result when result: var
   def run(conn, options \\ [], fun) when is_function(fun, 1) do
-    DBConnection.run(conn, fun, options)
+    safe_call(fn ->DBConnection.run(conn, fun, options) end)
   end
 
   defp reprepare_queries(conn, [%Simple{} | rest], options) do
@@ -926,7 +926,7 @@ defmodule Xandra do
 
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
     run(conn, options, fn conn ->
-      case DBConnection.prepare_execute(conn, batch, nil, options) do
+      case safe_call(fn -> DBConnection.prepare_execute(conn, batch, nil, options) end) do
         {:ok, _query, %Error{reason: :unprepared}} ->
           with :ok <- reprepare_queries(conn, batch.queries, options) do
             execute(conn, batch, options)
@@ -945,7 +945,7 @@ defmodule Xandra do
   end
 
   defp execute_without_retrying(conn, %Simple{} = query, params, options) do
-    case DBConnection.prepare_execute(conn, query, params, options) do
+    case safe_call(fn -> DBConnection.prepare_execute(conn, query, params, options) end) do
       {:ok, _query, %Error{} = error} ->
         {:error, error}
 
@@ -959,16 +959,16 @@ defmodule Xandra do
 
   defp execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
     run(conn, options, fn conn ->
-      case DBConnection.execute(conn, prepared, params, options) do
+      case safe_call(fn -> DBConnection.execute(conn, prepared, params, options) end) do
         {:ok, _query, %Error{reason: :unprepared}} ->
           # We can ignore the newly returned prepared query since it will have the
           # same id of the query we are repreparing.
-          case DBConnection.prepare_execute(
+          case safe_call(fn -> DBConnection.prepare_execute(
                  conn,
                  prepared,
                  params,
                  Keyword.put(options, :force, true)
-               ) do
+               ) end) do
             {:ok, _prepared, %Error{} = error} ->
               {:error, error}
 
@@ -1049,4 +1049,13 @@ defmodule Xandra do
 
   defp protocol_version_to_module(other),
     do: raise(ArgumentError, "unknown protocol version: #{inspect(other)}")
+
+  defp safe_call(db_connection_fun) do
+    try do
+      db_connection_fun.()
+    rescue
+      # DBConnection functions can sometimes raise DBConnection.ConnectionError instead of returning it.
+      err in DBConnection.ConnectionError -> {:error, err}
+    end
+  end
 end
