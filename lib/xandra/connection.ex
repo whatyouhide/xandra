@@ -139,7 +139,7 @@ defmodule Xandra.Connection do
 
       :error ->
         frame_options =
-          options |> Keyword.take([:tracing]) |> Keyword.put(:compressor, compressor)
+          options |> Keyword.take([:tracing, :custom_payload]) |> Keyword.put(:compressor, compressor)
 
         payload =
           Frame.new(:prepare, frame_options)

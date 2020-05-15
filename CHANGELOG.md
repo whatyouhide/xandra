@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.14.0
+
+* Add support for custom payload as defined in protocol version 4. This adds support for Azure Cosmos DB.
+
 ## v0.13.1
 
 * Fix the spec for `Xandra.Batch.add/3`.

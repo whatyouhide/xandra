@@ -84,6 +84,10 @@ defmodule Xandra.Protocol.V4 do
     %{statement: statement, values: values} = query
 
     body = [
+      case Keyword.get(options, :custom_payload) do
+        nil -> []
+        custom_payload -> encode_bytes_map(custom_payload)
+      end,
       <<byte_size(statement)::32>>,
       statement,
       encode_params([], values, options, query.default_consistency, _skip_metadata? = false)
@@ -92,9 +96,19 @@ defmodule Xandra.Protocol.V4 do
     %{frame | body: body}
   end
 
-  def encode_request(%Frame{kind: :prepare} = frame, %Prepared{} = prepared, _options) do
+  def encode_request(%Frame{kind: :prepare} = frame, %Prepared{} = prepared, options) do
     %{statement: statement} = prepared
-    %{frame | body: [<<byte_size(statement)::32>>, statement]}
+
+    body = [
+      case Keyword.get(options, :custom_payload) do
+        nil -> []
+        custom_payload -> encode_bytes_map(custom_payload)
+      end,
+      <<byte_size(statement)::32>>,
+      statement
+    ]
+
+    %{frame | body: body}
   end
 
   def encode_request(%Frame{kind: :execute} = frame, %Prepared{} = prepared, options) do
@@ -102,6 +116,10 @@ defmodule Xandra.Protocol.V4 do
     skip_metadata? = prepared.result_columns != nil
 
     body = [
+      case Keyword.get(options, :custom_payload) do
+        nil -> []
+        custom_payload -> encode_bytes_map(custom_payload)
+      end,
       <<byte_size(id)::16>>,
       id,
       encode_params(columns, values, options, prepared.default_consistency, skip_metadata?)
@@ -125,6 +143,10 @@ defmodule Xandra.Protocol.V4 do
     encoded_queries = [<<length(queries)::16>>] ++ Enum.map(queries, &encode_query_in_batch/1)
 
     body = [
+      case Keyword.get(options, :custom_payload) do
+        nil -> []
+        custom_payload -> encode_bytes_map(custom_payload)
+      end,
       encode_batch_type(type),
       encoded_queries,
       encode_consistency_level(consistency),
@@ -152,6 +174,10 @@ defmodule Xandra.Protocol.V4 do
       end
 
     [<<map_size(map)::16>>] ++ parts
+  end
+
+  defp encode_bytes_map(kwlist) do
+    encode_string_map(kwlist) # same effect
   end
 
   consistency_levels = %{
@@ -581,6 +607,7 @@ defmodule Xandra.Protocol.V4 do
           kind: :result,
           body: body,
           tracing: tracing?,
+          custom_payload: custom_payload?,
           atom_keys?: atom_keys?,
           warning: warning?
         },
@@ -589,8 +616,9 @@ defmodule Xandra.Protocol.V4 do
       )
       when kind in [Simple, Prepared, Batch] do
     {body, tracing_id} = decode_tracing_id(body, tracing?)
+    {body, custom_payload} = decode_custom_payload(body, custom_payload?)
     body = decode_warnings(body, warning?)
-    decode_result_response(body, query, tracing_id, Keyword.put(options, :atom_keys?, atom_keys?))
+    decode_result_response(body, query, tracing_id, custom_payload, Keyword.put(options, :atom_keys?, atom_keys?))
   end
 
   # We decode to consume the warning from the body but we ignore the result
@@ -618,24 +646,33 @@ defmodule Xandra.Protocol.V4 do
     {body, tracing_id}
   end
 
+  defp decode_custom_payload(body, _custom_payload? = false) do
+    {body, _custom_payload = nil}
+  end
+
+  defp decode_custom_payload(body, _custom_payload? = true) do
+    {custom_payload, body} = decode_bytes_map(body)
+    {body, custom_payload}
+  end
+
   # Void
-  defp decode_result_response(<<0x0001::32-signed>>, _query, tracing_id, _options) do
-    %Xandra.Void{tracing_id: tracing_id}
+  defp decode_result_response(<<0x0001::32-signed>>, _query, tracing_id, custom_payload, _options) do
+    %Xandra.Void{tracing_id: tracing_id, custom_payload: custom_payload}
   end
 
   # Page
-  defp decode_result_response(<<0x0002::32-signed, buffer::bits>>, query, tracing_id, options) do
+  defp decode_result_response(<<0x0002::32-signed, buffer::bits>>, query, tracing_id, custom_payload, options) do
     page = new_page(query)
     {page, buffer} = decode_metadata(buffer, page, Keyword.fetch!(options, :atom_keys?))
     columns = rewrite_column_types(page.columns, options)
-    %{page | content: decode_page_content(buffer, columns), tracing_id: tracing_id}
+    %{page | content: decode_page_content(buffer, columns), tracing_id: tracing_id, custom_payload: custom_payload}
   end
 
   # SetKeyspace
-  defp decode_result_response(<<0x0003::32-signed, buffer::bits>>, _query, tracing_id, _options) do
+  defp decode_result_response(<<0x0003::32-signed, buffer::bits>>, _query, tracing_id, custom_payload, _options) do
     decode_string(keyspace <- buffer)
     <<>> = buffer
-    %Xandra.SetKeyspace{keyspace: keyspace, tracing_id: tracing_id}
+    %Xandra.SetKeyspace{keyspace: keyspace, tracing_id: tracing_id, custom_payload: custom_payload}
   end
 
   # Prepared
@@ -643,6 +680,7 @@ defmodule Xandra.Protocol.V4 do
          <<0x0004::32-signed, buffer::bits>>,
          %Prepared{} = prepared,
          tracing_id,
+         custom_payload,
          options
        ) do
     atom_keys? = Keyword.fetch!(options, :atom_keys?)
@@ -655,16 +693,17 @@ defmodule Xandra.Protocol.V4 do
       | id: id,
         bound_columns: bound_columns,
         result_columns: result_columns,
-        tracing_id: tracing_id
+        tracing_id: tracing_id,
+        custom_payload: custom_payload
     }
   end
 
   # SchemaChange
-  defp decode_result_response(<<0x0005::32-signed, buffer::bits>>, _query, tracing_id, _options) do
+  defp decode_result_response(<<0x0005::32-signed, buffer::bits>>, _query, tracing_id, custom_payload, _options) do
     decode_string(effect <- buffer)
     decode_string(target <- buffer)
     options = decode_change_options(buffer, target)
-    %Xandra.SchemaChange{effect: effect, target: target, options: options, tracing_id: tracing_id}
+    %Xandra.SchemaChange{effect: effect, target: target, options: options, tracing_id: tracing_id, custom_payload: custom_payload}
   end
 
   # Since SELECT statements are not allowed in BATCH queries, there's no need to
@@ -1155,6 +1194,21 @@ defmodule Xandra.Protocol.V4 do
   defp decode_string_list(<<buffer::bits>>, count, acc) do
     decode_string(item <- buffer)
     decode_string_list(buffer, count - 1, [item | acc])
+  end
+
+  defp decode_bytes_map(<<count::16-unsigned, buffer::bits>>) do
+    decode_bytes_map(buffer, count, [])
+  end
+
+  defp decode_bytes_map(<<buffer::bits>>, 0, acc) do
+    {Enum.reverse(acc), buffer}
+  end
+
+  defp decode_bytes_map(<<buffer::bits>>, count, acc) do
+    decode_string(key <- buffer)
+    decode_value(value <- buffer, :blob) do
+      decode_bytes_map(buffer, count - 1, [{key, value} | acc])
+    end
   end
 
   defp date_from_unix_days(days) do

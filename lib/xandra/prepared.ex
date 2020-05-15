@@ -7,6 +7,9 @@ defmodule Xandra.Prepared do
     * `:tracing_id` - the tracing ID (as a UUID binary) if tracing was enabled,
       or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
 
+    * `:custom_payload` - the custom payload sent along with the request (only
+      protocol version 4). See the "Custom Payload" section in `Xandra.execute/4`.
+
   All other fields are documented in `t:t/0` to avoid Dialyzer warnings,
   but are not meant to be used by users.
   """
@@ -19,7 +22,8 @@ defmodule Xandra.Prepared do
     :result_columns,
     :default_consistency,
     :protocol_module,
-    :tracing_id
+    :tracing_id,
+    :custom_payload
   ]
 
   @type t :: %__MODULE__{
@@ -30,7 +34,8 @@ defmodule Xandra.Prepared do
           result_columns: list | nil,
           default_consistency: atom | nil,
           protocol_module: module | nil,
-          tracing_id: binary | nil
+          tracing_id: binary | nil,
+          custom_payload: [{String.t, binary}] | nil,
         }
 
   @doc false
@@ -61,7 +66,7 @@ defmodule Xandra.Prepared do
     end
 
     def encode(prepared, values, options) when is_list(values) do
-      Frame.new(:execute, Keyword.take(options, [:compressor, :tracing]))
+      Frame.new(:execute, Keyword.take(options, [:compressor, :tracing, :custom_payload]))
       |> prepared.protocol_module.encode_request(%{prepared | values: values}, options)
       |> Frame.encode(prepared.protocol_module)
     end
@@ -81,7 +86,8 @@ defmodule Xandra.Prepared do
     def inspect(prepared, options) do
       properties = [
         statement: prepared.statement,
-        tracing_id: prepared.tracing_id
+        tracing_id: prepared.tracing_id,
+        custom_payload: prepared.custom_payload
       ]
 
       concat(["#Xandra.Prepared<", to_doc(properties, options), ">"])

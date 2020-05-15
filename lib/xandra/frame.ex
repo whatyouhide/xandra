@@ -7,6 +7,7 @@ defmodule Xandra.Frame do
     stream_id: 0,
     compressor: nil,
     tracing: false,
+    custom_payload: nil,
     warning: false,
     atom_keys?: false
   ]
@@ -66,12 +67,18 @@ defmodule Xandra.Frame do
     0x10 => :auth_success
   }
 
+  @supports_custom_payload %{
+    Protocol.V3 => false,
+    Protocol.V4 => true
+  }
+
   @spec new(kind, keyword) :: t(kind) when kind: var
   def new(kind, options \\ []) do
     %__MODULE__{
       kind: kind,
       compressor: Keyword.get(options, :compressor),
-      tracing: Keyword.get(options, :tracing, false)
+      tracing: Keyword.get(options, :tracing, false),
+      custom_payload: Keyword.get(options, :custom_payload)
     }
   end
 
@@ -88,16 +95,20 @@ defmodule Xandra.Frame do
     %{
       compressor: compressor,
       tracing: tracing?,
+      custom_payload: custom_payload,
       kind: kind,
       stream_id: stream_id,
       body: body
     } = frame
 
+    custom_payload? = custom_payload != nil and
+      kind in [:query, :prepare, :execute, :batch] and
+      Map.fetch!(@supports_custom_payload, protocol_module)
     body = maybe_compress_body(compressor, body)
 
     [
       Map.fetch!(@request_versions, protocol_module),
-      encode_flags(compressor, tracing?),
+      encode_flags(compressor, tracing?, custom_payload?),
       <<stream_id::16>>,
       Map.fetch!(@request_opcodes, kind),
       <<IO.iodata_length(body)::32>>,
@@ -116,6 +127,7 @@ defmodule Xandra.Frame do
 
     compression? = flag_set?(flags, _compression = 0x01)
     tracing? = flag_set?(flags, _tracing = 0x02)
+    custom_payload? = flag_set?(flags, _custom_payload = 0x04)
     warning? = flag_set?(flags, _warning? = 0x08)
 
     kind = Map.fetch!(@response_opcodes, opcode)
@@ -125,6 +137,7 @@ defmodule Xandra.Frame do
       kind: kind,
       body: body,
       tracing: tracing?,
+      custom_payload: custom_payload?,
       warning: warning?,
       compressor: compressor
     }
@@ -141,10 +154,14 @@ defmodule Xandra.Frame do
     end
   end
 
-  defp encode_flags(_compressor = nil, _tracing? = false), do: 0x00
-  defp encode_flags(_compressor = nil, _tracing? = true), do: 0x02
-  defp encode_flags(_compressor = _, _tracing? = false), do: 0x01
-  defp encode_flags(_compressor = _, _tracing? = true), do: 0x03
+  defp encode_flags(_compressor = nil, _tracing? = false, _custom_payload? = false), do: 0x00
+  defp encode_flags(_compressor = nil, _tracing? = false, _custom_payload? = true), do: 0x04
+  defp encode_flags(_compressor = nil, _tracing? = true, _custom_payload? = false), do: 0x02
+  defp encode_flags(_compressor = nil, _tracing? = true, _custom_payload? = true), do: 0x06
+  defp encode_flags(_compressor = _, _tracing? = false, _custom_payload? = false), do: 0x01
+  defp encode_flags(_compressor = _, _tracing? = false, _custom_payload? = true), do: 0x05
+  defp encode_flags(_compressor = _, _tracing? = true, _custom_payload? = false), do: 0x03
+  defp encode_flags(_compressor = _, _tracing? = true, _custom_payload? = true), do: 0x07
 
   defp flag_set?(flags, flag) do
     (flags &&& flag) == flag

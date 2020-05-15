@@ -23,6 +23,10 @@ defmodule Xandra.Page do
     * `:tracing_id` - the tracing ID (as a UUID binary) if tracing was enabled,
       or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
 
+    * `:custom_payload` - the custom payload sent along with the response (only
+      protocol version 4). This is used by Azure Cosmos DB to inform about the
+      RequestCharge, for example. See the "Custom Payload" section in `Xandra.execute/4`.
+
   ## Examples
 
       statement = "SELECT name, age FROM users"
@@ -33,7 +37,7 @@ defmodule Xandra.Page do
 
   """
 
-  defstruct [:content, :columns, :paging_state, :tracing_id]
+  defstruct [:content, :columns, :paging_state, :tracing_id, :custom_payload]
 
   @type paging_state :: binary | nil
 
@@ -41,7 +45,8 @@ defmodule Xandra.Page do
           content: list,
           columns: nonempty_list,
           paging_state: paging_state,
-          tracing_id: binary | nil
+          tracing_id: binary | nil,
+          custom_payload: [{String.t, binary}] | nil
         }
 
   defimpl Enumerable do
@@ -86,6 +91,7 @@ defmodule Xandra.Page do
       properties = [
         rows: Enum.to_list(page),
         tracing_id: page.tracing_id,
+        custom_payload: page.custom_payload,
         more_pages?: page.paging_state != nil
       ]
 

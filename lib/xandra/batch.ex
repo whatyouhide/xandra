@@ -13,7 +13,7 @@ defmodule Xandra.Batch do
   alias Xandra.{Prepared, Simple}
 
   @enforce_keys [:type]
-  defstruct @enforce_keys ++ [queries: [], default_consistency: nil, protocol_module: nil]
+  defstruct @enforce_keys ++ [queries: [], default_consistency: nil, protocol_module: nil, custom_payload: nil]
 
   @type type :: :logged | :unlogged | :counter
 
@@ -22,7 +22,8 @@ defmodule Xandra.Batch do
           type: type,
           queries: [Simple.t() | Prepared.t()],
           default_consistency: atom() | nil,
-          protocol_module: module() | nil
+          protocol_module: module() | nil,
+          custom_payload: list({String.t(), binary()}) | nil
         }
 
   @type t() :: t(type)
@@ -33,14 +34,17 @@ defmodule Xandra.Batch do
   `type` represents the type of the batch query (`:logged`, `:unlogged`, or
   `:counter`). See the Cassandra documentation for the meaning of these types.
 
+  `custom_payload` can be used to send custom payload along with the request
+  (only protocol version 4). See the "Custom Payload" section in `Xandra.execute/4`.
+
   ## Examples
 
       batch = Xandra.Batch.new()
 
   """
-  @spec new(type) :: t
-  def new(type \\ :logged) when type in [:logged, :unlogged, :counter] do
-    %__MODULE__{type: type}
+  @spec new(type, custom_payload :: list({String.t(), binary()}) | nil) :: t
+  def new(type \\ :logged, custom_payload \\ nil) when type in [:logged, :unlogged, :counter] do
+    %__MODULE__{type: type, custom_payload: custom_payload}
   end
 
   @doc """
@@ -105,7 +109,7 @@ defmodule Xandra.Batch do
     def encode(batch, nil, options) do
       batch = %{batch | queries: Enum.reverse(batch.queries)}
 
-      Frame.new(:batch, Keyword.take(options, [:compressor, :tracing]))
+      Frame.new(:batch, Keyword.take(options, [:compressor, :tracing, :custom_payload]))
       |> batch.protocol_module.encode_request(batch, options)
       |> Frame.encode(batch.protocol_module)
     end
@@ -125,6 +129,7 @@ defmodule Xandra.Batch do
     def inspect(batch, options) do
       properties = [
         type: batch.type,
+        custom_payload: batch.custom_payload,
         queries: format_queries(Enum.reverse(batch.queries))
       ]
 

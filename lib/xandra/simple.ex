@@ -18,7 +18,7 @@ defmodule Xandra.Simple do
     end
 
     def encode(query, values, options) do
-      Frame.new(:query, Keyword.take(options, [:compressor, :tracing]))
+      Frame.new(:query, Keyword.take(options, [:compressor, :tracing, :custom_payload]))
       |> query.protocol_module.encode_request(%{query | values: values}, options)
       |> Frame.encode(query.protocol_module)
     end

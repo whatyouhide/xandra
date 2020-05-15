@@ -32,7 +32,7 @@ Add the `:xandra` dependency to your `mix.exs` file:
 
 ```elixir
 def deps() do
-  [{:xandra, "~> 0.11"}]
+  [{:xandra, "~> 0.14"}]
 end
 ```
 
@@ -81,6 +81,10 @@ page_stream
 
 Xandra supports [Scylla][scylladb] (version `2.x`) without the need to do anything in particular.
 
+## Azure Cosmos DB support
+
+Xandra supports [Azure Cosmos DB][cosmosdb] when using v4 of the CQL protocol.
+
 ## Contributing
 
 To run tests, you will need [Docker][docker] installed on your machine. This repository uses [`docker-compose`][docker-compose] to run multiple Cassandra instances in parallel on different ports to test different features (such as authentication or SSL encryption). To run normal tests, do this from the root of the project:
@@ -118,3 +122,4 @@ Xandra is released under the ISC license, see the [LICENSE](LICENSE) file.
 [docker]: https://www.docker.com
 [docker-compose]: https://docs.docker.com/compose/
 [scylladb]: https://www.scylladb.com/
+[cosmosdb]: https://azure.microsoft.com/services/cosmos-db/

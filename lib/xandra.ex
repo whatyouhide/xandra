@@ -445,6 +445,10 @@ defmodule Xandra do
       given query and sets the `tracing_id` field in the returned prepared
       query. See the "Tracing" option in `execute/4`. Defaults to `false`.
 
+    * `:custom_payload` - (Keywords) custom payload to be sent along with the
+      request (only protocol version 4). See the "Custom Payload" option in
+      `execute/4`. By default, this option is not present.
+
   ## Prepared queries cache
 
   Since Cassandra prepares queries on a per-node basis (and not on a
@@ -656,6 +660,11 @@ defmodule Xandra do
       `tracing_id` field on the result of the query. See the "Tracing" section
       below. Defaults to `false`.
 
+    * `:custom_payload` - (Keywords) custom payload to be sent along with the
+      request (only protocol version 4). Keys must be strings, values must be
+      binaries. See the "Custom Payload" section below. By default, this option
+      is not present.
+
     * `:date_format` - (`:date` or `:integer`) controls the format in which
       dates are returned. When set to `:integer` the returned value is
       a number of days from the Unix epoch, a date struct otherwise.
@@ -806,6 +815,22 @@ defmodule Xandra do
   Note that tracing is an expensive operation for Cassandra that puts load on
   executing queries. This is why this option is only supported *per-query* in
   `execute/4` instead of connection-wide.
+
+  Also note that not all Cassandra compatible servers support tracing.
+
+  ## Custom Payload
+
+  Some Cassandra compatible servers use custom payload to transmit additional
+  information through requests and responses. This feature is most prominently
+  used by Microsoft's Azure Cosomos DB where it is used in responses for
+  tracking request costs.
+
+  In Xandra, you can send custom payload with the `:custom_payload` option and
+  receive custom payload in all response structs (e.g. `Xandra.Page`).
+
+  Note that this feature is exclusive to protocol v4 and will be silently
+  ignored when using protocol v3. Also, as per specification, currently only
+  QUERY, PREPARE, EXECUTE and BATCH requests support outgoing payload.
   """
   @spec execute(conn, statement | Prepared.t(), values, keyword) ::
           {:ok, result} | {:error, error}
