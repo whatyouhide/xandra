@@ -129,9 +129,9 @@ defmodule BatchTest do
       |> Batch.add(prepared, [2])
 
     expected =
-      ~s/#Xandra.Batch<[type: :logged, / <>
+      ~s/#Xandra.Batch<[type: :logged, custom_payload: nil, / <>
         ~s/queries: [{"INSERT INTO users (id, name) VALUES (1, 'Marge')", []}, / <>
-        ~s/{#Xandra.Prepared<[statement: "DELETE FROM users WHERE id = ?", tracing_id: nil]>, [2]}]]>/
+        ~s/{#Xandra.Prepared<[statement: "DELETE FROM users WHERE id = ?", tracing_id: nil, custom_payload: nil]>, [2]}]]>/
 
     assert inspect(batch) == expected
   end

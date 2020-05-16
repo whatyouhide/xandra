@@ -65,7 +65,7 @@ defmodule PreparedTest do
     prepared = Xandra.prepare!(conn, "SELECT * FROM users")
 
     assert inspect(prepared) ==
-             ~s(#Xandra.Prepared<[statement: "SELECT * FROM users", tracing_id: nil]>)
+             ~s(#Xandra.Prepared<[statement: "SELECT * FROM users", tracing_id: nil, custom_payload: nil]>)
   end
 
   test "missing named params raise an error", %{conn: conn} do

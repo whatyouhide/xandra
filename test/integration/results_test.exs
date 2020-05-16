@@ -42,7 +42,7 @@ defmodule ResultsTest do
     %Xandra.Page{} = page = Xandra.execute!(conn, "SELECT * FROM users")
 
     assert inspect(page) ==
-             ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], tracing_id: nil, more_pages?: false]>)
+             ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], tracing_id: nil, custom_payload: nil, more_pages?: false]>)
   end
 
   describe "SCHEMA_CHANGE updates since native protocol v4" do
