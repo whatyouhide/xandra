@@ -177,7 +177,8 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp encode_bytes_map(kwlist) do
-    encode_string_map(kwlist) # same effect
+    # this has the same effect due to how kwlists and maps are iterated
+    encode_string_map(kwlist)
   end
 
   consistency_levels = %{
@@ -618,7 +619,14 @@ defmodule Xandra.Protocol.V4 do
     {body, tracing_id} = decode_tracing_id(body, tracing?)
     {body, custom_payload} = decode_custom_payload(body, custom_payload?)
     body = decode_warnings(body, warning?)
-    decode_result_response(body, query, tracing_id, custom_payload, Keyword.put(options, :atom_keys?, atom_keys?))
+
+    decode_result_response(
+      body,
+      query,
+      tracing_id,
+      custom_payload,
+      Keyword.put(options, :atom_keys?, atom_keys?)
+    )
   end
 
   # We decode to consume the warning from the body but we ignore the result
@@ -661,18 +669,41 @@ defmodule Xandra.Protocol.V4 do
   end
 
   # Page
-  defp decode_result_response(<<0x0002::32-signed, buffer::bits>>, query, tracing_id, custom_payload, options) do
+  defp decode_result_response(
+         <<0x0002::32-signed, buffer::bits>>,
+         query,
+         tracing_id,
+         custom_payload,
+         options
+       ) do
     page = new_page(query)
     {page, buffer} = decode_metadata(buffer, page, Keyword.fetch!(options, :atom_keys?))
     columns = rewrite_column_types(page.columns, options)
-    %{page | content: decode_page_content(buffer, columns), tracing_id: tracing_id, custom_payload: custom_payload}
+
+    %{
+      page
+      | content: decode_page_content(buffer, columns),
+        tracing_id: tracing_id,
+        custom_payload: custom_payload
+    }
   end
 
   # SetKeyspace
-  defp decode_result_response(<<0x0003::32-signed, buffer::bits>>, _query, tracing_id, custom_payload, _options) do
+  defp decode_result_response(
+         <<0x0003::32-signed, buffer::bits>>,
+         _query,
+         tracing_id,
+         custom_payload,
+         _options
+       ) do
     decode_string(keyspace <- buffer)
     <<>> = buffer
-    %Xandra.SetKeyspace{keyspace: keyspace, tracing_id: tracing_id, custom_payload: custom_payload}
+
+    %Xandra.SetKeyspace{
+      keyspace: keyspace,
+      tracing_id: tracing_id,
+      custom_payload: custom_payload
+    }
   end
 
   # Prepared
@@ -699,11 +730,24 @@ defmodule Xandra.Protocol.V4 do
   end
 
   # SchemaChange
-  defp decode_result_response(<<0x0005::32-signed, buffer::bits>>, _query, tracing_id, custom_payload, _options) do
+  defp decode_result_response(
+         <<0x0005::32-signed, buffer::bits>>,
+         _query,
+         tracing_id,
+         custom_payload,
+         _options
+       ) do
     decode_string(effect <- buffer)
     decode_string(target <- buffer)
     options = decode_change_options(buffer, target)
-    %Xandra.SchemaChange{effect: effect, target: target, options: options, tracing_id: tracing_id, custom_payload: custom_payload}
+
+    %Xandra.SchemaChange{
+      effect: effect,
+      target: target,
+      options: options,
+      tracing_id: tracing_id,
+      custom_payload: custom_payload
+    }
   end
 
   # Since SELECT statements are not allowed in BATCH queries, there's no need to
@@ -1206,6 +1250,7 @@ defmodule Xandra.Protocol.V4 do
 
   defp decode_bytes_map(<<buffer::bits>>, count, acc) do
     decode_string(key <- buffer)
+
     decode_value(value <- buffer, :blob) do
       decode_bytes_map(buffer, count - 1, [{key, value} | acc])
     end

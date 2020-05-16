@@ -18,5 +18,5 @@ defmodule Xandra.Void do
 
   defstruct [:tracing_id, :custom_payload]
 
-  @type t :: %__MODULE__{tracing_id: binary | nil, custom_payload: [{String.t, binary}] | nil}
+  @type t :: %__MODULE__{tracing_id: binary | nil, custom_payload: [{String.t(), binary}] | nil}
 end

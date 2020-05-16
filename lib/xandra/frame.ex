@@ -101,9 +101,11 @@ defmodule Xandra.Frame do
       body: body
     } = frame
 
-    custom_payload? = custom_payload != nil and
-      kind in [:query, :prepare, :execute, :batch] and
-      Map.fetch!(@supports_custom_payload, protocol_module)
+    custom_payload? =
+      custom_payload != nil and
+        kind in [:query, :prepare, :execute, :batch] and
+        Map.fetch!(@supports_custom_payload, protocol_module)
+
     body = maybe_compress_body(compressor, body)
 
     [

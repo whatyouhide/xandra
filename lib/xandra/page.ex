@@ -46,7 +46,7 @@ defmodule Xandra.Page do
           columns: nonempty_list,
           paging_state: paging_state,
           tracing_id: binary | nil,
-          custom_payload: [{String.t, binary}] | nil
+          custom_payload: [{String.t(), binary}] | nil
         }
 
   defimpl Enumerable do

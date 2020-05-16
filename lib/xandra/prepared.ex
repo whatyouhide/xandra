@@ -35,7 +35,7 @@ defmodule Xandra.Prepared do
           default_consistency: atom | nil,
           protocol_module: module | nil,
           tracing_id: binary | nil,
-          custom_payload: [{String.t, binary}] | nil,
+          custom_payload: [{String.t(), binary}] | nil
         }
 
   @doc false

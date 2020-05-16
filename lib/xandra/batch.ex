@@ -13,7 +13,8 @@ defmodule Xandra.Batch do
   alias Xandra.{Prepared, Simple}
 
   @enforce_keys [:type]
-  defstruct @enforce_keys ++ [queries: [], default_consistency: nil, protocol_module: nil, custom_payload: nil]
+  defstruct @enforce_keys ++
+              [queries: [], default_consistency: nil, protocol_module: nil, custom_payload: nil]
 
   @type type :: :logged | :unlogged | :counter
 
