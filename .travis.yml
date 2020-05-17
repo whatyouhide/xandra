@@ -62,14 +62,17 @@ jobs:
       language: shell
       install:
         - choco install --no-progress -y elixir --version 1.10.3
-        - powershell test/windows/cosmosdb-download-install.ps1
+        - export PATH=/c/ProgramData/chocolatey/lib/Elixir/bin:$PATH
+        - mix local.hex --force
+        - mix local.rebar --force
+        - powershell -executionpolicy bypass -file test/windows/cosmosdb-download-install.ps1
         - mix deps.get
         - mix deps.compile
       before_script:
-        - powershell test/windows/cosmosdb-start-wait.ps1
-      script: mix test.cosmosdb
+        - powershell -executionpolicy bypass -file test/windows/cosmosdb-start-wait.ps1
+      script: mix test.cosmosdb --max-cases 1
       after_script:
-        - powershell test/windows/cosmosdb-stop-wait.ps1
+        - powershell -executionpolicy bypass -file test/windows/cosmosdb-stop-wait.ps1
       env:
         - CASSANDRA_IS_COSMOSDB=true
         - CASSANDRA_NATIVE_PROTOCOL=v4
