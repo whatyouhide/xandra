@@ -19,7 +19,8 @@ defmodule Xandra.Mixfile do
       # Task aliases
       aliases: [
         "test.scylladb": "test --exclude encryption --exclude cassandra_specific",
-        "test.cosmosdb": "test --exclude encryption --exclude cassandra_specific --exclude authentication --exclude cosmosdb_unsupported"
+        "test.cosmosdb":
+          "test --exclude encryption --exclude cassandra_specific --exclude authentication --exclude cosmosdb_unsupported"
       ],
       preferred_cli_env: ["test.scylladb": :test, "test.cosmosdb": :test],
 
