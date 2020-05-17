@@ -36,13 +36,21 @@ defmodule ResultsTest do
     assert Enum.to_list(result) == [%{"figure" => 123}]
   end
 
-  test "inspecting Xandra.Page results", %{conn: conn} do
+  test "inspecting Xandra.Page results", %{conn: conn, is_cosmosdb: is_cosmosdb} do
     Xandra.execute!(conn, "CREATE TABLE users (name text PRIMARY KEY)")
     Xandra.execute!(conn, "INSERT INTO users (name) VALUES ('Jeff')")
     %Xandra.Page{} = page = Xandra.execute!(conn, "SELECT * FROM users")
 
-    assert inspect(page) ==
-             ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], tracing_id: nil, custom_payload: nil, more_pages?: false]>)
+    expected =
+      ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], tracing_id: nil, custom_payload: ) <>
+        if is_cosmosdb do
+          ~s([{"RequestCharge", <<64, 5, 27, 243, 217, 33, 92, 197>>}])
+        else
+          "nil"
+        end <>
+        ~s(, more_pages?: false]>)
+
+    assert inspect(page) == expected
   end
 
   describe "SCHEMA_CHANGE updates since native protocol v4" do

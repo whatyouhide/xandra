@@ -9,7 +9,7 @@ defmodule PreparedTest do
     Xandra.execute!(conn, statement)
 
     statement = """
-    BEGIN BATCH
+    BEGIN UNLOGGED BATCH
     INSERT INTO users (code, name) VALUES (1, 'Marge');
     INSERT INTO users (code, name) VALUES (1, 'Homer');
     INSERT INTO users (code, name) VALUES (1, 'Lisa');
@@ -28,7 +28,8 @@ defmodule PreparedTest do
   test "prepared functionality", %{conn: conn} do
     statement = "SELECT name FROM users WHERE code = :code"
     assert {:ok, prepared} = Xandra.prepare(conn, statement)
-    # Successive call to prepare uses cache.
+    # Successive call to prepare uses cache. This removes the custom payload (if any).
+    prepared = %{prepared | custom_payload: nil}
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement)
 
     assert {:ok, page} = Xandra.execute(conn, prepared, [1])
@@ -61,11 +62,19 @@ defmodule PreparedTest do
     assert Enum.to_list(page) == [%{"[applied]" => false, "code" => 3, "name" => "Nelson"}]
   end
 
-  test "inspecting prepared queries", %{conn: conn} do
+  test "inspecting prepared queries", %{conn: conn, is_cosmosdb: is_cosmosdb} do
     prepared = Xandra.prepare!(conn, "SELECT * FROM users")
 
-    assert inspect(prepared) ==
-             ~s(#Xandra.Prepared<[statement: "SELECT * FROM users", tracing_id: nil, custom_payload: nil]>)
+    expected =
+      ~s(#Xandra.Prepared<[statement: "SELECT * FROM users", tracing_id: nil, custom_payload: ) <>
+        if is_cosmosdb do
+          ~s([{"RequestCharge", <<63, 249, 29, 89, 218, 64, 181, 66>>}])
+        else
+          "nil"
+        end <>
+        ~s(]>)
+
+    assert inspect(prepared) == expected
   end
 
   test "missing named params raise an error", %{conn: conn} do

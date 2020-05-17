@@ -572,7 +572,12 @@ defmodule Xandra.Protocol.V4 do
           Xandra.result() | Prepared.t()
   def decode_response(frame, query \\ nil, options \\ [])
 
-  def decode_response(%Frame{kind: :error, body: body, warning: warning?}, _query, _options) do
+  def decode_response(
+        %Frame{kind: :error, body: body, custom_payload: custom_payload?, warning: warning?},
+        _query,
+        _options
+      ) do
+    {body, _} = decode_custom_payload(body, custom_payload?)
     body = decode_warnings(body, warning?)
     {reason, buffer} = decode_error_reason(body)
     Error.new(reason, decode_error_message(reason, buffer))

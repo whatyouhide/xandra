@@ -3,6 +3,9 @@ defmodule WarningTest do
 
   alias Xandra.Batch
 
+  # Technically, this is supported by Cosmos DB, but this test cannot trigger a warning like this.
+  @moduletag :cosmosdb_unsupported
+
   setup_all %{keyspace: keyspace, start_options: start_options} do
     {:ok, conn} = Xandra.start_link(start_options)
     Xandra.execute!(conn, "USE #{keyspace}")

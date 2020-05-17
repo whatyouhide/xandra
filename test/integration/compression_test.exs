@@ -1,6 +1,8 @@
 defmodule CompressionTest do
   use XandraTest.IntegrationCase, async: true
 
+  @moduletag :cosmosdb_unsupported
+
   defmodule Snappy do
     @behaviour Xandra.Compressor
 

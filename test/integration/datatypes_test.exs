@@ -436,7 +436,62 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "set_of_tinyint") == nil
   end
 
-  test "user-defined types", %{conn: conn} do
+  test "user-defined types (reduced)", %{conn: conn} do
+    statement = """
+    CREATE TYPE full_name_r
+    (first_name text,
+     last_name text)
+    """
+
+    Xandra.execute!(conn, statement)
+
+    statement = """
+    CREATE TYPE profile_r
+    (nickname text,
+     full_name frozen<full_name_r>)
+    """
+
+    Xandra.execute!(conn, statement)
+
+    statement = """
+    CREATE TABLE users_r
+    (id int PRIMARY KEY,
+     profile frozen<profile_r>)
+    """
+
+    Xandra.execute!(conn, statement)
+
+    statement = "INSERT INTO users_r (id, profile) VALUES (?, ?)"
+
+    foo_profile = %{
+      "nickname" => "foo",
+      "full_name" => %{"first_name" => "Kung", "last_name" => "Foo"}
+    }
+
+    bar_profile = %{
+      "nickname" => "bar",
+      "full_name" => %{"last_name" => "Bar"}
+    }
+
+    prepared = Xandra.prepare!(conn, statement)
+    Xandra.execute!(conn, prepared, [1, foo_profile])
+    Xandra.execute!(conn, prepared, [2, bar_profile])
+
+    statement = "SELECT id, profile FROM users_r"
+    page = Xandra.execute!(conn, statement)
+    assert [foo, bar] = Enum.sort(page, &(&1["id"] <= &2["id"]))
+    assert Map.fetch!(foo, "id") == 1
+    assert Map.fetch!(foo, "profile") == foo_profile
+    assert Map.fetch!(bar, "id") == 2
+
+    assert Map.fetch!(bar, "profile") == %{
+             "nickname" => "bar",
+             "full_name" => %{"first_name" => nil, "last_name" => "Bar"}
+           }
+  end
+
+  @tag :cosmosdb_unsupported
+  test "user-defined types (full)", %{conn: conn} do
     statement = """
     CREATE TYPE full_name
     (first_name text,

@@ -7,17 +7,19 @@ defmodule BatchTest do
     {:ok, conn} = Xandra.start_link(start_options)
     Xandra.execute!(conn, "USE #{keyspace}")
 
+    :ok
+  end
+
+  setup %{conn: conn} do
+    Xandra.execute!(conn, "DROP TABLE IF EXISTS users")
+
     statement = "CREATE TABLE users (id int, name text, PRIMARY KEY (id))"
     Xandra.execute!(conn, statement)
 
     :ok
   end
 
-  setup %{conn: conn} do
-    Xandra.execute!(conn, "TRUNCATE users")
-    :ok
-  end
-
+  @tag :cosmosdb_unsupported
   test "batch of type \"logged\"", %{conn: conn} do
     statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
     prepared_insert = Xandra.prepare!(conn, statement)
@@ -49,12 +51,13 @@ defmodule BatchTest do
 
     result = Xandra.execute!(conn, "SELECT name FROM users")
 
-    assert Enum.to_list(result) == [
+    assert Enum.sort(result, &(&1["name"] > &2["name"])) == [
              %{"name" => "Rick"},
              %{"name" => "Morty"}
            ]
   end
 
+  @tag :cosmosdb_unsupported
   test "using a default timestamp for the batch", %{conn: conn} do
     timestamp = System.system_time(:second) - (_10_minutes = 600)
 
@@ -85,7 +88,7 @@ defmodule BatchTest do
     statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
     prepared_insert = Xandra.prepare!(conn, statement)
 
-    batch = Batch.add(Batch.new(), prepared_insert, %{"id" => 1, "name" => "Beth"})
+    batch = Batch.add(Batch.new(:unlogged), prepared_insert, %{"id" => 1, "name" => "Beth"})
 
     assert {:ok, %Void{}} = Xandra.execute(conn, batch)
 
@@ -120,7 +123,7 @@ defmodule BatchTest do
     assert {:ok, %Void{}} = Xandra.execute(conn, Batch.new())
   end
 
-  test "inspecting batch queries", %{conn: conn} do
+  test "inspecting batch queries", %{conn: conn, is_cosmosdb: is_cosmosdb} do
     prepared = Xandra.prepare!(conn, "DELETE FROM users WHERE id = ?")
 
     batch =
@@ -131,7 +134,13 @@ defmodule BatchTest do
     expected =
       ~s/#Xandra.Batch<[type: :logged, custom_payload: nil, / <>
         ~s/queries: [{"INSERT INTO users (id, name) VALUES (1, 'Marge')", []}, / <>
-        ~s/{#Xandra.Prepared<[statement: "DELETE FROM users WHERE id = ?", tracing_id: nil, custom_payload: nil]>, [2]}]]>/
+        ~s/{#Xandra.Prepared<[statement: "DELETE FROM users WHERE id = ?", tracing_id: nil, custom_payload: / <>
+        if is_cosmosdb do
+          ~s/[{"RequestCharge", <<63, 247, 117, 4, 4, 82, 11, 147>>}]/
+        else
+          "nil"
+        end <>
+        ~s/]>, [2]}]]>/
 
     assert inspect(batch) == expected
   end

@@ -9,10 +9,26 @@ defmodule XandraTest.IntegrationCase do
       "v4" -> :v4
     end
 
-  @default_start_options [
-    protocol_version: protocol_version,
-    show_sensitive_data_on_connection_error: true
-  ]
+  @is_cosmosdb System.get_env("CASSANDRA_IS_COSMOSDB") == "true"
+
+  if @is_cosmosdb do
+    @default_start_options [
+      nodes: ["localhost:10350"],
+      protocol_version: protocol_version,
+      show_sensitive_data_on_connection_error: true,
+      encryption: true,
+      authentication:
+        {Xandra.Authenticator.Password,
+         username: "localhost",
+         password:
+           "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="}
+    ]
+  else
+    @default_start_options [
+      protocol_version: protocol_version,
+      show_sensitive_data_on_connection_error: true
+    ]
+  end
 
   using options do
     start_options = Keyword.get(options, :start_options, [])
@@ -20,6 +36,7 @@ defmodule XandraTest.IntegrationCase do
     quote bind_quoted: [
             start_options: start_options,
             case_template: __MODULE__,
+            is_cosmosdb: @is_cosmosdb,
             default_start_options: @default_start_options
           ] do
       setup_all do
@@ -34,7 +51,7 @@ defmodule XandraTest.IntegrationCase do
           case_template.drop_keyspace(keyspace, start_options)
         end)
 
-        %{keyspace: keyspace, start_options: start_options}
+        %{keyspace: keyspace, start_options: start_options, is_cosmosdb: unquote(is_cosmosdb)}
       end
     end
   end

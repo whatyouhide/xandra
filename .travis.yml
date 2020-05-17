@@ -56,6 +56,25 @@ jobs:
     - <<: *test-scylla
       env: SCYLLA_VERSION=2.0.0
 
+    - test-cosmos:
+      stage: test cosmos
+      os: windows
+      language: shell
+      install:
+        - choco install --no-progress -y elixir --version 1.10.3
+        - curl -Lso cosmosdb-emulator-install.msi https://aka.ms/cosmosdb-emulator
+        - msiexec /i cosmosdb-emulator-install.msi /quiet /qn /norestart
+        - mix deps.get
+        - mix deps.compile
+      before_script:
+        - powershell test/windows/cosmosdb-start-wait.ps1
+      script: mix test.cosmosdb
+      after_script:
+        - powershell test/windows/cosmosdb-stop-wait.ps1
+      env:
+        - CASSANDRA_IS_COSMOSDB=true
+        - CASSANDRA_NATIVE_PROTOCOL=v4
+
     - stage: check formatted
       script: mix format --check-formatted
       before_install: skip
@@ -66,3 +85,4 @@ stages:
   - check formatted
   - test
   - test scylla
+  - test cosmos

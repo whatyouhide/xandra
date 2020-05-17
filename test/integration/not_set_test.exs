@@ -33,7 +33,7 @@ defmodule NotSetTest do
 
     page = Xandra.execute!(conn, "SELECT id, name FROM cars")
 
-    assert Enum.to_list(page) == [
+    assert Enum.sort(page, &(&1["id"] <= &2["id"])) == [
              %{"id" => 1, "name" => "Tesla"},
              %{"id" => 2, "name" => "BMW"},
              %{"id" => 3, "name" => "T3"}
@@ -45,7 +45,7 @@ defmodule NotSetTest do
 
     page = Xandra.execute!(conn, "SELECT id, name FROM cars")
 
-    assert Enum.to_list(page) == [
+    assert Enum.sort(page, &(&1["id"] <= &2["id"])) == [
              %{"id" => 1, "name" => "Mercedes"},
              %{"id" => 2, "name" => nil},
              %{"id" => 3, "name" => "T3"}

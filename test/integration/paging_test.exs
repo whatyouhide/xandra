@@ -11,7 +11,7 @@ defmodule PagingTest do
     Xandra.execute!(conn, statement)
 
     statement = """
-    BEGIN BATCH
+    BEGIN UNLOGGED BATCH
     INSERT INTO alphabet (lang, letter) VALUES ('en', 'Aa');
     INSERT INTO alphabet (lang, letter) VALUES ('en', 'Bb');
     INSERT INTO alphabet (lang, letter) VALUES ('en', 'Cc');

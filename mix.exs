@@ -17,8 +17,11 @@ defmodule Xandra.Mixfile do
       deps: deps(),
 
       # Task aliases
-      aliases: ["test.scylladb": "test --exclude encryption --exclude cassandra_specific"],
-      preferred_cli_env: ["test.scylladb": :test],
+      aliases: [
+        "test.scylladb": "test --exclude encryption --exclude cassandra_specific",
+        "test.cosmosdb": "test --exclude encryption --exclude cassandra_specific --exclude authentication --exclude cosmosdb_unsupported"
+      ],
+      preferred_cli_env: ["test.scylladb": :test, "test.cosmosdb": :test],
 
       # Dialyzer
       dialyzer: [flags: [:no_contracts]],

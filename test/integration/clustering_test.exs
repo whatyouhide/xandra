@@ -3,6 +3,10 @@ defmodule ClusteringTest do
 
   import ExUnit.CaptureLog
 
+  # The way Cosmos DB works, clustering is not supported in this form. Any
+  # connection is handled transparently and might undergo internal clustering.
+  @moduletag :cosmosdb_unsupported
+
   def await_connected(cluster, options, fun, tries \\ 4) do
     try do
       Xandra.Cluster.run(cluster, options, fun)

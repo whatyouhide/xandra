@@ -3,7 +3,7 @@ defmodule ErrorsTest do
 
   alias Xandra.Error
 
-  test "each possible error", %{conn: conn} do
+  test "each possible error", %{conn: conn, is_cosmosdb: is_cosmosdb} do
     assert {:error, reason} = Xandra.execute(conn, "")
     assert %Error{reason: :invalid_syntax} = reason
 
@@ -15,7 +15,12 @@ defmodule ErrorsTest do
     assert %Error{reason: :already_exists} = reason
 
     assert {:error, reason} = Xandra.prepare(conn, "SELECT * FROM unknown")
-    assert %Error{reason: :invalid} = reason
+
+    if is_cosmosdb do
+      assert %Error{reason: :invalid_config} = reason
+    else
+      assert %Error{reason: :invalid} = reason
+    end
   end
 
   @tag :cassandra_specific
