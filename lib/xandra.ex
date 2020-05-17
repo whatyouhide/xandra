@@ -1057,7 +1057,7 @@ defmodule Xandra do
       db_connection_fun.()
     rescue
       # DBConnection functions can sometimes raise DBConnection.ConnectionError instead of returning it.
-      err in DBConnection.ConnectionError -> {:error, err}
+      error in DBConnection.ConnectionError -> {:error, error}
     end
   end
 end
