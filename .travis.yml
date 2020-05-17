@@ -62,8 +62,7 @@ jobs:
       language: shell
       install:
         - choco install --no-progress -y elixir --version 1.10.3
-        - curl -Lso cosmosdb-emulator-install.msi https://aka.ms/cosmosdb-emulator
-        - msiexec /i cosmosdb-emulator-install.msi /quiet /qn /norestart
+        - powershell test/windows/cosmosdb-download-install.ps1
         - mix deps.get
         - mix deps.compile
       before_script:
