@@ -3,7 +3,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   use Connection
 
-  alias Xandra.{Frame, Simple, Connection.Utils}
+  alias Xandra.{Frame, Simple, Connection.Utils, Cluster}
 
   require Logger
 
@@ -23,6 +23,7 @@ defmodule Xandra.Cluster.ControlConnection do
     :autodiscovery,
     :protocol_module,
     :peername,
+    :discover_peers,
     new: true,
     buffer: <<>>
   ]
@@ -70,17 +71,18 @@ defmodule Xandra.Cluster.ControlConnection do
                  protocol_module,
                  options
                ),
+             {:ok, local_node} <- fetch_node_local_info(transport, socket, protocol_module),
              {:ok, peers_or_nil} <-
-               maybe_discover_peers(state.autodiscovery, transport, socket, protocol_module),
+               maybe_discover_peers(state.autodiscovery, local_node, transport, socket, protocol_module),
              :ok <- register_to_events(state.transport, socket, protocol_module),
              :ok <- inet_mod(state.transport).setopts(socket, active: true) do
-          {:ok, state} = report_active(state)
+          {:ok, state} = report_active(state, local_node)
 
           if not is_nil(peers_or_nil) do
             report_peers(state, peers_or_nil)
           end
 
-          {:ok, state}
+          {:ok, %{state | discover_peers: peers_or_nil}}
         else
           {:error, _reason} = error ->
             {:connect, :reconnect, state} = disconnect(error, state)
@@ -113,14 +115,14 @@ defmodule Xandra.Cluster.ControlConnection do
     {:connect, :reconnect, %{state | socket: nil, buffer: <<>>}}
   end
 
-  defp report_active(%{new: false, cluster: cluster, peername: peername} = state) do
+  defp report_active(%{new: false, cluster: cluster, peername: peername} = state, _local_node) do
     Xandra.Cluster.update(cluster, {:control_connection_established, peername})
     {:ok, state}
   end
 
-  defp report_active(%{new: true, cluster: cluster, node_ref: node_ref, socket: socket} = state) do
+  defp report_active(%{new: true, cluster: cluster, node_ref: node_ref, socket: socket} = state, local_node) do
     with {:ok, {address, port}} <- inet_mod(state.transport).peername(socket) do
-      Xandra.Cluster.activate(cluster, node_ref, address, port)
+      Xandra.Cluster.activate(cluster, node_ref, address, port, local_node)
       {:ok, %{state | new: false, peername: address}}
     end
   end
@@ -150,27 +152,22 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  defp maybe_discover_peers(_autodiscovery? = false, _transport, _socket, _protocol_module) do
+  defp maybe_discover_peers(_autodiscovery? = false, _local_node, _transport, _socket, _protocol_module) do
     {:ok, _peers = nil}
   end
 
-  defp maybe_discover_peers(_autodiscovery? = true, transport, socket, protocol_module) do
+  defp maybe_discover_peers(_autodiscovery? = true, local_node, transport, socket, protocol_module) do
     # Discover the peers in the same data center as the node we're connected to.
-    with {:ok, local_info} <- fetch_node_local_info(transport, socket, protocol_module),
-         local_data_center = Map.fetch!(local_info, "data_center"),
-         {:ok, peers} <- discover_peers(transport, socket, protocol_module) do
-      peers =
-        for %{"data_center" => data_center, "rpc_address" => address} <- peers,
-            data_center == local_data_center,
-            do: address
+    with {:ok, peers} <- discover_peers(transport, socket, protocol_module) do
+      peers = Enum.filter(peers, & &1.data_center == local_node.data_center)
 
-      {:ok, peers}
+      {:ok, Enum.map(peers, & &1.address)}
     end
   end
 
   defp fetch_node_local_info(transport, socket, protocol_module) do
     query = %Simple{
-      statement: "SELECT data_center FROM system.local",
+      statement: "SELECT data_center, rack, rpc_address FROM system.local",
       values: [],
       default_consistency: :one
     }
@@ -184,13 +181,13 @@ defmodule Xandra.Cluster.ControlConnection do
          {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, protocol_module) do
       %Xandra.Page{} = page = protocol_module.decode_response(frame, query)
       [local_info] = Enum.to_list(page)
-      {:ok, local_info}
+      {:ok, Cluster.Node.new(local_info)}
     end
   end
 
   defp discover_peers(transport, socket, protocol_module) do
     query = %Simple{
-      statement: "SELECT rpc_address, data_center FROM system.peers",
+      statement: "SELECT rpc_address, rack, data_center FROM system.peers",
       values: [],
       default_consistency: :one
     }
@@ -203,7 +200,8 @@ defmodule Xandra.Cluster.ControlConnection do
     with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, protocol_module) do
       %Xandra.Page{} = page = protocol_module.decode_response(frame, query)
-      {:ok, Enum.to_list(page)}
+      peers = Enum.map(page, &Cluster.Node.new/1)
+      {:ok, peers}
     end
   end
 
@@ -212,13 +210,25 @@ defmodule Xandra.Cluster.ControlConnection do
       {frame, rest} ->
         change_event = state.protocol_module.decode_response(frame)
         Logger.debug("Received event: #{inspect(change_event)}")
-        Xandra.Cluster.update(cluster, change_event)
+        Xandra.Cluster.update(cluster, maybe_enrich_event(state, change_event))
         report_event(%{state | buffer: rest})
 
       :error ->
         state
     end
   end
+
+  defp maybe_enrich_event(state, %Cluster.TopologyChange{effect: "NEW_NODE", address: address} = event) do
+    case discover_peers(state.transport, state.socket, state.protocol_module) do
+      {:ok, peers} ->
+        %{event | node: Enum.find(peers, & &1.address == address)}
+
+      {:error, _} ->
+        event
+    end
+  end
+
+  defp maybe_fetch_node_info(_state, event), do: event
 
   defp decode_frame(buffer, protocol_module) do
     header_length = Frame.header_length()
