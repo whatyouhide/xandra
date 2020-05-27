@@ -228,7 +228,7 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  defp maybe_fetch_node_info(_state, event), do: event
+  defp maybe_enrich_event(_state, event), do: event
 
   defp decode_frame(buffer, protocol_module) do
     header_length = Frame.header_length()

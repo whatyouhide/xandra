@@ -329,7 +329,11 @@ defmodule Xandra.Cluster do
   @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), keyword) ::
           {:ok, Xandra.result()} | {:error, Xandra.error()}
   def execute(cluster, query, params, options) do
-    with_conn_and_retrying(cluster, options, &Xandra.execute(&1, query, params, options))
+    with_conn_and_retrying(
+      cluster,
+      [query: query] ++ options,
+      &Xandra.execute(&1, query, params, options)
+    )
   end
 
   @doc """
@@ -384,11 +388,13 @@ defmodule Xandra.Cluster do
   end
 
   defp with_conn_and_retrying(cluster, options, fun) do
-    RetryStrategy.run_with_retrying(options, fn -> with_conn(cluster, fun) end)
+    RetryStrategy.run_with_retrying(options, fn -> with_conn(cluster, fun, options) end)
   end
 
-  defp with_conn(cluster, fun) do
-    case GenServer.call(cluster, :checkout) do
+  defp with_conn(cluster, fun, options \\ []) do
+    query = Keyword.get(options, :query)
+
+    case GenServer.call(cluster, {:checkout, query}) do
       {:ok, pool} ->
         fun.(pool)
 
@@ -408,17 +414,18 @@ defmodule Xandra.Cluster do
   end
 
   @impl true
-  def handle_call(:checkout, _from, %__MODULE__{} = state) do
+  def handle_call({:checkout, query}, _from, %__MODULE__{} = state) do
     %{
       node_refs: node_refs,
       load_balancing: load_balancing,
-      pools: pools
+      pools: pools,
+      nodes: nodes
     } = state
 
     if Enum.empty?(pools) do
       {:reply, {:error, :empty}, state}
     else
-      pool = select_pool(load_balancing, pools, node_refs)
+      pool = select_pool(load_balancing, query, pools, node_refs, nodes)
       {:reply, {:ok, pool}, state}
     end
   end
@@ -549,15 +556,25 @@ defmodule Xandra.Cluster do
     state
   end
 
-  defp select_pool(:random, pools, _node_refs) do
+  defp select_pool(:random, _query, pools, _node_refs, _) do
     {_address, pool} = Enum.random(pools)
     pool
   end
 
-  defp select_pool(:priority, pools, node_refs) do
+  defp select_pool(:priority, _query, pools, node_refs, _) do
     Enum.find_value(node_refs, fn {_node_ref, address} ->
       Map.get(pools, address)
     end)
+  end
+
+  defp select_pool(load_balancing, query, pools, node_refs, nodes) do
+    with {:ok, node} <- load_balancing.select_node(nodes, query),
+         {:ok, pool} <- Map.fetch(pools, node.address) do
+      pool
+    else
+      :error ->
+        select_pool(:random, query, pools, node_refs, nodes)
+    end
   end
 
   defp parse_node(string) do
