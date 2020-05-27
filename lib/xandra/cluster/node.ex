@@ -2,7 +2,7 @@ defmodule Xandra.Cluster.Node do
   @enforce_keys [
     :address,
     :data_center,
-    :rack,
+    :rack
   ]
 
   defstruct @enforce_keys
