@@ -160,7 +160,8 @@ defmodule Xandra.Cluster.ControlConnection do
          local_data_center = Map.fetch!(local_info, "data_center"),
          {:ok, peers} <- discover_peers(transport, socket, protocol_module) do
       peers =
-        for %{"host_id" => host_id, "data_center" => data_center, "rpc_address" => address} <- peers,
+        for %{"host_id" => host_id, "data_center" => data_center, "rpc_address" => address} <-
+              peers,
             not is_nil(host_id) and data_center == local_data_center,
             do: address
 
