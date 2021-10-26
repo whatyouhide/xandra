@@ -56,9 +56,11 @@ defmodule Xandra.Mixfile do
     [
       {:db_connection, "~> 2.0"},
       {:decimal, "~> 1.7", optional: true},
-      {:snappy, github: "skunkwerks/snappy-erlang-nif", only: [:dev, :test]},
+
+      # Dev and test dependencies
+      {:snappy, github: "skunkwerks/snappy-erlang-nif", tag: "1.1.2", only: [:dev, :test]},
       {:ex_doc, "~> 0.20", only: :dev},
-      {:dialyxir, "~> 1.0.0-rc.6", only: :dev, runtime: false}
+      {:dialyxir, "~> 1.1", only: :dev, runtime: false}
     ]
   end
 end
