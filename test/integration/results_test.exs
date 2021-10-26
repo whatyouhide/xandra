@@ -45,6 +45,24 @@ defmodule ResultsTest do
              ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], tracing_id: nil, more_pages?: false]>)
   end
 
+  # Regression test for https://github.com/lexhide/xandra/issues/187.
+  test "SCHEMA_CHANGE regression in protocol v3", %{conn: conn, keyspace: keyspace} do
+    statement = """
+    CREATE FUNCTION #{keyspace}.downcase (arg text)
+    RETURNS NULL ON NULL INPUT
+    RETURNS text LANGUAGE java AS $$ return arg.toLowerCase();
+    $$
+    """
+
+    prepared = Xandra.prepare!(conn, statement)
+
+    assert {:ok, %SchemaChange{} = schema_change} = Xandra.execute(conn, prepared)
+
+    assert schema_change.target == "KEYSPACE"
+    assert schema_change.effect == "UPDATED"
+    assert schema_change.options == %{keyspace: String.downcase(keyspace)}
+  end
+
   describe "SCHEMA_CHANGE updates since native protocol v4" do
     @describetag :cassandra_specific
 

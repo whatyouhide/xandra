@@ -686,7 +686,23 @@ defmodule Xandra.Protocol.V3 do
 
   defp decode_change_options(<<buffer::bits>>, "KEYSPACE") do
     decode_string(keyspace <- buffer)
-    <<>> = buffer
+
+    # It looks like on protocol v3 the buffer is not empty here *if* the change to the keyspace
+    # was a change to a function. This issue shows the problem:
+    # https://github.com/lexhide/xandra/issues/187. To patch the issue, if the buffer is not empty
+    # then we decode a string out of it and ignore it. In the issue linked above, the string is an
+    # empty string anyways.
+
+    case buffer do
+      <<>> ->
+        :ok
+
+      _other ->
+        decode_string(str <- buffer)
+        "" = str
+        <<>> = buffer
+    end
+
     %{keyspace: keyspace}
   end
 
