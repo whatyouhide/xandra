@@ -159,8 +159,14 @@ defmodule Xandra.Cluster.ControlConnection do
     with {:ok, local_info} <- fetch_node_local_info(transport, socket, protocol_module),
          local_data_center = Map.fetch!(local_info, "data_center"),
          {:ok, peers} <- discover_peers(transport, socket, protocol_module) do
+      # We filter out the peers with null host_id because they seem to be nodes that are down or
+      # decommissioned but not removed from the cluster. See
+      # https://github.com/lexhide/xandra/pull/196 and
+      # https://user.cassandra.apache.narkive.com/APRtj5hb/system-peers-and-decommissioned-nodes.
       peers =
-        for %{"data_center" => data_center, "rpc_address" => address} <- peers,
+        for %{"host_id" => host_id, "data_center" => data_center, "rpc_address" => address} <-
+              peers,
+            not is_nil(host_id),
             data_center == local_data_center,
             do: address
 
@@ -190,7 +196,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defp discover_peers(transport, socket, protocol_module) do
     query = %Simple{
-      statement: "SELECT rpc_address, data_center FROM system.peers",
+      statement: "SELECT host_id, rpc_address, data_center FROM system.peers",
       values: [],
       default_consistency: :one
     }
