@@ -230,10 +230,31 @@ defmodule Xandra.Cluster.ControlConnection do
       |> protocol_module.encode_request(query)
       |> Frame.encode(protocol_module)
 
-    with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, protocol_module) do
-      %Xandra.Page{} = page = protocol_module.decode_response(frame, query)
-      {:ok, Enum.to_list(page)}
+    with :ok <- transport.send(socket, payload) do
+      receive_response_frame(transport, socket, protocol_module, query)
+    end
+  end
+
+  defp receive_response_frame(transport, socket, protocol_module, query) do
+    with {:ok, header} <- transport.recv(socket, Frame.header_length()),
+         {:ok, body} <- transport.recv(socket, Frame.body_length(header)) do
+      frame =
+        if Frame.body_length(header) == 0 do
+          Frame.decode(header, protocol_module)
+        else
+          Frame.decode(header, body, protocol_module, nil)
+        end
+
+      case frame do
+        %Frame{kind: :result} ->
+          %Xandra.Page{} = page = protocol_module.decode_response(frame, query)
+          {:ok, Enum.to_list(page)}
+
+        _ ->
+          # Active mode frame received, process later
+          send(self(), {kind(transport), socket, header <> body})
+          receive_response_frame(transport, socket, protocol_module, query)
+      end
     end
   end
 
@@ -266,7 +287,7 @@ defmodule Xandra.Cluster.ControlConnection do
     nil
   end
 
-  defp data_center_for_address(transport, socket, protocol_module, address) do
+  defp data_center_for_address(transport, socket, protocol_module, %{address: address}) do
     data_center =
       with :ok <- inet_mod(transport).setopts(socket, active: false),
            {:ok, peers} <- discover_peers(transport, socket, protocol_module) do
@@ -304,4 +325,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defp inet_mod(:gen_tcp), do: :inet
   defp inet_mod(:ssl), do: :ssl
+
+  defp kind(:gen_tcp), do: :tcp
+  defp kind(:ssl), do: :ssl
 end

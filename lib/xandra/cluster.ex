@@ -531,13 +531,6 @@ defmodule Xandra.Cluster do
     %{state | pools: remove_pool(pools, address)}
   end
 
-  defp remove_pool(pools, address) do
-    pools
-    |> IO.inspect()
-    |> Enum.reject(fn {{node_address, _data_center}, _} -> node_address == address end)
-    |> Map.new()
-  end
-
   # We don't care about changes in the topology if we're not autodiscovering
   # nodes.
   defp handle_topology_change(%{autodiscovery: false} = state, _change, _data_center) do
@@ -558,6 +551,12 @@ defmodule Xandra.Cluster do
   defp handle_topology_change(state, %{effect: "MOVED_NODE"} = event, _data_center) do
     _ = Logger.warn("Ignored TOPOLOGY_CHANGE event: #{inspect(event)}")
     state
+  end
+
+  defp remove_pool(pools, address) do
+    pools
+    |> Enum.reject(fn {{node_address, _data_center}, _} -> node_address == address end)
+    |> Map.new()
   end
 
   defp select_pool(:random, pools, _node_refs) do
