@@ -171,7 +171,7 @@ defmodule Xandra.Cluster.ControlConnection do
          _protocol_module,
          _local_data_center
        ) do
-    {:ok, _peers = nil, nil}
+    {:ok, _peers = nil}
   end
 
   defp maybe_discover_peers(
@@ -251,8 +251,7 @@ defmodule Xandra.Cluster.ControlConnection do
         change_event = state.protocol_module.decode_response(frame)
         Logger.debug("Received event: #{inspect(change_event)}")
 
-        data_center =
-          data_center_for_address(transport, socket, protocol_module, change_event.address)
+        data_center = data_center_for_address(transport, socket, protocol_module, change_event)
 
         Xandra.Cluster.update(cluster, change_event, data_center)
         report_event(%{state | buffer: rest})
@@ -260,6 +259,11 @@ defmodule Xandra.Cluster.ControlConnection do
       :error ->
         state
     end
+  end
+
+  defp data_center_for_address(_, _, _, %{effect: effect})
+       when effect in ~w(DOWN REMOVED_NODE MOVED_NODE) do
+    nil
   end
 
   defp data_center_for_address(transport, socket, protocol_module, address) do
