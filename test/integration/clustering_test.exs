@@ -3,8 +3,6 @@ defmodule ClusteringTest do
 
   import ExUnit.CaptureLog
 
-  alias Xandra.Cluster.TopologyChange
-
   def await_connected(cluster, options, fun, tries \\ 4) do
     try do
       Xandra.Cluster.run(cluster, options, fun)
@@ -39,31 +37,6 @@ defmodule ClusteringTest do
     assert log =~ "received request to start another connection pool to the same address"
 
     assert Xandra.Cluster.execute!(TestCluster, statement, _params = [])
-  end
-
-  test "doesn't connect to nodes started in remote datacenters", %{keyspace: keyspace} do
-    log =
-      capture_log(fn ->
-        {:ok, cluster} =
-          Xandra.Cluster.start_link(
-            nodes: ["127.0.0.1"],
-            name: TestCluster,
-            load_balancing: :random
-          )
-
-        assert await_connected(cluster, _options = [], &Xandra.execute!(&1, "USE #{keyspace}"))
-
-        Process.sleep(250)
-
-        Xandra.Cluster.update(
-          cluster,
-          %TopologyChange{effect: "NEW_NODE", address: '127.0.0.2'}
-        )
-
-        Process.sleep(250)
-      end)
-
-    refute(log =~ "Started connection to '127.0.0.2'")
   end
 
   test "priority load balancing", %{keyspace: keyspace, start_options: start_options} do

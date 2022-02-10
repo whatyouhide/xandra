@@ -208,20 +208,20 @@ defmodule Xandra.Cluster do
 
   # Used internally by Xandra.Cluster.ControlConnection.
   @doc false
-  def activate(cluster, node_ref, address, port) do
-    GenServer.cast(cluster, {:activate, node_ref, address, port})
+  def activate(cluster, node_ref, address, port, data_center) do
+    GenServer.cast(cluster, {:activate, node_ref, address, port, data_center})
   end
 
   # Used internally by Xandra.Cluster.ControlConnection.
   @doc false
-  def update(cluster, status_change) do
-    GenServer.cast(cluster, {:update, status_change})
+  def update(cluster, status_change, data_center) do
+    GenServer.cast(cluster, {:update, status_change, data_center})
   end
 
   # Used internally by Xandra.Cluster.ControlConnection.
   @doc false
-  def discovered_peers(cluster, peers) do
-    GenServer.cast(cluster, {:discovered_peers, peers})
+  def discovered_peers(cluster, peers, data_center) do
+    GenServer.cast(cluster, {:discovered_peers, peers, data_center})
   end
 
   @doc """
@@ -425,35 +425,45 @@ defmodule Xandra.Cluster do
   @impl true
   def handle_cast(message, state)
 
-  def handle_cast({:activate, node_ref, address, port}, %__MODULE__{} = state) do
+  def handle_cast({:activate, node_ref, address, port, data_center}, %__MODULE__{} = state) do
     _ = Logger.debug("Control connection for #{:inet.ntoa(address)}:#{port} is up")
 
     # Update the node_refs with the actual address of the control connection node.
-    state = update_in(state.node_refs, &List.keystore(&1, node_ref, 0, {node_ref, address}))
+    state =
+      update_in(
+        state.node_refs,
+        &List.keystore(&1, node_ref, 0, {node_ref, {address, data_center}})
+      )
 
-    state = start_pool(state, address, port)
+    state = start_pool(state, address, port, data_center)
     {:noreply, state}
   end
 
-  def handle_cast({:discovered_peers, peers}, %__MODULE__{} = state) do
+  def handle_cast({:discovered_peers, peers, data_center}, %__MODULE__{} = state) do
     _ = Logger.debug("Discovered peers: #{inspect(peers)}")
     port = state.autodiscovered_nodes_port
-    state = Enum.reduce(peers, state, &start_pool(_state = &2, _peer = &1, port))
+    state = Enum.reduce(peers, state, &start_pool(_state = &2, _peer = &1, port, data_center))
     {:noreply, state}
   end
 
-  def handle_cast({:update, {:control_connection_established, address}}, %__MODULE__{} = state) do
-    state = restart_pool(state, address)
+  def handle_cast(
+        {:update, {:control_connection_established, address}, data_center},
+        %__MODULE__{} = state
+      ) do
+    state = restart_pool(state, address, data_center)
     {:noreply, state}
   end
 
-  def handle_cast({:update, %StatusChange{} = status_change}, %__MODULE__{} = state) do
-    state = handle_status_change(state, status_change)
+  def handle_cast({:update, %StatusChange{} = status_change, data_center}, %__MODULE__{} = state) do
+    state = handle_status_change(state, status_change, data_center)
     {:noreply, state}
   end
 
-  def handle_cast({:update, %TopologyChange{} = topology_change}, %__MODULE__{} = state) do
-    state = handle_topology_change(state, topology_change)
+  def handle_cast(
+        {:update, %TopologyChange{} = topology_change, data_center},
+        %__MODULE__{} = state
+      ) do
+    state = handle_topology_change(state, topology_change, data_center)
     {:noreply, state}
   end
 
@@ -469,7 +479,7 @@ defmodule Xandra.Cluster do
     end)
   end
 
-  defp start_pool(state, address, port) do
+  defp start_pool(state, address, port, data_center) do
     %{
       options: options,
       pool_supervisor: pool_supervisor,
@@ -482,7 +492,7 @@ defmodule Xandra.Cluster do
     case Supervisor.start_child(pool_supervisor, child_spec) do
       {:ok, pool} ->
         _ = Logger.debug("Started connection to #{inspect(address)}")
-        %{state | pools: Map.put(pools, address, pool)}
+        %{state | pools: Map.put(pools, {address, data_center}, pool)}
 
       {:error, {:already_started, _pool}} ->
         # TODO: to have a reliable cluster name, we need to bring the name given on
@@ -498,7 +508,7 @@ defmodule Xandra.Cluster do
     end
   end
 
-  defp restart_pool(state, address) do
+  defp restart_pool(state, address, data_center) do
     %{pool_supervisor: pool_supervisor, pools: pools} = state
 
     case Supervisor.restart_child(pool_supervisor, address) do
@@ -506,39 +516,46 @@ defmodule Xandra.Cluster do
         state
 
       {:ok, pool} ->
-        %{state | pools: Map.put(pools, address, pool)}
+        %{state | pools: Map.put(pools, {address, data_center}, pool)}
     end
   end
 
-  defp handle_status_change(state, %{effect: "UP", address: address}) do
-    restart_pool(state, address)
+  defp handle_status_change(state, %{effect: "UP", address: address}, data_center) do
+    restart_pool(state, address, data_center)
   end
 
-  defp handle_status_change(state, %{effect: "DOWN", address: address}) do
+  defp handle_status_change(state, %{effect: "DOWN", address: address}, _data_center) do
     %{pool_supervisor: pool_supervisor, pools: pools} = state
 
     _ = Supervisor.terminate_child(pool_supervisor, address)
-    %{state | pools: Map.delete(pools, address)}
+    %{state | pools: remove_pool(pools, address)}
+  end
+
+  defp remove_pool(pools, address) do
+    pools
+    |> IO.inspect()
+    |> Enum.reject(fn {{node_address, _data_center}, _} -> node_address == address end)
+    |> Map.new()
   end
 
   # We don't care about changes in the topology if we're not autodiscovering
   # nodes.
-  defp handle_topology_change(%{autodiscovery: false} = state, _change) do
+  defp handle_topology_change(%{autodiscovery: false} = state, _change, _data_center) do
     state
   end
 
-  defp handle_topology_change(state, %{effect: "NEW_NODE", address: address}) do
-    start_pool(state, address, state.autodiscovered_nodes_port)
+  defp handle_topology_change(state, %{effect: "NEW_NODE", address: address}, data_center) do
+    start_pool(state, address, state.autodiscovered_nodes_port, data_center)
   end
 
-  defp handle_topology_change(state, %{effect: "REMOVED_NODE", address: address}) do
+  defp handle_topology_change(state, %{effect: "REMOVED_NODE", address: address}, _data_center) do
     %{pool_supervisor: pool_supervisor, pools: pools} = state
     _ = Supervisor.terminate_child(pool_supervisor, address)
     _ = Supervisor.delete_child(pool_supervisor, address)
-    %{state | pools: Map.delete(pools, address)}
+    %{state | pools: remove_pool(pools, address)}
   end
 
-  defp handle_topology_change(state, %{effect: "MOVED_NODE"} = event) do
+  defp handle_topology_change(state, %{effect: "MOVED_NODE"} = event, _data_center) do
     _ = Logger.warn("Ignored TOPOLOGY_CHANGE event: #{inspect(event)}")
     state
   end
@@ -549,9 +566,22 @@ defmodule Xandra.Cluster do
   end
 
   defp select_pool(:priority, pools, node_refs) do
-    Enum.find_value(node_refs, fn {_node_ref, address} ->
-      Map.get(pools, address)
+    Enum.find_value(node_refs, fn {_node_ref, location} ->
+      Map.get(pools, location)
     end)
+  end
+
+  defp select_pool(:dc_aware, pools, node_refs) do
+    Enum.find_value(node_refs, fn {_node_ref, {_address, data_center}} ->
+      pools =
+        pools
+        |> Enum.filter(fn {{_address, node_data_center}, _pool} ->
+          node_data_center == data_center
+        end)
+        |> Enum.map(&elem(&1, 1))
+
+      if length(pools) > 0, do: Enum.random(pools)
+    end) || select_pool(:random, pools, node_refs)
   end
 
   defp parse_node(string) do
