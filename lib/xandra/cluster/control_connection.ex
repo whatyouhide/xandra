@@ -237,7 +237,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defp receive_response_frame(transport, socket, protocol_module, query) do
     with {:ok, header} <- transport.recv(socket, Frame.header_length()),
-         {:ok, body} <- transport.recv(socket, Frame.body_length(header)) do
+         {:ok, body} <- maybe_receive_body(transport, socket, Frame.body_length(header)) do
       frame =
         if Frame.body_length(header) == 0 do
           Frame.decode(header, protocol_module)
@@ -257,6 +257,10 @@ defmodule Xandra.Cluster.ControlConnection do
       end
     end
   end
+
+  def maybe_receive_body(_transport, _socket, 0), do: {:ok, <<>>}
+
+  def maybe_receive_body(transport, socket, length), do: transport.recv(socket, length)
 
   defp report_event(
          %{
