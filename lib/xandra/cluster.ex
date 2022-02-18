@@ -94,6 +94,7 @@ defmodule Xandra.Cluster do
     idle_interval: 30_000,
     protocol_version: :v3,
     autodiscovery: true,
+    autodiscover_other_datacenters: false,
     autodiscovered_nodes_port: @default_port
   ]
 
@@ -102,6 +103,7 @@ defmodule Xandra.Cluster do
     :node_refs,
     :load_balancing,
     :autodiscovery,
+    :autodiscover_other_datacenters,
     :autodiscovered_nodes_port,
     :pool_supervisor,
     pools: %{}
@@ -186,6 +188,10 @@ defmodule Xandra.Cluster do
     {load_balancing, options} = Keyword.pop(options, :load_balancing, @default_load_balancing)
     {nodes, options} = Keyword.pop(options, :nodes)
     {autodiscovery?, options} = Keyword.pop(options, :autodiscovery)
+
+    {autodiscover_other_datacenters, options} =
+      Keyword.pop(options, :autodiscover_other_datacenters)
+
     {autodiscovered_nodes_port, options} = Keyword.pop(options, :autodiscovered_nodes_port)
     {name, options} = Keyword.pop(options, :name)
 
@@ -198,6 +204,7 @@ defmodule Xandra.Cluster do
       options: Keyword.delete(options, :pool),
       load_balancing: load_balancing,
       autodiscovery: autodiscovery?,
+      autodiscover_other_datacenters: autodiscover_other_datacenters,
       autodiscovered_nodes_port: autodiscovered_nodes_port
     }
 
@@ -537,8 +544,24 @@ defmodule Xandra.Cluster do
     state
   end
 
-  defp handle_topology_change(state, %{effect: "NEW_NODE", address: address}, data_center) do
+  defp handle_topology_change(
+         %{autodiscover_other_datacenters: true} = state,
+         %{effect: "NEW_NODE", address: address},
+         data_center
+       ) do
     start_pool(state, address, state.autodiscovered_nodes_port, data_center)
+  end
+
+  defp handle_topology_change(
+         %{autodiscover_other_datacenters: false} = state,
+         %{effect: "NEW_NODE", address: address},
+         data_center
+       ) do
+    if data_center in seed_data_centers(state) do
+      start_pool(state, address, state.autodiscovered_nodes_port, data_center)
+    else
+      state
+    end
   end
 
   defp handle_topology_change(state, %{effect: "REMOVED_NODE", address: address}, _data_center) do
@@ -551,6 +574,10 @@ defmodule Xandra.Cluster do
   defp handle_topology_change(state, %{effect: "MOVED_NODE"} = event, _data_center) do
     _ = Logger.warn("Ignored TOPOLOGY_CHANGE event: #{inspect(event)}")
     state
+  end
+
+  defp seed_data_centers(%{node_refs: node_refs}) do
+    Enum.map(node_refs, fn {_ref, {_ip, data_center}} -> data_center end)
   end
 
   defp remove_pool(pools, address) do
