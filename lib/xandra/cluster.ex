@@ -200,6 +200,11 @@ defmodule Xandra.Cluster do
             "the :priority load balancing strategy is only supported when :autodiscovery is false"
     end
 
+    if !autodiscovery? and load_balancing == :dc_aware do
+      raise ArgumentError,
+            "the :dc_aware load balancing strategy is only supported when :autodiscovery is true"
+    end
+
     state = %__MODULE__{
       options: Keyword.delete(options, :pool),
       load_balancing: load_balancing,
