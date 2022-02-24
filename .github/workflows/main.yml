@@ -31,7 +31,9 @@ jobs:
             cassandra_version: "3"
             cassandra_native_protocol: "v4"
           # Oldest supported matrix.
-          - otp: "20.3"
+          # Elixir 1.9 supports OTP 20, but telemetry doesn't, so we force
+          # OTP 21 here.
+          - otp: "21.3"
             elixir: "1.9"
     env:
       GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
