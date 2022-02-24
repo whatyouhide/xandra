@@ -117,11 +117,6 @@ defmodule Xandra.Connection do
   end
 
   @impl true
-  def checkin(state) do
-    {:ok, state}
-  end
-
-  @impl true
   def handle_prepare(%Prepared{} = prepared, options, %__MODULE__{socket: socket} = state) do
     prepared = %{
       prepared
