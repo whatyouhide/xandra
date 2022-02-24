@@ -46,6 +46,7 @@ defmodule ResultsTest do
   end
 
   # Regression test for https://github.com/lexhide/xandra/issues/187.
+  @tag :cassandra_specific
   test "SCHEMA_CHANGE regression in protocol v3", %{keyspace: keyspace} do
     {:ok, conn} = Xandra.start_link(protocol_version: :v3)
     Xandra.execute!(conn, "USE #{keyspace}")
