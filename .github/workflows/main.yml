@@ -88,7 +88,7 @@ jobs:
         if: failure()
 
   test_scylla:
-    name: Test (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }})
+    name: Test ScyllaDB (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Scylla ${{ matrix.scylla_version }}, Native protocol ${{ matrix.cassandra_native_protocol }})
     runs-on: ubuntu-18.04
     strategy:
       fail-fast: false
