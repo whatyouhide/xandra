@@ -19,8 +19,8 @@ jobs:
         include:
           - otp: "21.3"
             elixir: "1.8"
-            cassandra_version: ["3"]
-            cassandra_native_protocol: ["v3"]
+            cassandra_version: "3"
+            cassandra_native_protocol: "v3"
             lint: true
           - otp: "21.3"
             elixir: "1.8"
