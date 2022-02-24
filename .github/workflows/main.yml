@@ -35,6 +35,8 @@ jobs:
     env:
       GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
       MIX_ENV: test
+      CASSANDRA_VERSION: ${{ matrix.cassandra_version }}
+      CASSANDRA_NATIVE_PROTOCOL: ${{ matrix.cassandra_native_protocol }}
 
     steps:
       - name: Clone the repository
@@ -80,6 +82,69 @@ jobs:
 
       - name: Run tests
         run: mix test --trace
+
+      - name: Dump Docker logs on failure
+        uses: jwalton/gh-docker-logs@v1
+        if: failure()
+
+  test_scylla:
+    name: Test (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }})
+    runs-on: ubuntu-18.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - otp: "21.3"
+            elixir: "1.8"
+            scylla_version: "2.3.0"
+            cassandra_native_protocol: "v3"
+          - otp: "21.3"
+            elixir: "1.8"
+            cassandra_version: "2.3.0"
+            cassandra_native_protocol: "v4"
+          - otp: "21.3"
+            elixir: "1.8"
+            scylla_version: "2.0.0"
+            cassandra_native_protocol: "v3"
+
+    env:
+      GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      MIX_ENV: test
+      SCYLLA_VERSION: ${{ matrix.scylla_version }}
+      CASSANDRA_NATIVE_PROTOCOL: ${{ matrix.cassandra_native_protocol }}
+
+    steps:
+      - name: Clone the repository
+        uses: actions/checkout@v2
+
+      - name: Start Docker and wait for it to be up
+        run: |
+          docker-compose --file docker-compose.scylladb.yml up --detach
+          ./test/docker/health-check-services.sh
+
+      - name: Install OTP and Elixir
+        uses: erlef/setup-elixir@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          elixir-version: ${{matrix.elixir}}
+
+      - name: Cache dependencies
+        id: cache-deps
+        uses: actions/cache@v2
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
+
+      - name: Install and compile dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        run: |
+          mix deps.get --only test
+          mix deps.compile
+
+      - name: Run tests
+        run: mix test.scylladb
 
       - name: Dump Docker logs on failure
         uses: jwalton/gh-docker-logs@v1
