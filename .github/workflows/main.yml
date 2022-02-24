@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Test (Elixir ${{matrix.elixir}} | OTP ${{matrix.otp}})
+    name: Test (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, C* ${{ matrix.cassandra_version }}, Native protocol ${{ matrix.cassandra_native_protocol }})
     runs-on: ubuntu-18.04
     strategy:
       fail-fast: false
@@ -37,8 +37,10 @@ jobs:
       - name: Clone the repository
         uses: actions/checkout@v2
 
-      - name: Start Docker
-        run: docker-compose up --detach
+      - name: Start Docker and wait for it to be up
+        run: |
+          docker-compose up --detach
+          ./test/docker/health-check-services.sh
 
       - name: Install OTP and Elixir
         uses: erlef/setup-elixir@v1
