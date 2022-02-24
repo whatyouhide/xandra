@@ -15,14 +15,15 @@ jobs:
       matrix:
         cassandra_version: ["3"]
         cassandra_native_protocol: ["v3"]
+        lint: [false]
         include:
           - otp: "21.3"
             elixir: "1.8"
-            coverage: true
             lint: true
           - otp: "21.3"
             elixir: "1.8"
             cassandra_version: "2.2"
+            cassandra_native_protocol: "v3"
           - otp: "21.3"
             elixir: "1.8"
             cassandra_version: "3"
@@ -77,11 +78,6 @@ jobs:
 
       - name: Run tests
         run: mix test --trace
-        if: ${{ !matrix.coverage }}
-
-      - name: Run tests with coverage
-        run: mix coveralls.github
-        if: ${{ matrix.coverage }}
 
       - name: Dump Docker logs on failure
         uses: jwalton/gh-docker-logs@v1
