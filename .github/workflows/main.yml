@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Test (Elixir ${{matrix.elixir}} | OTP ${{matrix.otp}})
+    runs-on: ubuntu-18.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cassandra_version: ["3"]
+        cassandra_native_protocol: ["v3"]
+        include:
+          - otp: "21.3"
+            elixir: "1.8"
+            coverage: true
+            lint: true
+          - otp: "21.3"
+            elixir: "1.8"
+            cassandra_version: "2.2"
+          - otp: "21.3"
+            elixir: "1.8"
+            cassandra_version: "3"
+            cassandra_native_protocol: "v4"
+          - otp: "19.3"
+            elixir: "1.6"
+    env:
+      GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      MIX_ENV: test
+
+    steps:
+      - name: Clone the repository
+        uses: actions/checkout@v2
+
+      - name: Start Docker
+        run: docker-compose up --detach
+
+      - name: Install OTP and Elixir
+        uses: erlef/setup-elixir@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          elixir-version: ${{matrix.elixir}}
+
+      - name: Cache dependencies
+        id: cache-deps
+        uses: actions/cache@v2
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
+
+      - name: Install and compile dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        run: |
+          mix deps.get --only test
+          mix deps.compile
+
+      - name: Check formatting
+        run: mix format --check-formatted
+        if: ${{ matrix.lint }}
+
+      - name: Check no unused dependencies
+        run: mix deps.get && mix deps.unlock --check-unused
+        if: ${{ matrix.lint == 'true' && steps.cache-deps.outputs.cache-hit != 'true' }}
+
+      - name: Compile with --warnings-as-errors
+        run: mix compile --warnings-as-errors
+        if: ${{ matrix.lint }}
+
+      - name: Run tests
+        run: mix test --trace
+        if: ${{ !matrix.coverage }}
+
+      - name: Run tests with coverage
+        run: mix coveralls.github
+        if: ${{ matrix.coverage }}
+
+      - name: Dump Docker logs on failure
+        uses: jwalton/gh-docker-logs@v1
+        if: failure()
