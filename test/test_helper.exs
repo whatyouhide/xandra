@@ -1,5 +1,3 @@
-ExUnit.start()
-
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
 
@@ -61,4 +59,8 @@ defmodule XandraTest.IntegrationCase do
     {:ok, conn} = Xandra.start_link(start_options)
     Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}")
   end
+
+  def protocol_version, do: unquote(protocol_version)
 end
+
+ExUnit.start(exclude: [skip_for_native_protocol: XandraTest.IntegrationCase.protocol_version()])
