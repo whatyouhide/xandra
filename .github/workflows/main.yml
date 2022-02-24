@@ -17,21 +17,24 @@ jobs:
         cassandra_native_protocol: ["v3"]
         lint: [false]
         include:
-          - otp: "21.3"
-            elixir: "1.8"
+          - otp: "24.2"
+            elixir: "1.13"
             cassandra_version: "3"
             cassandra_native_protocol: "v3"
             lint: true
-          - otp: "21.3"
-            elixir: "1.8"
+          - otp: "24.2"
+            elixir: "1.13"
             cassandra_version: "2.2"
             cassandra_native_protocol: "v3"
-          - otp: "21.3"
-            elixir: "1.8"
+          - otp: "24.2"
+            elixir: "1.13"
             cassandra_version: "3"
             cassandra_native_protocol: "v4"
-          - otp: "19.3"
-            elixir: "1.6"
+          # Oldest supported matrix.
+          # Elixir 1.9 supports OTP 20, but telemetry doesn't, so we force
+          # OTP 21 here.
+          - otp: "21.3"
+            elixir: "1.9"
     env:
       GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
       MIX_ENV: test
@@ -94,16 +97,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - otp: "21.3"
-            elixir: "1.8"
+          - otp: "24.2"
+            elixir: "1.13"
             scylla_version: "2.3.0"
             cassandra_native_protocol: "v3"
-          - otp: "21.3"
-            elixir: "1.8"
+          - otp: "24.2"
+            elixir: "1.13"
             cassandra_version: "2.3.0"
             cassandra_native_protocol: "v4"
-          - otp: "21.3"
-            elixir: "1.8"
+          - otp: "24.2"
+            elixir: "1.13"
             scylla_version: "2.0.0"
             cassandra_native_protocol: "v3"
 

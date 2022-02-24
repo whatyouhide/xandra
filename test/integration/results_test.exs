@@ -46,7 +46,10 @@ defmodule ResultsTest do
   end
 
   # Regression test for https://github.com/lexhide/xandra/issues/187.
-  test "SCHEMA_CHANGE regression in protocol v3", %{conn: conn, keyspace: keyspace} do
+  test "SCHEMA_CHANGE regression in protocol v3", %{keyspace: keyspace} do
+    {:ok, conn} = Xandra.start_link(protocol_version: :v3)
+    Xandra.execute!(conn, "USE #{keyspace}")
+
     statement = """
     CREATE FUNCTION #{keyspace}.downcase (arg text)
     RETURNS NULL ON NULL INPUT
