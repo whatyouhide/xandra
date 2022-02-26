@@ -220,35 +220,35 @@ defmodule Xandra do
 
   # Raw NimbleOptions schema before parsing. Broken out to work around
   # `mix format`.
-  @raw_schema [
+  start_link_schema = [
     address: [
-      type: {:custom, __MODULE__, :__validate_ip_address__, []},
+      type: {:custom, Xandra.OptionsValidators, :validate_ip, []},
       doc: false
     ],
     atom_keys: [
       type: :boolean,
       default: false,
       doc: """
-         Whether or not results of and parameters to `execute/4` will have atom
-         keys. If `true`, the result maps will have column names returned as
-         atoms rather than as strings. Additionally, maps that represent named
-         parameters will need atom keys. Defaults to `false`.
+      Whether or not results of and parameters to `execute/4` will have atom
+      keys. If `true`, the result maps will have column names returned as
+      atoms rather than as strings. Additionally, maps that represent named
+      parameters will need atom keys.
       """
     ],
     authentication: [
-      type: {:custom, __MODULE__, :__validate_authentication_options__, []},
+      type: {:custom, Xandra.OptionsValidators, :validate_authentication, []},
       doc: """
-        Two-element tuple: the authenticator module to use for authentication
-        and its supported options. See the "Authentication" section in the
-        module documentation.
+      Two-element tuple: the authenticator module to use for authentication
+      and its supported options. See the "Authentication" section in the
+      module documentation.
       """
     ],
     compressor: [
-      type: {:custom, __MODULE__, :__validate_module__, ["compressor"]},
+      type: {:custom, Xandra.OptionsValidators, :validate_module, ["compressor"]},
       doc: """
-        The compressor module to use for compressing and decompressing data.
-        See the "Compression" section in the module documentation. By default
-        this option is not present.
+      The compressor module to use for compressing and decompressing data.
+      See the "Compression" section in the module documentation. By default
+      this option is not present, which means no compression is used.
       """
     ],
     default_consistency: [
@@ -268,120 +268,81 @@ defmodule Xandra do
          ]},
       default: :one,
       doc: """
-        The default consistency to set for all queries. For a list of values,
-        look at the `:consistency` option in `execute/4`. Can be overridden
-        through the `:consistency` option in `execute/4`. Defaults to `:one`.
+      The default consistency to set for all queries. For a list of values,
+      look at the `:consistency` option in `execute/4`. Can be overridden
+      through the `:consistency` option in `execute/4`.
       """
     ],
     encryption: [
       type: :boolean,
       default: false,
       doc: """
-        Whether to connect to Cassandra using SSL. If you want to set up SSL
-        options, see the `:transport_options` option below.  Defaults to
-        `false`.
+      Whether to connect to Cassandra using SSL. If you want to set up SSL
+      options, see the `:transport_options` option.
       """
     ],
     idle_interval: [
       type: :non_neg_integer,
       default: 30_000,
       doc: """
-       From DBConnection library. Controls the frequency we check for idle
-       connections in the pool. We then notify each idle connection to ping the
-       database. In practice, the ping happens within idle_interval <= ping < 2
-       * idle_interval. Defaults to 30_000ms (30 seconds).
+      From DBConnection library. Controls the frequency we check for idle
+      connections in the pool (in milliseconds). We then notify each idle connection to ping the
+      database. In practice, the ping happens between `idle_interval` and `2 * idle_interval`.
       """
     ],
     nodes: [
       type: {:list, :string},
       doc: """
-        The Cassandra nodes to connect to. Each node in the list has to be in
-        the form `"ADDRESS:PORT"` or in the form `"ADDRESS"`: if the latter is
-        used, the default port (`#{@default_port}`) will be used for that node.
-        Defaults to `["127.0.0.1"]`. This option must contain only one node.
-        See the documentation for `Xandra.Cluster` for more information on
-        connecting to multiple nodes.
+      The Cassandra nodes to connect to. Each node in the list has to be in
+      the form `"ADDRESS:PORT"` or in the form `"ADDRESS"`. If the latter is
+      used, the default port (`#{@default_port}`) will be used for that node.
+      Defaults to `["127.0.0.1"]`. This option must contain only one node.
+      See the documentation for `Xandra.Cluster` for more information on
+      connecting to multiple nodes.
       """
     ],
     pool_size: [
       type: :non_neg_integer,
       default: 1,
       doc: """
-        The number of connections to start for the pool. Defaults to `1`, which
-        means that a single connection is started.
+      The number of connections to start for the pool. The default pool size of `1`
+      means that a single connection is started to the given node.
       """
     ],
     port: [
       type: :non_neg_integer,
-      doc: """
-        Internal, not to be set by hand.
-      """
+      doc: false
     ],
     protocol_module: [
-      type: {:custom, __MODULE__, :__validate_module__, ["protocol_module"]},
+      type: {:custom, Xandra.OptionsValidators, :validate_module, ["protocol_module"]},
       doc: false
     ],
     protocol_version: [
       type: {:in, [:v3, :v4]},
       default: :v3,
       doc: """
-        The version of the Cassandra native protocol to use, either `:v3` or
-        `:v4`.
+      The version of the Cassandra native protocol to use, either `:v3` or `:v4`.
       """
     ],
     show_sensitive_data_on_connection_error: [
       type: :boolean,
       default: false,
       doc: """
-        Is it ok to show sensitive data on connection errors? Useful for
-        debugging and in tests.
+      Is it ok to show sensitive data on connection errors? Useful for
+      debugging and in tests.
       """
     ],
     transport_options: [
       type: :keyword_list,
       doc: """
-        Options to forward to the socket transport. If `:encryption` is `true`,
-        then the transport is SSL (see the Erlang `:ssl` module) otherwise it's
-        TCP (see the `:gen_tcp` Erlang module).
+      Options to forward to the socket transport. If the `:encryption` option is `true`,
+      then the transport is SSL (see the Erlang `:ssl` module) otherwise it's
+      TCP (see the `:gen_tcp` Erlang module).
       """
     ]
   ]
 
-  @options_definition NimbleOptions.new!(@raw_schema)
-
-  def __validate_ip_address__({a, b, c, d} = ip)
-      when is_integer(a) and is_integer(b) and is_integer(c) and is_integer(d) do
-    {:ok, ip}
-  end
-
-  def __validate_ip_address__(other) do
-    {:error, "Invalid IP address: #{inspect(other)}"}
-  end
-
-  def __validate_authentication_options__({module, keyword})
-      when is_atom(module) and is_list(keyword) do
-    if Code.ensure_loaded?(module) do
-      {:ok, {module, keyword}}
-    else
-      {:error, "Authentication module #{inspect(module)} is not loaded!"}
-    end
-  end
-
-  def __validate_authentication_options__(all) do
-    {:error, "Invalid options supplied for authentication: #{inspect(all)}"}
-  end
-
-  def __validate_module__(module, name) when is_atom(module) do
-    if Code.ensure_loaded?(module) do
-      {:ok, module}
-    else
-      {:error, "#{name} module #{inspect(module)} is not loaded!"}
-    end
-  end
-
-  def __validate_module__(module, name) do
-    {:error, "#{name} module #{inspect(module)} is not loaded!"}
-  end
+  @start_link_opts_schema NimbleOptions.new!(start_link_schema)
 
   @doc """
   Starts a new pool of connections to Cassandra.
@@ -394,58 +355,13 @@ defmodule Xandra do
 
   These are the Xandra-specific options supported by this function:
 
-    * `:nodes` - (list of strings) the Cassandra nodes to connect to. Each node
-      in the list has to be in the form `"ADDRESS:PORT"` or in the form
-      `"ADDRESS"`: if the latter is used, the default port (`#{@default_port}`)
-      will be used for that node. Defaults to `["127.0.0.1"]`. This option must
-      contain only one node. See the documentation for `Xandra.Cluster` for more
-      information on connecting to multiple nodes.
-
-    * `:compressor` - (module) the compressor module to use for compressing and
-      decompressing data. See the "Compression" section in the module
-      documentation. By default this option is not present.
-
-    * `:authentication` - (tuple) a two-element tuple: the authenticator
-      module to use for authentication and its supported options. See the
-      "Authentication" section in the module documentation.
-
-    * `:atom_keys` - (boolean) whether or not results of and parameters to
-      `execute/4` will have atom keys. If `true`, the result maps will have
-      column names returned as atoms rather than as strings. Additionally,
-      maps that represent named parameters will need atom keys. Defaults to
-      `false`.
-
-    * `:pool_size` - (integer) the number of connections to start for the
-      pool. Defaults to `1`, which means that a single connection is
-      started.
-
-    * `:encryption` - (boolean) whether to connect to Cassandra using SSL. If you
-      want to set up SSL options, see the `:transport_options` option below.
-      Defaults to `false`.
-
-    * `:transport_options` - (keyword) options to forward to the socket
-      transport. If `:encryption` is `true`, then the transport is SSL (see
-      the Erlang `:ssl` module) otherwise it's TCP (see the `:gen_tcp` Erlang
-      module).
-
-    * `:default_consistency` - (atom) the default consistency to set for
-      all queries. For a list of values, look at the `:consistency` option
-      in `execute/4`. Can be overridden through the `:consistency` option in
-      `execute/4`. Defaults to `:one`.
-
-    * `:protocol_version` - (`:v3` or `:v4`) the version of the Cassandra native
-      protocol to use. Defaults to `:v3`.
+  #{NimbleOptions.docs(@start_link_opts_schema)}
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of five connections, you can use the `:pool_size`
   option:
 
       Xandra.start_link(pool_size: 5)
-
-  The following options have default values that are different from
-  the default values provided by `DBConnection`:
-
-    * `:idle_interval` - defaults to `30_000` (30 seconds)
 
   ## Examples
 
@@ -487,7 +403,7 @@ defmodule Xandra do
   """
   @spec start_link(start_options) :: GenServer.on_start()
   def start_link(options \\ []) when is_list(options) do
-    options = NimbleOptions.validate!(options, @options_definition)
+    options = NimbleOptions.validate!(options, @start_link_opts_schema)
     {protocol_version, options} = Keyword.pop(options, :protocol_version)
 
     options =
