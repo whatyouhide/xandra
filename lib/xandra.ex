@@ -220,7 +220,7 @@ defmodule Xandra do
 
   # Raw NimbleOptions schema before parsing. Broken out to work around
   # `mix format`.
-  @raw_schema = [
+  @raw_schema [
     address: [
       type: {:custom, __MODULE__, :__validate_ip_address__, []},
       doc: false
