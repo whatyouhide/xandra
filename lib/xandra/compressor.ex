@@ -50,7 +50,7 @@ defmodule Xandra.Compressor do
   @callback compress(iodata) :: iodata
 
   @doc """
-  Deompresses the given binary according to the algorithm returned by
+  Decompresses the given binary according to the algorithm returned by
   `c:algorithm/0`.
   """
   @callback decompress(binary) :: binary
