@@ -35,4 +35,13 @@ defmodule Xandra.OptionsValidators do
   def validate_ip(other) do
     {:error, "invalid IP address: #{inspect(other)}"}
   end
+
+  @doc false
+  def validate_binary(value, key) do
+    if is_binary(value) do
+      {:ok, value}
+    else
+      {:error, "expected #{inspect(key)} to be a binary, got: #{inspect(value)}"}
+    end
+  end
 end
