@@ -124,7 +124,7 @@ defmodule Xandra.Connection do
         protocol_module: state.protocol_module
     }
 
-    force? = Keyword.get(options, :force, false)
+    force? = Keyword.fetch!(options, :force)
     compressor = assert_valid_compressor(state.compressor, options[:compressor])
     transport = state.transport
 
