@@ -3,6 +3,8 @@ defmodule WarningTest do
 
   alias Xandra.Batch
 
+  @moduletag skip_for_native_protocol: :v3
+
   setup_all %{keyspace: keyspace, start_options: start_options} do
     {:ok, conn} = Xandra.start_link(start_options)
     Xandra.execute!(conn, "USE #{keyspace}")

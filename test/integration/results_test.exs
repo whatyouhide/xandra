@@ -70,6 +70,7 @@ defmodule ResultsTest do
 
   describe "SCHEMA_CHANGE updates since native protocol v4" do
     @describetag :cassandra_specific
+    @describetag skip_for_native_protocol: :v3
 
     setup %{start_options: start_options} do
       start_options = Keyword.put(start_options, :protocol_version, :v4)
