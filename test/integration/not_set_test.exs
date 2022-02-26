@@ -1,6 +1,8 @@
 defmodule NotSetTest do
   use XandraTest.IntegrationCase, async: true, start_options: [protocol_version: :v4]
 
+  @moduletag skip_for_native_protocol: :v3
+
   test "not_set values in simple statements", %{conn: conn} do
     statement = "CREATE TABLE towns (id int PRIMARY KEY, name text, country text)"
     Xandra.execute!(conn, statement)

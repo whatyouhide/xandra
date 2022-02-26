@@ -13,28 +13,31 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cassandra_version: ["3"]
-        cassandra_native_protocol: ["v3"]
-        lint: [false]
         include:
           - otp: "24.2"
             elixir: "1.13"
-            cassandra_version: "3"
-            cassandra_native_protocol: "v3"
+            cassandra_version: "4"
+            cassandra_native_protocol: "v4"
             lint: true
           - otp: "24.2"
             elixir: "1.13"
-            cassandra_version: "2.2"
+            cassandra_version: "3"
             cassandra_native_protocol: "v3"
           - otp: "24.2"
             elixir: "1.13"
             cassandra_version: "3"
             cassandra_native_protocol: "v4"
-          # Oldest supported matrix.
+          - otp: "24.2"
+            elixir: "1.13"
+            cassandra_version: "2.2"
+            cassandra_native_protocol: "v3"
+          # Oldest supported Elixir/OTP matrix.
           # Elixir 1.9 supports OTP 20, but telemetry doesn't, so we force
           # OTP 21 here.
           - otp: "21.3"
             elixir: "1.9"
+            cassandra_version: "3"
+            cassandra_native_protocol: "v3"
     env:
       GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
       MIX_ENV: test
