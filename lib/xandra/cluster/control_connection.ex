@@ -1,7 +1,7 @@
 defmodule Xandra.Cluster.ControlConnection do
   @moduledoc false
 
-  use Connection
+  @behaviour :gen_statem
 
   alias Xandra.{Frame, Simple, Connection.Utils}
 
@@ -33,7 +33,7 @@ defmodule Xandra.Cluster.ControlConnection do
       |> Keyword.get(:transport_options, [])
       |> Keyword.merge(@forced_transport_options)
 
-    state = %__MODULE__{
+    data = %__MODULE__{
       cluster: cluster,
       node_ref: node_ref,
       address: address,
@@ -44,68 +44,68 @@ defmodule Xandra.Cluster.ControlConnection do
       autodiscovery: autodiscovery?
     }
 
-    Connection.start_link(__MODULE__, state)
+    :gen_statem.start_link(__MODULE__, data, [])
   end
 
-  def init(state) do
-    {:connect, :init, state}
+  ## Callbacks
+
+  @impl :gen_statem
+  def init(data) do
+    {:ok, :disconnected, data, {:next_event, :internal, :connect}}
   end
 
-  def connect(_action, %__MODULE__{address: address, port: port, options: options} = state) do
-    protocol_module = Keyword.fetch!(options, :protocol_module)
-    state = %{state | protocol_module: protocol_module}
+  @impl :gen_statem
+  def callback_mode do
+    :state_functions
+  end
 
-    case state.transport.connect(address, port, state.transport_options, @default_timeout) do
+  # Disconnected state
+
+  def disconnected(:internal, :connect, %__MODULE__{} = data) do
+    %__MODULE__{options: options, address: address, port: port, transport: transport} = data
+
+    protocol_mod = Keyword.fetch!(options, :protocol_module)
+    data = %__MODULE__{data | protocol_module: protocol_mod}
+
+    case transport.connect(address, port, data.transport_options, @default_timeout) do
       {:ok, socket} ->
-        state = %{state | socket: socket}
-        transport = state.transport
+        data = %__MODULE__{data | socket: socket}
 
-        with {:ok, supported_options} <-
-               Utils.request_options(state.transport, socket, protocol_module),
+        with {:ok, supported_options} <- Utils.request_options(transport, socket, protocol_mod),
              :ok <-
-               startup_connection(
-                 state.transport,
-                 socket,
-                 supported_options,
-                 protocol_module,
-                 options
-               ),
+               startup_connection(transport, socket, supported_options, protocol_mod, options),
              {:ok, peers_or_nil} <-
-               maybe_discover_peers(state.autodiscovery, transport, socket, protocol_module),
-             :ok <- register_to_events(state.transport, socket, protocol_module),
-             :ok <- inet_mod(state.transport).setopts(socket, active: true) do
-          {:ok, state} = report_active(state)
+               maybe_discover_peers(data.autodiscovery, transport, socket, protocol_mod),
+             :ok <- register_to_events(transport, socket, protocol_mod),
+             :ok <- inet_mod(transport).setopts(socket, active: true) do
+          {:ok, data} = report_active(data)
 
           if not is_nil(peers_or_nil) do
-            report_peers(state, peers_or_nil)
+            report_peers(data, peers_or_nil)
           end
 
-          {:ok, state}
+          {:next_state, :connected, data}
         else
           {:error, _reason} = error ->
-            {:connect, :reconnect, state} = disconnect(error, state)
-            {:backoff, @default_backoff, state}
+            {:connect, :reconnect, data} = disconnect(error, data)
+            timeout_action = {{:timeout, :reconnect}, @default_backoff, data}
+            {:keep_state, data, timeout_action}
         end
 
       {:error, _reason} ->
-        {:backoff, @default_backoff, state}
+        timeout_action = {{:timeout, :reconnect}, @default_backoff, data}
+        {:keep_state_and_data, timeout_action}
     end
   end
 
-  def handle_info({kind, socket, reason}, %__MODULE__{socket: socket} = state)
+  def disconnected(:info, {kind, socket, _other}, %__MODULE__{socket: socket})
       when kind in [:tcp_error, :ssl_error] do
-    {:disconnect, {:error, reason}, state}
+    :keep_state_and_data
   end
 
-  def handle_info({kind, socket}, %__MODULE__{socket: socket} = state)
+  def disconnected(:info, {kind, socket}, %__MODULE__{socket: socket})
       when kind in [:tcp_closed, :ssl_closed] do
-    {:disconnect, {:error, :closed}, state}
-  end
-
-  def handle_info({kind, socket, data}, %__MODULE__{socket: socket} = state)
-      when kind in [:tcp, :ssl] do
-    state = %{state | buffer: state.buffer <> data}
-    {:noreply, report_event(state)}
+    :keep_state_and_data
   end
 
   def disconnect({:error, _reason}, %__MODULE__{} = state) do
@@ -113,15 +113,42 @@ defmodule Xandra.Cluster.ControlConnection do
     {:connect, :reconnect, %{state | socket: nil, buffer: <<>>}}
   end
 
-  defp report_active(%{new: false, cluster: cluster, peername: peername} = state) do
-    Xandra.Cluster.update(cluster, {:control_connection_established, peername})
-    {:ok, state}
+  # Connected state
+
+  def connected(:info, {kind, socket, _reason}, %__MODULE__{socket: socket} = data)
+      when kind in [:tcp_error, :ssl_error] do
+    data.transport.close(data.socket)
+    data = %__MODULE__{data | buffer: <<>>}
+    {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
   end
 
-  defp report_active(%{new: true, cluster: cluster, node_ref: node_ref, socket: socket} = state) do
-    with {:ok, {address, port}} <- inet_mod(state.transport).peername(socket) do
+  def connected(:info, {kind, socket}, %__MODULE__{socket: socket} = data)
+      when kind in [:tcp_closed, :ssl_closed] do
+    data.transport.close(data.socket)
+    data = %__MODULE__{data | buffer: <<>>, socket: nil}
+    {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
+  end
+
+  def connected({kind, socket, bytes}, %__MODULE__{socket: socket, buffer: buffer} = data)
+      when kind in [:tcp, :ssl] do
+    data = %__MODULE__{data | buffer: buffer <> bytes}
+    data = report_event(data)
+    {:keep_state, data}
+  end
+
+  ## Helper functions
+
+  defp report_active(%__MODULE__{new: false, cluster: cluster, peername: peername} = data) do
+    Xandra.Cluster.update(cluster, {:control_connection_established, peername})
+    {:ok, data}
+  end
+
+  defp report_active(
+         %__MODULE__{new: true, cluster: cluster, node_ref: node_ref, socket: socket} = data
+       ) do
+    with {:ok, {address, port}} <- inet_mod(data.transport).peername(socket) do
       Xandra.Cluster.activate(cluster, node_ref, address, port)
-      {:ok, %{state | new: false, peername: address}}
+      {:ok, %{data | new: false, peername: address}}
     end
   end
 
