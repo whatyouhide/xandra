@@ -1,5 +1,7 @@
 # Xandra
 
+[![hex.pm badge](https://img.shields.io/badge/Package%20on%20hex.pm-informational)](https://hex.pm/packages/xandra)
+[![Documentation badge](https://img.shields.io/badge/Documentation-ff69b4)][documentation]
 [![CI](https://github.com/lexhide/xandra/actions/workflows/main.yml/badge.svg)](https://github.com/lexhide/xandra/actions/workflows/main.yml)
 [![Hex.pm](https://img.shields.io/hexpm/v/xandra.svg)](https://hex.pm/packages/xandra)
 
