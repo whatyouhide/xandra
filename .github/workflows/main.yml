@@ -102,7 +102,7 @@ jobs:
         include:
           - otp: "24.2"
             elixir: "1.13"
-            scylla_version: "2.3.0"
+            scylla_version: "2.3.1"
             cassandra_native_protocol: "v3"
           - otp: "24.2"
             elixir: "1.13"
