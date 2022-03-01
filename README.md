@@ -1,6 +1,6 @@
 # Xandra
 
-[![Build Status](https://travis-ci.org/lexhide/xandra.svg?branch=master)](https://travis-ci.org/lexhide/xandra)
+[![CI](https://github.com/lexhide/xandra/actions/workflows/main.yml/badge.svg)](https://github.com/lexhide/xandra/actions/workflows/main.yml)
 [![Hex.pm](https://img.shields.io/hexpm/v/xandra.svg)](https://hex.pm/packages/xandra)
 
 > Fast, simple, and robust Cassandra driver for Elixir.
