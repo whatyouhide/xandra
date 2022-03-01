@@ -19,7 +19,8 @@ defmodule Xandra.Prepared do
     :result_columns,
     :default_consistency,
     :protocol_module,
-    :tracing_id
+    :tracing_id,
+    :keyspace
   ]
 
   @type t :: %__MODULE__{
@@ -30,7 +31,8 @@ defmodule Xandra.Prepared do
           result_columns: list | nil,
           default_consistency: atom | nil,
           protocol_module: module | nil,
-          tracing_id: binary | nil
+          tracing_id: binary | nil,
+          keyspace: binary | nil
         }
 
   @doc false
@@ -66,8 +68,8 @@ defmodule Xandra.Prepared do
       |> Frame.encode(prepared.protocol_module)
     end
 
-    def decode(prepared, %Frame{} = frame, options) do
-      prepared.protocol_module.decode_response(frame, prepared, options)
+    def decode(_prepared, response, _options) do
+      response
     end
 
     def describe(prepared, _options) do

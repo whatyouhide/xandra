@@ -23,8 +23,8 @@ defmodule Xandra.Simple do
       |> Frame.encode(query.protocol_module)
     end
 
-    def decode(query, %Frame{} = frame, options) do
-      query.protocol_module.decode_response(frame, query, options)
+    def decode(_query, response, _options) do
+      response
     end
 
     def describe(query, _options) do
