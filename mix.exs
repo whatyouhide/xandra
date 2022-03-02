@@ -18,10 +18,13 @@ defmodule Xandra.Mixfile do
 
       # Task aliases
       aliases: ["test.scylladb": "test --exclude encryption --exclude cassandra_specific"],
-      preferred_cli_env: ["test.scylladb": :test],
 
       # Dialyzer
       dialyzer: [flags: [:no_contracts]],
+
+      # Testing
+      preferred_cli_env: ["test.scylladb": :test, "coveralls.html": :test],
+      test_coverage: [tool: ExCoveralls],
 
       # Hex
       package: package(),
@@ -60,7 +63,8 @@ defmodule Xandra.Mixfile do
 
       # Dev and test dependencies
       {:ex_doc, "~> 0.20", only: :dev},
-      {:dialyxir, "~> 1.1", only: :dev, runtime: false}
+      {:dialyxir, "~> 1.1", only: :dev, runtime: false},
+      {:excoveralls, "~> 0.14.4", only: :test}
     ]
   end
 end
