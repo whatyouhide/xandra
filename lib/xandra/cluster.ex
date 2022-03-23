@@ -189,7 +189,7 @@ defmodule Xandra.Cluster do
     {nodes, options} = Keyword.pop(options, :nodes)
     {autodiscovery?, options} = Keyword.pop(options, :autodiscovery)
 
-    {autodiscover_other_datacenters, options} =
+    {autodiscover_other_datacenters?, options} =
       Keyword.pop(options, :autodiscover_other_datacenters)
 
     {autodiscovered_nodes_port, options} = Keyword.pop(options, :autodiscovered_nodes_port)
@@ -200,7 +200,7 @@ defmodule Xandra.Cluster do
             "the :priority load balancing strategy is only supported when :autodiscovery is false"
     end
 
-    if !autodiscovery? and load_balancing == :dc_aware do
+    if not autodiscovery? and load_balancing == :dc_aware do
       raise ArgumentError,
             "the :dc_aware load balancing strategy is only supported when :autodiscovery is true"
     end
@@ -209,7 +209,7 @@ defmodule Xandra.Cluster do
       options: Keyword.delete(options, :pool),
       load_balancing: load_balancing,
       autodiscovery: autodiscovery?,
-      autodiscover_other_datacenters: autodiscover_other_datacenters,
+      autodiscover_other_datacenters: autodiscover_other_datacenters?,
       autodiscovered_nodes_port: autodiscovered_nodes_port
     }
 
@@ -444,7 +444,7 @@ defmodule Xandra.Cluster do
     state =
       update_in(
         state.node_refs,
-        &List.keystore(&1, node_ref, 0, {node_ref, {address, data_center}})
+        &List.keystore(&1, node_ref, 0, {node_ref, address, data_center})
       )
 
     state = start_pool(state, address, port, data_center)
@@ -582,7 +582,7 @@ defmodule Xandra.Cluster do
   end
 
   defp seed_data_centers(%{node_refs: node_refs}) do
-    Enum.map(node_refs, fn {_ref, {_ip, data_center}} -> data_center end)
+    Enum.map(node_refs, fn {_ref, _ip, data_center} -> data_center end)
   end
 
   defp remove_pool(pools, address) do
@@ -603,7 +603,7 @@ defmodule Xandra.Cluster do
   end
 
   defp select_pool(:dc_aware, pools, node_refs) do
-    Enum.find_value(node_refs, fn {_node_ref, {_address, data_center}} ->
+    Enum.find_value(node_refs, fn {_node_ref, _address, data_center} ->
       pools =
         pools
         |> Enum.filter(fn {{_address, node_data_center}, _pool} ->

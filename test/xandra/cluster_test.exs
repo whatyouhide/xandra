@@ -118,7 +118,7 @@ defmodule Xandra.ClusterTest do
 
       wait_for_connection(cluster)
 
-      {:ok, inital_pool} = GenServer.call(cluster, :checkout)
+      {:ok, initial_pool} = GenServer.call(cluster, :checkout)
 
       Cluster.update(
         cluster,
@@ -128,7 +128,38 @@ defmodule Xandra.ClusterTest do
 
       wait_for_connection(cluster)
 
-      assert {:ok, ^inital_pool} = GenServer.call(cluster, :checkout)
+      assert {:ok, ^initial_pool} = GenServer.call(cluster, :checkout)
+    end
+
+    test "falls back to using other nodes when preferred data center isn't available" do
+      {:ok, cluster} =
+        Cluster.start_link(
+          nodes: ["127.0.0.1"],
+          autodiscover_other_datacenters: true,
+          autodiscovery: true,
+          load_balancing: :dc_aware
+        )
+
+      wait_for_connection(cluster)
+
+      {:ok, initial_pool} = GenServer.call(cluster, :checkout)
+
+      Cluster.update(
+        cluster,
+        %TopologyChange{effect: "NEW_NODE", address: {192, 0, 2, 0}, port: 9042},
+        "datacenter2"
+      )
+
+      Cluster.update(
+        cluster,
+        %TopologyChange{effect: "REMOVED_NODE", address: {127, 0, 0, 1}, port: 9042},
+        "datacenter2"
+      )
+
+      wait_for_connection(cluster)
+
+      {:ok, checked_out_pool} = GenServer.call(cluster, :checkout)
+      assert checked_out_pool != initial_pool
     end
   end
 
