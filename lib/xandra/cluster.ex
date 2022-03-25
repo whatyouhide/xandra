@@ -487,7 +487,7 @@ defmodule Xandra.Cluster do
     Enum.map(nodes, fn {address, port} ->
       node_ref = make_ref()
       ControlConnection.start_link(cluster, node_ref, address, port, options, autodiscovery?)
-      {node_ref, nil}
+      {node_ref, nil, nil}
     end)
   end
 
@@ -504,7 +504,7 @@ defmodule Xandra.Cluster do
     case Supervisor.start_child(pool_supervisor, child_spec) do
       {:ok, pool} ->
         _ = Logger.debug("Started connection to #{inspect(address)}")
-        %{state | pools: Map.put(pools, {address, data_center}, pool)}
+        %{state | pools: Map.put(pools, address, {data_center, pool})}
 
       {:error, {:already_started, _pool}} ->
         # TODO: to have a reliable cluster name, we need to bring the name given on
@@ -528,7 +528,7 @@ defmodule Xandra.Cluster do
         state
 
       {:ok, pool} ->
-        %{state | pools: Map.put(pools, {address, data_center}, pool)}
+        %{state | pools: Map.put(pools, address, {data_center, pool})}
     end
   end
 
@@ -587,18 +587,21 @@ defmodule Xandra.Cluster do
 
   defp remove_pool(pools, address) do
     pools
-    |> Enum.reject(fn {{node_address, _data_center}, _} -> node_address == address end)
+    |> Enum.reject(fn {node_address, _} -> node_address == address end)
     |> Map.new()
   end
 
   defp select_pool(:random, pools, _node_refs) do
-    {_address, pool} = Enum.random(pools)
+    {_address, {_data_center, pool}} = Enum.random(pools)
     pool
   end
 
   defp select_pool(:priority, pools, node_refs) do
-    Enum.find_value(node_refs, fn {_node_ref, location} ->
-      Map.get(pools, location)
+    Enum.find_value(node_refs, fn {_node_ref, address, _data_center} ->
+      case Map.get(pools, address) do
+        {_data_center, pool} -> pool
+        _ -> nil
+      end
     end)
   end
 
@@ -606,10 +609,10 @@ defmodule Xandra.Cluster do
     Enum.find_value(node_refs, fn {_node_ref, _address, data_center} ->
       pools =
         pools
-        |> Enum.filter(fn {{_address, node_data_center}, _pool} ->
+        |> Enum.filter(fn {_address, {node_data_center, _pool}} ->
           node_data_center == data_center
         end)
-        |> Enum.map(&elem(&1, 1))
+        |> Enum.map(fn {_address, {_node_data_center, pool}} -> pool end)
 
       if length(pools) > 0, do: Enum.random(pools)
     end) || select_pool(:random, pools, node_refs)
