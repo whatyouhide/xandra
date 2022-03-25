@@ -110,8 +110,8 @@ defmodule Xandra.Batch do
       |> Frame.encode(batch.protocol_module)
     end
 
-    def decode(batch, %Frame{} = frame, _options) do
-      batch.protocol_module.decode_response(frame, batch)
+    def decode(_batch, response, _options) do
+      response
     end
 
     def describe(batch, _options) do

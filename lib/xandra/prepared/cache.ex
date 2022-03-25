@@ -16,17 +16,22 @@ defmodule Xandra.Prepared.Cache do
       statement: statement,
       id: id,
       bound_columns: bound_columns,
-      result_columns: result_columns
+      result_columns: result_columns,
+      keyspace: keyspace
     } = prepared
 
-    :ets.insert(table, {statement, id, bound_columns, result_columns})
+    key = {statement, keyspace}
+
+    :ets.insert(table, {key, id, bound_columns, result_columns})
     :ok
   end
 
   @spec lookup(t, Prepared.t()) :: {:ok, Prepared.t()} | :error
-  def lookup(table, %Prepared{statement: statement} = prepared) do
-    case :ets.lookup(table, statement) do
-      [{^statement, id, bound_columns, result_columns}] ->
+  def lookup(table, %Prepared{statement: statement, keyspace: keyspace} = prepared) do
+    key = {statement, keyspace}
+
+    case :ets.lookup(table, key) do
+      [{^key, id, bound_columns, result_columns}] ->
         {:ok, %{prepared | id: id, bound_columns: bound_columns, result_columns: result_columns}}
 
       [] ->

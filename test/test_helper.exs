@@ -1,5 +1,3 @@
-ExUnit.start()
-
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
 
@@ -23,7 +21,12 @@ defmodule XandraTest.IntegrationCase do
             default_start_options: @default_start_options
           ] do
       setup_all do
-        keyspace = "xandra_test_" <> String.replace(inspect(__MODULE__), ".", "")
+        module_suffix =
+          inspect(__MODULE__)
+          |> String.replace(".", "")
+          |> String.downcase()
+
+        keyspace = "xandra_test_" <> module_suffix
 
         start_options = Keyword.merge(unquote(default_start_options), unquote(start_options))
         case_template = unquote(case_template)
@@ -61,4 +64,8 @@ defmodule XandraTest.IntegrationCase do
     {:ok, conn} = Xandra.start_link(start_options)
     Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}")
   end
+
+  def protocol_version, do: unquote(protocol_version)
 end
+
+ExUnit.start(exclude: [skip_for_native_protocol: XandraTest.IntegrationCase.protocol_version()])

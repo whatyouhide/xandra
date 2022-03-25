@@ -11,17 +11,20 @@ defmodule Xandra.Mixfile do
     [
       app: :xandra,
       version: @version,
-      elixir: "~> 1.6",
+      elixir: "~> 1.9",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       deps: deps(),
 
       # Task aliases
       aliases: ["test.scylladb": "test --exclude encryption --exclude cassandra_specific"],
-      preferred_cli_env: ["test.scylladb": :test],
 
       # Dialyzer
       dialyzer: [flags: [:no_contracts]],
+
+      # Testing
+      preferred_cli_env: ["test.scylladb": :test, "coveralls.html": :test],
+      test_coverage: [tool: ExCoveralls],
 
       # Hex
       package: package(),
@@ -56,11 +59,12 @@ defmodule Xandra.Mixfile do
     [
       {:db_connection, "~> 2.0"},
       {:decimal, "~> 1.7", optional: true},
+      {:nimble_options, "~> 0.4.0"},
 
       # Dev and test dependencies
-      {:snappy, github: "skunkwerks/snappy-erlang-nif", tag: "1.1.2", only: [:dev, :test]},
       {:ex_doc, "~> 0.20", only: :dev},
-      {:dialyxir, "~> 1.1", only: :dev, runtime: false}
+      {:dialyxir, "~> 1.1", only: :dev, runtime: false},
+      {:excoveralls, "~> 0.14.4", only: :test}
     ]
   end
 end

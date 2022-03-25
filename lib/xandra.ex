@@ -218,11 +218,128 @@ defmodule Xandra do
   @default_address '127.0.0.1'
   @default_port 9042
 
-  @default_start_options [
-    idle_interval: 30_000,
-    default_consistency: :one,
-    protocol_version: :v3
+  # Raw NimbleOptions schema before parsing. Broken out to work around
+  # `mix format`.
+  start_link_opts_schema = [
+    address: [
+      type: {:custom, Xandra.OptionsValidators, :validate_ip, []},
+      doc: false
+    ],
+    atom_keys: [
+      type: :boolean,
+      default: false,
+      doc: """
+      Whether or not results of and parameters to `execute/4` will have atom
+      keys. If `true`, the result maps will have column names returned as
+      atoms rather than as strings. Additionally, maps that represent named
+      parameters will need atom keys.
+      """
+    ],
+    authentication: [
+      type: {:custom, Xandra.OptionsValidators, :validate_authentication, []},
+      doc: """
+      Two-element tuple: the authenticator module to use for authentication
+      and its supported options. See the "Authentication" section in the
+      module documentation.
+      """
+    ],
+    compressor: [
+      type: {:custom, Xandra.OptionsValidators, :validate_module, ["compressor"]},
+      doc: """
+      The compressor module to use for compressing and decompressing data.
+      See the "Compression" section in the module documentation. By default
+      this option is not present, which means no compression is used.
+      """
+    ],
+    default_consistency: [
+      type:
+        {:in,
+         [
+           :one,
+           :two,
+           :three,
+           :serial,
+           :all,
+           :quorum,
+           :local_one,
+           :local_quorum,
+           :each_quorum,
+           :local_serial
+         ]},
+      default: :one,
+      doc: """
+      The default consistency to set for all queries. For a list of values,
+      look at the `:consistency` option in `execute/4`. Can be overridden
+      through the `:consistency` option in `execute/4`.
+      """
+    ],
+    encryption: [
+      type: :boolean,
+      default: false,
+      doc: """
+      Whether to connect to Cassandra using SSL. If you want to set up SSL
+      options, see the `:transport_options` option.
+      """
+    ],
+    idle_interval: [
+      type: :non_neg_integer,
+      default: 30_000,
+      doc: """
+      From DBConnection library. Controls the frequency we check for idle
+      connections in the pool (in milliseconds). We then notify each idle connection to ping the
+      database. In practice, the ping happens between `idle_interval` and `2 * idle_interval`.
+      """
+    ],
+    nodes: [
+      type: {:list, :string},
+      doc: """
+      The Cassandra nodes to connect to. Each node in the list has to be in
+      the form `"ADDRESS:PORT"` or in the form `"ADDRESS"`. If the latter is
+      used, the default port (`#{@default_port}`) will be used for that node.
+      Defaults to `["127.0.0.1"]`. This option must contain only one node.
+      See the documentation for `Xandra.Cluster` for more information on
+      connecting to multiple nodes.
+      """
+    ],
+    pool_size: [
+      type: :non_neg_integer,
+      default: 1,
+      doc: """
+      The number of connections to start for the pool. The default pool size of `1`
+      means that a single connection is started to the given node.
+      """
+    ],
+    port: [
+      type: :non_neg_integer,
+      doc: false
+    ],
+    protocol_version: [
+      type: {:in, [:v3, :v4]},
+      default: :v3,
+      doc: """
+      The version of the Cassandra native protocol to use, either `:v3` or `:v4`.
+      """
+    ],
+    show_sensitive_data_on_connection_error: [
+      type: :boolean,
+      default: false,
+      doc: """
+      Is it ok to show sensitive data on connection errors? Useful for
+      debugging and in tests.
+      """
+    ],
+    transport_options: [
+      type: :keyword_list,
+      doc: """
+      Options to forward to the socket transport. If the `:encryption` option is `true`,
+      then the transport is SSL (see the Erlang `:ssl` module) otherwise it's
+      TCP (see the `:gen_tcp` Erlang module).
+      """
+    ]
   ]
+
+  @start_link_opts_schema NimbleOptions.new!(start_link_opts_schema)
+  @start_link_opts_keys Keyword.keys(start_link_opts_schema)
 
   @doc """
   Starts a new pool of connections to Cassandra.
@@ -235,58 +352,13 @@ defmodule Xandra do
 
   These are the Xandra-specific options supported by this function:
 
-    * `:nodes` - (list of strings) the Cassandra nodes to connect to. Each node
-      in the list has to be in the form `"ADDRESS:PORT"` or in the form
-      `"ADDRESS"`: if the latter is used, the default port (`#{@default_port}`)
-      will be used for that node. Defaults to `["127.0.0.1"]`. This option must
-      contain only one node. See the documentation for `Xandra.Cluster` for more
-      information on connecting to multiple nodes.
-
-    * `:compressor` - (module) the compressor module to use for compressing and
-      decompressing data. See the "Compression" section in the module
-      documentation. By default this option is not present.
-
-    * `:authentication` - (tuple) a two-element tuple: the authenticator
-      module to use for authentication and its supported options. See the
-      "Authentication" section in the module documentation.
-
-    * `:atom_keys` - (boolean) whether or not results of and parameters to
-      `execute/4` will have atom keys. If `true`, the result maps will have
-      column names returned as atoms rather than as strings. Additionally,
-      maps that represent named parameters will need atom keys. Defaults to
-      `false`.
-
-    * `:pool_size` - (integer) the number of connections to start for the
-      pool. Defaults to `1`, which means that a single connection is
-      started.
-
-    * `:encryption` - (boolean) whether to connect to Cassandra using SSL. If you
-      want to set up SSL options, see the `:transport_options` option below.
-      Defaults to `false`.
-
-    * `:transport_options` - (keyword) options to forward to the socket
-      transport. If `:encryption` is `true`, then the transport is SSL (see
-      the Erlang `:ssl` module) otherwise it's TCP (see the `:gen_tcp` Erlang
-      module).
-
-    * `:default_consistency` - (atom) the default consistency to set for
-      all queries. For a list of values, look at the `:consistency` option
-      in `execute/4`. Can be overridden through the `:consistency` option in
-      `execute/4`. Defaults to `:one`.
-
-    * `:protocol_version` - (`:v3` or `:v4`) the version of the Cassandra native
-      protocol to use. Defaults to `:v3`.
+  #{NimbleOptions.docs(@start_link_opts_schema)}
 
   The rest of the options are forwarded to `DBConnection.start_link/2`. For
   example, to start a pool of five connections, you can use the `:pool_size`
   option:
 
       Xandra.start_link(pool_size: 5)
-
-  The following options have default values that are different from
-  the default values provided by `DBConnection`:
-
-    * `:idle_interval` - defaults to `30_000` (30 seconds)
 
   ## Examples
 
@@ -328,7 +400,10 @@ defmodule Xandra do
   """
   @spec start_link(start_options) :: GenServer.on_start()
   def start_link(options \\ []) when is_list(options) do
-    options = Keyword.merge(@default_start_options, options)
+    {xandra_opts, db_conn_opts} = Keyword.split(options, @start_link_opts_keys)
+    xandra_opts = NimbleOptions.validate!(xandra_opts, @start_link_opts_schema)
+    options = Keyword.merge(xandra_opts, db_conn_opts)
+
     {protocol_version, options} = Keyword.pop(options, :protocol_version)
 
     options =
@@ -415,6 +490,38 @@ defmodule Xandra do
     %PageStream{conn: conn, query: prepared, params: params, options: options}
   end
 
+  prepare_opts_schema = [
+    compressor: [
+      type: {:custom, Xandra.OptionsValidators, :validate_module, ["compressor"]},
+      doc: """
+      The compressor module to use for compressing and decompressing data.
+      See the "Compression" section in the module documentation. By default
+      this option is not present, which means no compression is used.
+      """
+    ],
+    force: [
+      type: :boolean,
+      default: false,
+      doc: """
+      When `true`, forces the preparation of the query on
+      the server instead of trying to read the prepared query from cache. See
+      the "Prepared queries cache" section below.
+      """
+    ],
+    tracing: [
+      type: :boolean,
+      default: false,
+      doc: """
+      Turn on tracing for the preparation of the
+      given query and sets the `tracing_id` field in the returned prepared
+      query. See the "Tracing" option in `execute/4`.
+      """
+    ]
+  ]
+
+  @prepare_opts_schema NimbleOptions.new!(prepare_opts_schema)
+  @prepare_opts_keys Keyword.keys(prepare_opts_schema)
+
   @doc """
   Prepares the given query.
 
@@ -433,17 +540,7 @@ defmodule Xandra do
   Supports all the options supported by `DBConnection.prepare/3`, and the
   following additional options:
 
-    * `:force` - (boolean) when `true`, forces the preparation of the query on
-      the server instead of trying to read the prepared query from cache. See
-      the "Prepared queries cache" section below. Defaults to `false`.
-
-    * `:compressor` - (module) the compressor module used to compress and
-      decompress data. See the "Compression" section in the module
-      documentation. By default, this option is not present.
-
-    * `:tracing` - (boolean) turn on tracing for the preparation of the
-      given query and sets the `tracing_id` field in the returned prepared
-      query. See the "Tracing" option in `execute/4`. Defaults to `false`.
+  #{NimbleOptions.docs(@prepare_opts_schema)}
 
   ## Prepared queries cache
 
@@ -475,6 +572,8 @@ defmodule Xandra do
   """
   @spec prepare(conn, statement, keyword) :: {:ok, Prepared.t()} | {:error, error}
   def prepare(conn, statement, options \\ []) when is_binary(statement) do
+    {prepare_opts, db_conn_opts} = Keyword.split(options, @prepare_opts_keys)
+    options = NimbleOptions.validate!(prepare_opts, @prepare_opts_schema) ++ db_conn_opts
     DBConnection.prepare(conn, %Prepared{statement: statement}, options)
   end
 
@@ -533,7 +632,7 @@ defmodule Xandra do
     * `:serial_consistency` - same as the `:serial_consistency` option described
       in the documentation for `execute/4`.
 
-    * `:timestamp` - (integer) using this option means that the provided
+    * `:timestamp` - using this option means that the provided
       timestamp will apply to all the statements in the batch that do not
       explicitly specify a timestamp.
 
@@ -582,6 +681,160 @@ defmodule Xandra do
     execute_with_retrying(conn, batch, nil, options)
   end
 
+  execute_opts_schema = [
+    consistency: [
+      type:
+        {:in,
+         [
+           :one,
+           :two,
+           :three,
+           :any,
+           :quorum,
+           :all,
+           :local_quorum,
+           :each_quorum,
+           :serial,
+           :local_serial,
+           :local_one
+         ]},
+      default: :one,
+      doc: """
+      Specifies the consistency level for the given
+      query. See the Cassandra documentation for more information on consistency
+      levels. The value of this option can be one of:
+        * `:one`
+        * `:two`
+        * `:three`
+        * `:any`
+        * `:quorum`
+        * `:all`
+        * `:local_quorum`
+        * `:each_quorum`
+        * `:serial`
+        * `:local_serial`
+        * `:local_one`
+      """
+    ],
+    page_size: [
+      type: :non_neg_integer,
+      default: 10_000,
+      doc: """
+      The size of a page of results. If `query` returns
+      `Xandra.Page` struct, that struct will contain at most `:page_size` rows in it.
+      """
+    ],
+    paging_state: [
+      type:
+        {:or,
+         [{:custom, Xandra.OptionsValidators, :validate_binary, [:paging_state]}, {:in, [nil]}]},
+      doc: """
+      The offset where rows should be returned from. By default this option is not
+      present and paging starts from the beginning. See the "Paging" section
+      below for more information on how to page queries.
+      """
+    ],
+    timestamp: [
+      type: :integer,
+      doc: """
+      The default timestamp for the query, expressed in microseconds. If provided,
+      overrides the server-side assigned timestamp. However, a timestamp in
+      the query itself will still override this timestamp.
+      """
+    ],
+    serial_consistency: [
+      type: {:in, [:serial, :local_serial]},
+      doc: """
+      Specifies the serial consistency to use for executing the given query. Can
+      be one of `:serial` or `:local_serial`. By default this option is not present.
+      """
+    ],
+    compressor: [
+      type: {:custom, Xandra.OptionsValidators, :validate_module, ["compressor"]},
+      doc: """
+      The compressor module to use for compressing and decompressing data.
+      See the "Compression" section in the module documentation. By default
+      this option is not present, which means no compression is used.
+      """
+    ],
+    retry_strategy: [
+      type: {:custom, Xandra.OptionsValidators, :validate_module, ["retry strategy"]},
+      doc: """
+      The module implementing the `Xandra.RetryStrategy` behaviour that is used in case
+      the query fails to determine whether to retry it or not. See the
+      "Retrying failed queries" section in the module documentation.
+      By default, this option is not present, which means no retries are attempted.
+      """
+    ],
+    tracing: [
+      type: :boolean,
+      default: false,
+      doc: """
+      Turn on tracing for the preparation of the
+      given query and sets the `tracing_id` field in the returned prepared
+      query. See the "Tracing" option in `execute/4`.
+      """
+    ],
+    date_format: [
+      type: {:in, [:date, :integer]},
+      default: :date,
+      doc: """
+      Controls the format in which dates are returned. When set to `:integer`, the
+      returned value is a number of days from the Unix epoch. When set to
+      `:date`, the returned value is a date struct.
+      """
+    ],
+    time_format: [
+      type: {:in, [:time, :integer]},
+      default: :time,
+      doc: """
+      Controls the format in which times are returned. When set to `:integer`, the
+      returned value is a number of nanoseconds from midnight. When set to
+      `:time`, the returned value is a time struct.
+      """
+    ],
+    timestamp_format: [
+      type: {:in, [:datetime, :integer]},
+      default: :datetime,
+      doc: """
+      Controls the format in which timestamps are returned. When set to `:integer`, the
+      returned value is a number of milliseconds from the Unix epoch. When set to
+      `:datetime`, the returned value is a datetime struct.
+      """
+    ],
+    decimal_format: [
+      type: {:in, [:decimal, :tuple]},
+      default: :tuple,
+      doc: """
+      Controls the format in which decimals are returned. When set to `:decimal`, a
+      `Decimal` struct from the [decimal](https://hex.pm/packages/decimal) package is
+      returned. When set to `:tuple`, a `{value, scale}` is returned such that
+      the returned number is `value * 10^(-1 * scale)`. If you use `:decimal`,
+      you'll have to add the `:decimal` dependency to your application explicitly.
+      """
+    ],
+    uuid_format: [
+      type: {:in, [:binary, :string]},
+      default: :string,
+      doc: """
+      Controls the format in which UUIDs are returned. When set to `:binary`, UUIDs are
+      returned as raw 16-byte binaries, such as: `<<0, 182, 145, 128, 208, 225, 17, 226,
+      139, 139, 8, 0, 32, 12, 154, 102>>`. When set to `:string`, UUIDs are returned in
+      their human-readable format, such as: `"fe2b4360-28c6-11e2-81c1-0800200c9a66"`.
+      """
+    ],
+    timeuuid_format: [
+      type: {:in, [:binary, :string]},
+      default: :string,
+      doc: """
+      Same as the `:uuid_format` option, but for values of the *timeuuid* type.
+      """
+    ]
+  ]
+
+  @execute_opts_schema NimbleOptions.new!(execute_opts_schema)
+  @execute_opts_keys Keyword.keys(execute_opts_schema)
+
   @doc """
   Executes the given simple query or prepared query with the given parameters.
 
@@ -610,83 +863,7 @@ defmodule Xandra do
   This function accepts all options accepted by `DBConnection.execute/4`, plus
   the following ones:
 
-    * `:consistency` - (atom) specifies the consistency level for the given
-      query. See the Cassandra documentation for more information on consistency
-      levels. The value of this option can be one of:
-      * `:one` (default)
-      * `:two`
-      * `:three`
-      * `:any`
-      * `:quorum`
-      * `:all`
-      * `:local_quorum`
-      * `:each_quorum`
-      * `:serial`
-      * `:local_serial`
-      * `:local_one`
-
-    * `:page_size` - (integer) the size of a page of results. If `query` returns
-      `Xandra.Page` struct, that struct will contain at most `:page_size` rows
-      in it. Defaults to `10_000`.
-
-    * `:paging_state` - (binary) the offset where rows should be
-      returned from. By default this option is not present and paging starts
-      from the beginning. See the "Paging" section below for more information on
-      how to page queries.
-
-    * `:timestamp` - (integer) the default timestamp for the query (in
-      microseconds). If provided, overrides the server-side assigned timestamp;
-      however, a timestamp in the query itself will still override this
-      timestamp.
-
-    * `:serial_consistency` - (atom) specifies the serial consistency to use for
-      executing the given query. Can be of `:serial` and `:local_serial`.
-
-    * `:compressor` - (module) the compressor module used to compress and
-      decompress data. See the "Compression" section in the module
-      documentation. By default, this option is not present.
-
-    * `:retry_strategy` - (module) the module implementing the
-      `Xandra.RetryStrategy` behaviour that is used in case the query fails to
-      determine whether to retry it or not. See the "Retrying failed queries"
-      section in the module documentation. By default, this option is not
-      present.
-
-    * `:tracing` - (boolean) turns on tracing for the given query and sets the
-      `tracing_id` field on the result of the query. See the "Tracing" section
-      below. Defaults to `false`.
-
-    * `:date_format` - (`:date` or `:integer`) controls the format in which
-      dates are returned. When set to `:integer` the returned value is
-      a number of days from the Unix epoch, a date struct otherwise.
-      Defaults to `:date`.
-
-    * `:time_format` - (`:time` or `:integer`) controls the format in which
-      times are returned. When set to `:integer` the returned value is
-      a number of nanoseconds from midnight, a time struct otherwise.
-      Defaults to `:time`.
-
-    * `:timestamp_format` - (`:datetime` or `:integer`) controls the format in which
-      timestamps are returned. When set to `:integer` the returned value is
-      a number of milliseconds from the Unix epoch, a datetime struct otherwise.
-      Defaults to `:datetime`.
-
-    * `:decimal_format` - (`:decimal` or `:tuple`) controls the format in which
-      decimals are returned. When set to `:decimal`, a `Decimal` struct from the
-      [decimal](https://hex.pm/packages/decimal) package is returned. When set to
-      `:tuple`, a `{value, scale}` is returned such that the returned number is
-      `value * 10^(-1 * scale)`. Defaults to `:tuple`. If you use `:decimal`,
-      you'll have to add the `:decimal` dependency to your application explicitly.
-
-    * `:uuid_format` - (`:binary` or `:string`) controls the format in which UUIDs
-      are returned. When set to `:binary`, UUIDs are returned as raw binaries with
-      16 bytes in it, such as: `<<0, 182, 145, 128, 208, 225, 17, 226, 139, 139, 8,
-      0, 32, 12, 154, 102>>`. When set to `:string`, UUIDs are returned in the
-      human-readable format such as `"fe2b4360-28c6-11e2-81c1-0800200c9a66"`.
-      Defaults to `:string`.
-
-    * `:timeuuid_format` - (`:binary` or `:string`) same as the `:uuid_format`
-      option but for values of the timeuuid type. Defaults to `:string`.
+  #{NimbleOptions.docs(@execute_opts_schema)}
 
   ## Parameters
 
@@ -919,6 +1096,10 @@ defmodule Xandra do
   end
 
   defp execute_with_retrying(conn, query, params, options) do
+    {xandra_opts, db_conn_opts} = Keyword.split(options, @execute_opts_keys)
+    xandra_opts = NimbleOptions.validate!(xandra_opts, @execute_opts_schema)
+    options = xandra_opts ++ db_conn_opts
+
     RetryStrategy.run_with_retrying(options, fn ->
       execute_without_retrying(conn, query, params, options)
     end)
@@ -1044,9 +1225,5 @@ defmodule Xandra do
   end
 
   defp protocol_version_to_module(:v3), do: Protocol.V3
-
   defp protocol_version_to_module(:v4), do: Protocol.V4
-
-  defp protocol_version_to_module(other),
-    do: raise(ArgumentError, "unknown protocol version: #{inspect(other)}")
 end
