@@ -341,6 +341,11 @@ defmodule Xandra do
   @start_link_opts_schema NimbleOptions.new!(start_link_opts_schema)
   @start_link_opts_keys Keyword.keys(start_link_opts_schema)
 
+  @doc false
+  def start_link_opts_schema do
+    @start_link_opts_schema
+  end
+
   @doc """
   Starts a new pool of connections to Cassandra.
 
