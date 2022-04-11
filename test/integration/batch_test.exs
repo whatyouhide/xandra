@@ -1,7 +1,7 @@
 defmodule BatchTest do
   use XandraTest.IntegrationCase
 
-  alias Xandra.{Batch, Error, Void}
+  alias Xandra.{Batch, Error, Void, Page}
 
   setup_all %{keyspace: keyspace, start_options: start_options} do
     {:ok, conn} = Xandra.start_link(start_options)
@@ -134,5 +134,15 @@ defmodule BatchTest do
         ~s/{#Xandra.Prepared<[statement: "DELETE FROM users WHERE id = ?", tracing_id: nil]>, [2]}]]>/
 
     assert inspect(batch) == expected
+  end
+
+  @tag :cassandra_specific
+  test "batch query with lightweight transactions", %{conn: conn} do
+    batch =
+      Batch.new(:logged)
+      |> Batch.add("INSERT INTO users (id, name) VALUES (1, 'Marge')")
+      |> Batch.add("INSERT INTO users (id, name) VALUES (1, 'Bart') IF NOT EXISTS")
+
+    assert {:ok, %Page{}} = Xandra.execute(conn, batch)
   end
 end

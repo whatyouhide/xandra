@@ -643,9 +643,8 @@ defmodule Xandra.Protocol.V3 do
     %Xandra.SchemaChange{effect: effect, target: target, options: options, tracing_id: tracing_id}
   end
 
-  # Since SELECT statements are not allowed in BATCH queries, there's no need to
-  # support %Batch{} in this function.
   defp new_page(%Simple{}), do: %Page{}
+  defp new_page(%Batch{}), do: %Page{}
   defp new_page(%Prepared{result_columns: result_columns}), do: %Page{columns: result_columns}
 
   defp rewrite_column_types(columns, options) do
