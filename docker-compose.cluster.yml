@@ -29,6 +29,10 @@ services:
       - seed
 
   elixir:
-    image: elixir:1.8.1
-    volumes: 
-      - "./:/app"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    links:
+      - seed
+      - node1
+      - node2

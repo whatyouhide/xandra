@@ -24,12 +24,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       _autodiscovery? = true
     ]
 
-    assert {:ok, _ctrl_conn} =
-             start_supervised(%{
-               id: ControlConnection,
-               start: {ControlConnection, :start_link, args},
-               type: :worker
-             })
+    assert {:ok, _ctrl_conn} = start_supervised({ControlConnection, args})
 
     assert_receive {^mirror_ref, {:"$gen_cast", {:activate, _ref, {127, 0, 0, 1}, 9042}}}
     assert_receive {^mirror_ref, {:"$gen_cast", {:discovered_peers, []}}}
