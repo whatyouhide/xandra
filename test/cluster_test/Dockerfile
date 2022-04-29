@@ -10,7 +10,3 @@ RUN mix do local.rebar --force, local.hex --force, deps.get, deps.compile
 
 COPY lib lib
 COPY test test
-COPY test.sh .
-COPY cc_test.exs .
-
-CMD ["mix", "run", "cc_test.exs"]

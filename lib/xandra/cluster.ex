@@ -98,18 +98,42 @@ defmodule Xandra.Cluster do
   ]
 
   defstruct [
+    # Options for the cluster and for the underlying connection pools.
     :options,
     :node_refs,
+
+    # Load balancing strategy.
     :load_balancing,
+
+    # A boolean that decides whether to discover new nodes in the cluster
+    # and add them to the pool.
     :autodiscovery,
+
+    # When autodiscovering nodes, you cannot get their port from C*.
+    # Other drivers solve this by providing a static port that the driver
+    # uses to connect to any autodiscovered node.
     :autodiscovered_nodes_port,
+
+    # A supervisor that supervises pools.
     :pool_supervisor,
+
+    # A supervisor that supervises control connections.
+    # Children under this supervisor are identified by a "node_ref"
+    # (t:reference/0) generated when we start each control connection.
+    # We keep a reverse lookup of {peername, node_ref} pairs in the
+    # :control_conn_peername_to_node_ref key.
     :control_conn_supervisor,
-    :node_supervisor,
-    node_ref_to_peername: %{},
-    control_conns_without_peername: %{},
+
+    # A map of peername to pool PID pairs.
     pools: %{},
-    control_connection_peers: %{}
+
+    # A reverse lookup list of peername => node_ref. This is used
+    # to retrieve the node_ref of a control connection in order to
+    # operate that control connection under the control connection
+    # supervisor. The reason this is a list is that we want to keep
+    # it ordered in order to support the :priority strategy,
+    # which runs a query through the same order of nodes every time.
+    control_conn_peername_to_node_ref: []
   ]
 
   @doc """
@@ -413,16 +437,15 @@ defmodule Xandra.Cluster do
 
     {:ok, control_conn_sup} = Supervisor.start_link(control_conn_children, strategy: :one_for_one)
 
-    Enum.each(Supervisor.which_children(control_conn_sup), fn {_, pid, _, _} ->
-      Process.monitor(pid)
-    end)
-
     {:ok, pool_sup} = Supervisor.start_link([], strategy: :one_for_one)
+
+    node_refs = for %{id: ref} <- control_conn_children, do: {_peername = nil, ref}
 
     state = %__MODULE__{
       state
       | control_conn_supervisor: control_conn_sup,
-        pool_supervisor: pool_sup
+        pool_supervisor: pool_sup,
+        control_conn_peername_to_node_ref: node_refs
     }
 
     {:ok, state}
@@ -455,18 +478,21 @@ defmodule Xandra.Cluster do
     # If we did, shut down the control connection that just reported active.
     # Otherwise, store this control connection and start the pool for this
     # peer.
-    if Map.has_key?(state.control_connection_peers, peername) do
+    if List.keymember?(state.control_conn_peername_to_node_ref, peername, 0) do
       Logger.debug(
         "Control connection for #{peername_to_string(peername)} was already present, shutting this one down"
       )
-
-      IO.inspect(Supervisor.which_children(state.control_conn_supervisor), label: "CC sup state")
 
       _ = Supervisor.terminate_child(state.control_conn_supervisor, node_ref)
       _ = Supervisor.delete_child(state.control_conn_supervisor, node_ref)
       {:noreply, state}
     else
-      state = put_in(state.control_connection_peers[peername], node_ref)
+      # Store the peername alongside the original node_ref that we kept.
+      state =
+        update_in(state.control_conn_peername_to_node_ref, fn list ->
+          List.keystore(list, node_ref, 1, {peername, node_ref})
+        end)
+
       state = start_pool(state, node_ref, peername)
       {:noreply, state}
     end
@@ -486,13 +512,20 @@ defmodule Xandra.Cluster do
 
       # Ignore this peer if we already had a control connection (and
       # thus a pool) for it.
-      if Map.has_key?(state.control_connection_peers, peername) do
+      if List.keymember?(state.control_conn_peername_to_node_ref, peername, 0) do
         Logger.debug("Connection to node #{peername_to_string({ip, port})} already established")
       else
         control_conn_spec = control_conn_child_spec(peername, state.options, state.autodiscovery)
+        node_ref = control_conn_spec.id
 
-        {:ok, pid} = Supervisor.start_child(state.control_conn_supervisor, control_conn_spec)
-        Process.monitor(pid)
+        # Append this node_ref (and later on its peername) to the ordered
+        # list of node_refs.
+        state =
+          update_in(state.control_conn_peername_to_node_ref, fn list ->
+            List.keystore(list, node_ref, 1, {peername, node_ref})
+          end)
+
+        {:ok, _pid} = Supervisor.start_child(state.control_conn_supervisor, control_conn_spec)
       end
     end)
 
@@ -541,31 +574,30 @@ defmodule Xandra.Cluster do
 
   defp restart_pool(state, address) do
     Logger.debug("Restarting pool: #{inspect(address)}")
-    %{pool_supervisor: pool_supervisor, pools: pools} = state
+    %__MODULE__{pool_supervisor: pool_supervisor, pools: pools} = state
 
     case Supervisor.restart_child(pool_supervisor, address) do
       {:error, reason} when reason in [:not_found, :running, :restarting] ->
         state
 
       {:ok, pool} ->
-        %{state | pools: Map.put(pools, address, pool)}
+        %__MODULE__{state | pools: Map.put(pools, address, pool)}
     end
   end
 
-  defp handle_status_change(state, %{effect: "UP", address: address}) do
+  defp handle_status_change(state, %StatusChange{effect: "UP", address: address}) do
     restart_pool(state, address)
   end
 
-  defp handle_status_change(state, %{effect: "DOWN", address: address}) do
-    %{pool_supervisor: pool_supervisor, pools: pools} = state
-
+  defp handle_status_change(state, %StatusChange{effect: "DOWN", address: address}) do
+    %__MODULE__{pool_supervisor: pool_supervisor, pools: pools} = state
     _ = Supervisor.terminate_child(pool_supervisor, address)
-    %{state | pools: Map.delete(pools, address)}
+    %__MODULE__{state | pools: Map.delete(pools, address)}
   end
 
   # We don't care about changes in the topology if we're not autodiscovering
   # nodes.
-  defp handle_topology_change(%{autodiscovery: false} = state, _change) do
+  defp handle_topology_change(%__MODULE__{autodiscovery: false} = state, _change) do
     state
   end
 

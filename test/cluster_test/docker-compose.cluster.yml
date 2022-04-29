@@ -2,14 +2,14 @@ version: '3'
 
 services:
   seed:
-    image: cassandra
+    image: cassandra:${CASSANDRA_VERSION:-4}
     container_name: seed
     environment:
       - HEAP_NEWSIZE=1M
       - MAX_HEAP_SIZE=200M
 
   node1:
-    image: cassandra
+    image: cassandra:${CASSANDRA_VERSION:-4}
     container_name: node1
     environment:
       - CASSANDRA_SEEDS=seed
@@ -19,8 +19,18 @@ services:
       - seed
 
   node2:
-    image: cassandra
+    image: cassandra:${CASSANDRA_VERSION:-4}
     container_name: node2
+    environment:
+      - CASSANDRA_SEEDS=seed
+      - HEAP_NEWSIZE=1M
+      - MAX_HEAP_SIZE=200M
+    depends_on:
+      - seed
+
+  node3:
+    image: cassandra:${CASSANDRA_VERSION:-4}
+    container_name: node3
     environment:
       - CASSANDRA_SEEDS=seed
       - HEAP_NEWSIZE=1M
@@ -30,9 +40,11 @@ services:
 
   elixir:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: ./test/cluster_test/Dockerfile
+    container_name: cluster_elixir
     links:
       - seed
       - node1
       - node2
+      - node3
