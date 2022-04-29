@@ -42,6 +42,12 @@ defmodule Xandra.ClusterTest.CoordinationTest do
     ])
   end
 
+  @tag :skip
+  test "if a node goes down, the cluster removes its control connection and pool"
+
+  @tag :skip
+  test "if a node goes down and then rejoins, the cluster readds its control connection and pool"
+
   defp docker_compose(args) do
     System.cmd("docker-compose", ["-f", @docker_compose_file | args], stderr_to_stdout: true)
   end
