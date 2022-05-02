@@ -68,4 +68,6 @@ defmodule XandraTest.IntegrationCase do
   def protocol_version, do: unquote(protocol_version)
 end
 
+Logger.configure(level: :info)
+
 ExUnit.start(exclude: [skip_for_native_protocol: XandraTest.IntegrationCase.protocol_version()])
