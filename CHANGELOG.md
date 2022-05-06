@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.14.0
+
+**Breaking changes**:
+
+  * Drop support for Elixir 1.8 and below. Xandra now requires Elixir 1.9+.
+
+**Improvements**:
+
+  * Implement significantly-more accurate and strict validation of options for `Xandra` functions.
+
+**Bug fixes**:
+
+  * Fix schema change payloads with UDFs in native protocol v3.
+  * Filter nodes with null `host_id` when autodiscovering nodes in `Xandra.Cluster`.
+  * Fix some warnings related to upgrading DBConnection.
+  * Make connections aware of the current keyspace, which fixes some issues with the prepared query cache.
+  * Fix an issue where pagination would break for some batch queries: with a lightweight transaction the returned result would be a page representing the status of that transaction, and we did not support that.
+
 ## v0.13.1
 
 * Fix the spec for `Xandra.Batch.add/3`.
