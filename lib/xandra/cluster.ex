@@ -84,6 +84,7 @@ defmodule Xandra.Cluster do
   alias Xandra.{Batch, ConnectionError, Prepared, Protocol, RetryStrategy}
 
   require Logger
+  require Record
 
   @type cluster :: GenServer.server()
 
@@ -472,23 +473,30 @@ defmodule Xandra.Cluster do
     end
   end
 
-  ## Callbacks
+  ## Callbacks and implementation stuff
+
+  Record.defrecordp(:node_ref, ref: nil, peername: nil)
+
+  defguardp is_inet_port(port) when port in 0..65355
+  defguardp is_ip(ip) when is_tuple(ip) and tuple_size(ip) in [4, 8]
+
+  defguardp is_peername(peername)
+            when is_tuple(peername) and tuple_size(peername) == 2 and is_ip(elem(peername, 0)) and
+                   is_inet_port(elem(peername, 1))
 
   @impl true
   def init({%__MODULE__{} = state, nodes}) do
     control_conn_children = Enum.map(nodes, &control_conn_child_spec(&1, state))
 
+    # Start supervisors for the pools and the control connections.
     {:ok, control_conn_sup} = Supervisor.start_link(control_conn_children, strategy: :one_for_one)
-
     {:ok, pool_sup} = Supervisor.start_link([], strategy: :one_for_one)
-
-    node_refs = for %{id: ref} <- control_conn_children, do: {_peername = nil, ref}
 
     state = %__MODULE__{
       state
       | control_conn_supervisor: control_conn_sup,
         pool_supervisor: pool_sup,
-        node_refs: node_refs
+        node_refs: Enum.map(control_conn_children, &node_ref(ref: &1.id))
     }
 
     {:ok, state}
@@ -513,72 +521,67 @@ defmodule Xandra.Cluster do
   @impl true
   def handle_cast(message, state)
 
-  # A control connection came online.
-  def handle_cast({:activate, node_ref, {_ip, _port} = peername}, %__MODULE__{} = state) do
+  # A control connection came online for the first time.
+  def handle_cast({:activate, node_ref, peername}, %__MODULE__{} = state)
+      when is_reference(node_ref) and is_peername(peername) do
     _ = Logger.debug("Control connection for #{peername_to_string(peername)} is up")
 
     # Check whether we already had an active control connection to this peer.
     # If we did, shut down the control connection that just reported active.
     # Otherwise, store this control connection and start the pool for this
     # peer.
-    if List.keymember?(state.node_refs, peername, 0) do
+    if List.keymember?(state.node_refs, peername, node_ref(:peername)) do
       Logger.debug(
         "Control connection for #{peername_to_string(peername)} was already present, shutting this one down"
       )
 
-      state =
-        update_in(state.node_refs, fn list ->
-          List.keydelete(list, node_ref, 1)
-        end)
-
+      state = update_in(state.node_refs, &List.keydelete(&1, node_ref, node_ref(:ref)))
       _ = Supervisor.terminate_child(state.control_conn_supervisor, node_ref)
       _ = Supervisor.delete_child(state.control_conn_supervisor, node_ref)
       {:noreply, state}
     else
       # Store the peername alongside the original node_ref that we kept.
+      new_node_ref = node_ref(ref: node_ref, peername: peername)
+
       state =
-        update_in(state.node_refs, fn list ->
-          List.keystore(list, node_ref, 1, {peername, node_ref})
-        end)
+        update_in(state.node_refs, &List.keystore(&1, node_ref, node_ref(:ref), new_node_ref))
 
       state = start_pool(state, node_ref, peername)
       {:noreply, state}
     end
   end
 
+  # A control connection is reporting peers that it discovered.
+  # "peers" is a list of IP tuples.
   def handle_cast({:discovered_peers, peers, source_control_conn}, %__MODULE__{} = state) do
-    _ =
-      Logger.debug(fn ->
-        "Discovered peers from #{inspect(source_control_conn)}: " <>
-          inspect(Enum.map(peers, &:inet.ntoa/1))
-      end)
+    Logger.debug(fn ->
+      "Discovered peers from #{inspect(source_control_conn)}: " <>
+        inspect(Enum.map(peers, &:inet.ntoa/1))
+    end)
 
-    port = state.autodiscovered_nodes_port
+    {already_connected_peernames, new_peernames} =
+      peers
+      |> Stream.map(&{&1, state.autodiscovered_nodes_port})
+      |> Enum.split_with(&List.keymember?(state.node_refs, &1, node_ref(:peername)))
+
+    Enum.each(already_connected_peernames, fn peername ->
+      Logger.debug("Connection to node #{peername_to_string(peername)} already established")
+    end)
 
     state =
-      Enum.reduce(peers, state, fn ip, acc ->
-        peername = {ip, port}
+      Enum.reduce(new_peernames, state, fn peername, state ->
+        %{id: node_ref} = control_conn_spec = control_conn_child_spec(peername, state)
 
-        # Ignore this peer if we already had a control connection (and
-        # thus a pool) for it.
-        if List.keymember?(state.node_refs, peername, 0) do
-          Logger.debug("Connection to node #{peername_to_string({ip, port})} already established")
-          acc
-        else
-          control_conn_spec = control_conn_child_spec(peername, state)
-          node_ref = control_conn_spec.id
+        # Append this node_ref (and later on its peername) to the ordered
+        # list of node_refs.
+        new_node_ref = node_ref(ref: node_ref)
 
-          # Append this node_ref (and later on its peername) to the ordered
-          # list of node_refs.
-          acc =
-            update_in(acc.node_refs, fn list ->
-              List.keystore(list, node_ref, 1, {_peername = nil, node_ref})
-            end)
+        acc =
+          update_in(state.node_refs, &List.keystore(&1, node_ref, node_ref(:ref), new_node_ref))
 
-          {:ok, _pid} = Supervisor.start_child(state.control_conn_supervisor, control_conn_spec)
+        {:ok, _pid} = Supervisor.start_child(state.control_conn_supervisor, control_conn_spec)
 
-          acc
-        end
+        acc
       end)
 
     {:noreply, state}
@@ -596,12 +599,6 @@ defmodule Xandra.Cluster do
 
   def handle_cast({:update, %TopologyChange{} = topology_change}, %__MODULE__{} = state) do
     state = handle_topology_change(state, topology_change)
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info(message, state) do
-    Logger.debug("Received message #{inspect(message)} with state: #{inspect(state)}")
     {:noreply, state}
   end
 
@@ -669,7 +666,7 @@ defmodule Xandra.Cluster do
 
     # Ignore this peer if we already had a control connection (and
     # thus a pool) for it.
-    if List.keymember?(state.node_refs, peername, 0) do
+    if List.keymember?(state.node_refs, peername, node_ref(:peername)) do
       Logger.debug("Connection to node #{peername_to_string(peername)} already established")
       state
     else
@@ -679,9 +676,10 @@ defmodule Xandra.Cluster do
       # Append this node_ref (and later on its peername) to the ordered
       # list of node_refs.
       state =
-        update_in(state.node_refs, fn list ->
-          List.keystore(list, node_ref, 1, {_peername = nil, node_ref})
-        end)
+        update_in(
+          state.node_refs,
+          &List.keystore(&1, node_ref, node_ref(:ref), node_ref(ref: node_ref))
+        )
 
       {:ok, _pid} = Supervisor.start_child(state.control_conn_supervisor, control_conn_spec)
 
@@ -707,8 +705,8 @@ defmodule Xandra.Cluster do
     {ref, state} =
       get_and_update_in(state.node_refs, fn list ->
         # TODO: Replace with List.keyfind!/3 when we depend on Elixir 1.13+.
-        {^peername, ref} = List.keyfind(list, peername, 0)
-        {ref, List.keydelete(list, peername, 0)}
+        node_ref(ref: ref) = List.keyfind(list, peername, node_ref(:peername))
+        {ref, List.keydelete(list, peername, node_ref(:peername))}
       end)
 
     _ = Supervisor.terminate_child(control_conn_supervisor, ref)
@@ -728,7 +726,7 @@ defmodule Xandra.Cluster do
   end
 
   defp select_pool(:priority, pools, node_refs) do
-    Enum.find_value(node_refs, fn {peername, _node_ref} -> Map.get(pools, peername) end)
+    Enum.find_value(node_refs, fn node_ref(peername: peername) -> Map.get(pools, peername) end)
   end
 
   defp protocol_version_to_module(:v3), do: Protocol.V3
@@ -738,7 +736,7 @@ defmodule Xandra.Cluster do
   defp protocol_version_to_module(other),
     do: raise(ArgumentError, "unknown protocol version: #{inspect(other)}")
 
-  defp peername_to_string({ip, port}) do
+  defp peername_to_string({ip, port} = peername) when is_peername(peername) do
     "#{:inet.ntoa(ip)}:#{port}"
   end
 
