@@ -242,7 +242,8 @@ defmodule Xandra.Cluster do
     {cluster_opts, pool_opts} = Keyword.split(options, @start_link_opts_schema_keys)
     cluster_opts = NimbleOptions.validate!(cluster_opts, @start_link_opts_schema)
 
-    {nodes, cluster_opts} = Keyword.pop!(cluster_opts, :nodes)
+    # TODO: Replace with Keyword.pop!/2 once we depend on Elixir 1.10+.
+    {nodes, cluster_opts} = Keyword.pop(cluster_opts, :nodes)
 
     # We don't pop the :protocol_version option because we want to
     # also forward it to the Xandra connections.
