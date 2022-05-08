@@ -89,6 +89,9 @@ jobs:
       - name: Run tests
         run: mix test --trace
 
+      - name: Run clustering end-to-end tests
+        run: mix test.clustering
+
       - name: Dump Docker logs on failure
         uses: jwalton/gh-docker-logs@v1
         if: failure()

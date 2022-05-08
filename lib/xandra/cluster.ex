@@ -98,13 +98,45 @@ defmodule Xandra.Cluster do
   ]
 
   defstruct [
+    # Options for the cluster and for the underlying connection pools.
     :options,
-    :node_refs,
+
+    # Load balancing strategy.
     :load_balancing,
+
+    # A boolean that decides whether to discover new nodes in the cluster
+    # and add them to the pool.
     :autodiscovery,
+
+    # When autodiscovering nodes, you cannot get their port from C*.
+    # Other drivers solve this by providing a static port that the driver
+    # uses to connect to any autodiscovered node.
     :autodiscovered_nodes_port,
+
+    # A supervisor that supervises pools.
     :pool_supervisor,
-    pools: %{}
+
+    # A supervisor that supervises control connections.
+    # Children under this supervisor are identified by a "node_ref"
+    # (t:reference/0) generated when we start each control connection.
+    # We keep a reverse lookup of {peername, node_ref} pairs in the
+    # :control_conn_peername_to_node_ref key.
+    :control_conn_supervisor,
+
+    # A map of peername to pool PID pairs.
+    pools: %{},
+
+    # A reverse lookup list of peername => node_ref. This is used
+    # to retrieve the node_ref of a control connection in order to
+    # operate that control connection under the control connection
+    # supervisor. The reason this is a list is that we want to keep
+    # it ordered in order to support the :priority strategy,
+    # which runs a query through the same order of nodes every time.
+    control_conn_peername_to_node_ref: [],
+
+    # Modules to swap processes when testing.
+    xandra_mod: nil,
+    control_conn_mod: nil
   ]
 
   @doc """
@@ -183,6 +215,12 @@ defmodule Xandra.Cluster do
         protocol_version_to_module(options[:protocol_version])
       )
 
+    # These are mostly used for swapping the real ones with test processes.
+    {xandra_mod, options} = Keyword.pop(options, :xandra_module, Xandra)
+
+    {control_conn_mod, options} =
+      Keyword.pop(options, :control_connection_module, ControlConnection)
+
     {load_balancing, options} = Keyword.pop(options, :load_balancing, @default_load_balancing)
     {nodes, options} = Keyword.pop(options, :nodes)
     {autodiscovery?, options} = Keyword.pop(options, :autodiscovery)
@@ -198,7 +236,9 @@ defmodule Xandra.Cluster do
       options: Keyword.delete(options, :pool),
       load_balancing: load_balancing,
       autodiscovery: autodiscovery?,
-      autodiscovered_nodes_port: autodiscovered_nodes_port
+      autodiscovered_nodes_port: autodiscovered_nodes_port,
+      xandra_mod: xandra_mod,
+      control_conn_mod: control_conn_mod
     }
 
     nodes = Enum.map(nodes, &parse_node/1)
@@ -208,8 +248,8 @@ defmodule Xandra.Cluster do
 
   # Used internally by Xandra.Cluster.ControlConnection.
   @doc false
-  def activate(cluster, node_ref, address, port) do
-    GenServer.cast(cluster, {:activate, node_ref, address, port})
+  def activate(cluster, node_ref, {_ip, _port} = peername) do
+    GenServer.cast(cluster, {:activate, node_ref, peername})
   end
 
   # Used internally by Xandra.Cluster.ControlConnection.
@@ -220,8 +260,8 @@ defmodule Xandra.Cluster do
 
   # Used internally by Xandra.Cluster.ControlConnection.
   @doc false
-  def discovered_peers(cluster, peers) do
-    GenServer.cast(cluster, {:discovered_peers, peers})
+  def discovered_peers(cluster, peers, source_control_conn) do
+    GenServer.cast(cluster, {:discovered_peers, peers, source_control_conn})
   end
 
   @doc """
@@ -400,16 +440,29 @@ defmodule Xandra.Cluster do
   ## Callbacks
 
   @impl true
-  def init({%__MODULE__{options: options} = state, nodes}) do
-    {:ok, pool_supervisor} = Supervisor.start_link([], strategy: :one_for_one, max_restarts: 0)
-    node_refs = start_control_connections(nodes, options, state.autodiscovery)
-    {:ok, %{state | node_refs: node_refs, pool_supervisor: pool_supervisor}}
+  def init({%__MODULE__{} = state, nodes}) do
+    control_conn_children = Enum.map(nodes, &control_conn_child_spec(&1, state))
+
+    {:ok, control_conn_sup} = Supervisor.start_link(control_conn_children, strategy: :one_for_one)
+
+    {:ok, pool_sup} = Supervisor.start_link([], strategy: :one_for_one)
+
+    node_refs = for %{id: ref} <- control_conn_children, do: {_peername = nil, ref}
+
+    state = %__MODULE__{
+      state
+      | control_conn_supervisor: control_conn_sup,
+        pool_supervisor: pool_sup,
+        control_conn_peername_to_node_ref: node_refs
+    }
+
+    {:ok, state}
   end
 
   @impl true
   def handle_call(:checkout, _from, %__MODULE__{} = state) do
-    %{
-      node_refs: node_refs,
+    %__MODULE__{
+      control_conn_peername_to_node_ref: node_refs,
       load_balancing: load_balancing,
       pools: pools
     } = state
@@ -425,20 +478,74 @@ defmodule Xandra.Cluster do
   @impl true
   def handle_cast(message, state)
 
-  def handle_cast({:activate, node_ref, address, port}, %__MODULE__{} = state) do
-    _ = Logger.debug("Control connection for #{:inet.ntoa(address)}:#{port} is up")
+  # A control connection came online.
+  def handle_cast({:activate, node_ref, {_ip, _port} = peername}, %__MODULE__{} = state) do
+    _ = Logger.debug("Control connection for #{peername_to_string(peername)} is up")
 
-    # Update the node_refs with the actual address of the control connection node.
-    state = update_in(state.node_refs, &List.keystore(&1, node_ref, 0, {node_ref, address}))
+    # Check whether we already had an active control connection to this peer.
+    # If we did, shut down the control connection that just reported active.
+    # Otherwise, store this control connection and start the pool for this
+    # peer.
+    if List.keymember?(state.control_conn_peername_to_node_ref, peername, 0) do
+      Logger.debug(
+        "Control connection for #{peername_to_string(peername)} was already present, shutting this one down"
+      )
 
-    state = start_pool(state, address, port)
-    {:noreply, state}
+      state =
+        update_in(state.control_conn_peername_to_node_ref, fn list ->
+          List.keydelete(list, node_ref, 1)
+        end)
+
+      _ = Supervisor.terminate_child(state.control_conn_supervisor, node_ref)
+      _ = Supervisor.delete_child(state.control_conn_supervisor, node_ref)
+      {:noreply, state}
+    else
+      # Store the peername alongside the original node_ref that we kept.
+      state =
+        update_in(state.control_conn_peername_to_node_ref, fn list ->
+          List.keystore(list, node_ref, 1, {peername, node_ref})
+        end)
+
+      state = start_pool(state, node_ref, peername)
+      {:noreply, state}
+    end
   end
 
-  def handle_cast({:discovered_peers, peers}, %__MODULE__{} = state) do
-    _ = Logger.debug("Discovered peers: #{inspect(peers)}")
+  def handle_cast({:discovered_peers, peers, source_control_conn}, %__MODULE__{} = state) do
+    _ =
+      Logger.debug(fn ->
+        "Discovered peers from #{inspect(source_control_conn)}: " <>
+          inspect(Enum.map(peers, &:inet.ntoa/1))
+      end)
+
     port = state.autodiscovered_nodes_port
-    state = Enum.reduce(peers, state, &start_pool(_state = &2, _peer = &1, port))
+
+    state =
+      Enum.reduce(peers, state, fn ip, acc ->
+        peername = {ip, port}
+
+        # Ignore this peer if we already had a control connection (and
+        # thus a pool) for it.
+        if List.keymember?(state.control_conn_peername_to_node_ref, peername, 0) do
+          Logger.debug("Connection to node #{peername_to_string({ip, port})} already established")
+          acc
+        else
+          control_conn_spec = control_conn_child_spec(peername, state)
+          node_ref = control_conn_spec.id
+
+          # Append this node_ref (and later on its peername) to the ordered
+          # list of node_refs.
+          acc =
+            update_in(acc.control_conn_peername_to_node_ref, fn list ->
+              List.keystore(list, node_ref, 1, {_peername = nil, node_ref})
+            end)
+
+          {:ok, _pid} = Supervisor.start_child(state.control_conn_supervisor, control_conn_spec)
+
+          acc
+        end
+      end)
+
     {:noreply, state}
   end
 
@@ -457,88 +564,125 @@ defmodule Xandra.Cluster do
     {:noreply, state}
   end
 
-  ## Helpers
-
-  defp start_control_connections(nodes, options, autodiscovery?) do
-    cluster = self()
-
-    Enum.map(nodes, fn {address, port} ->
-      node_ref = make_ref()
-      ControlConnection.start_link(cluster, node_ref, address, port, options, autodiscovery?)
-      {node_ref, nil}
-    end)
+  @impl true
+  def handle_info(message, state) do
+    Logger.debug("Received message #{inspect(message)} with state: #{inspect(state)}")
+    {:noreply, state}
   end
 
-  defp start_pool(state, address, port) do
-    %{
+  ## Helpers
+
+  defp control_conn_child_spec({address, port}, %__MODULE__{} = state) do
+    %__MODULE__{
+      autodiscovery: autodiscovery?,
       options: options,
-      pool_supervisor: pool_supervisor,
-      pools: pools
+      control_conn_mod: control_conn_mod
     } = state
 
-    options = Keyword.merge(options, address: address, port: port)
-    child_spec = Supervisor.child_spec({Xandra, options}, id: address)
+    node_ref = make_ref()
+    start_args = [_cluster = self(), node_ref, address, port, options, autodiscovery?]
+    Supervisor.child_spec({control_conn_mod, start_args}, id: node_ref, restart: :transient)
+  end
 
-    case Supervisor.start_child(pool_supervisor, child_spec) do
+  defp start_pool(%__MODULE__{} = state, _node_ref, {ip, port} = peername) do
+    options = Keyword.merge(state.options, address: ip, port: port)
+
+    pool_spec =
+      Supervisor.child_spec({state.xandra_mod, options}, id: peername, restart: :transient)
+
+    # TODO: handle other return values
+    case Supervisor.start_child(state.pool_supervisor, pool_spec) do
       {:ok, pool} ->
-        _ = Logger.debug("Started connection to #{inspect(address)}")
-        %{state | pools: Map.put(pools, address, pool)}
-
-      {:error, {:already_started, _pool}} ->
-        # TODO: to have a reliable cluster name, we need to bring the name given on
-        # start_link/1 into the state because it could be an atom, {:global, term}
-        # and so on.
-        Logger.warn(fn ->
-          "Xandra cluster #{inspect(self())} " <>
-            "received request to start another connection pool " <>
-            "to the same address: #{inspect(address)}"
-        end)
-
-        state
+        _ = Logger.debug("Started connection pool to #{peername_to_string(peername)}")
+        put_in(state.pools[peername], pool)
     end
   end
 
   defp restart_pool(state, address) do
-    %{pool_supervisor: pool_supervisor, pools: pools} = state
+    Logger.debug("Restarting pool: #{inspect(address)}")
+    %__MODULE__{pool_supervisor: pool_supervisor, pools: pools} = state
 
     case Supervisor.restart_child(pool_supervisor, address) do
       {:error, reason} when reason in [:not_found, :running, :restarting] ->
         state
 
       {:ok, pool} ->
-        %{state | pools: Map.put(pools, address, pool)}
+        %__MODULE__{state | pools: Map.put(pools, address, pool)}
     end
   end
 
-  defp handle_status_change(state, %{effect: "UP", address: address}) do
-    restart_pool(state, address)
+  defp handle_status_change(state, %StatusChange{effect: "UP", address: address}) do
+    restart_pool(state, {address, state.autodiscovered_nodes_port})
   end
 
-  defp handle_status_change(state, %{effect: "DOWN", address: address}) do
-    %{pool_supervisor: pool_supervisor, pools: pools} = state
-
-    _ = Supervisor.terminate_child(pool_supervisor, address)
-    %{state | pools: Map.delete(pools, address)}
+  defp handle_status_change(state, %StatusChange{effect: "DOWN", address: address}) do
+    Logger.debug("StatusChange DOWN for node: #{inspect(address)}")
+    peername = {address, state.autodiscovered_nodes_port}
+    %__MODULE__{pool_supervisor: pool_supervisor, pools: pools} = state
+    _ = Supervisor.terminate_child(pool_supervisor, peername)
+    %__MODULE__{state | pools: Map.delete(pools, peername)}
   end
 
   # We don't care about changes in the topology if we're not autodiscovering
   # nodes.
-  defp handle_topology_change(%{autodiscovery: false} = state, _change) do
+  defp handle_topology_change(%__MODULE__{autodiscovery: false} = state, %TopologyChange{}) do
     state
   end
 
-  defp handle_topology_change(state, %{effect: "NEW_NODE", address: address}) do
-    start_pool(state, address, state.autodiscovered_nodes_port)
+  defp handle_topology_change(state, %TopologyChange{effect: "NEW_NODE", address: address}) do
+    peername = {address, state.autodiscovered_nodes_port}
+
+    # Ignore this peer if we already had a control connection (and
+    # thus a pool) for it.
+    if List.keymember?(state.control_conn_peername_to_node_ref, peername, 0) do
+      Logger.debug("Connection to node #{peername_to_string(peername)} already established")
+      state
+    else
+      control_conn_spec = control_conn_child_spec(peername, state)
+      node_ref = control_conn_spec.id
+
+      # Append this node_ref (and later on its peername) to the ordered
+      # list of node_refs.
+      state =
+        update_in(state.control_conn_peername_to_node_ref, fn list ->
+          List.keystore(list, node_ref, 1, {_peername = nil, node_ref})
+        end)
+
+      {:ok, _pid} = Supervisor.start_child(state.control_conn_supervisor, control_conn_spec)
+
+      state
+    end
   end
 
-  defp handle_topology_change(state, %{effect: "REMOVED_NODE", address: address}) do
-    %{pool_supervisor: pool_supervisor, pools: pools} = state
-    _ = Supervisor.terminate_child(pool_supervisor, address)
-    _ = Supervisor.delete_child(pool_supervisor, address)
-    %{state | pools: Map.delete(pools, address)}
+  defp handle_topology_change(state, %TopologyChange{effect: "REMOVED_NODE", address: address}) do
+    %__MODULE__{
+      pool_supervisor: pool_supervisor,
+      pools: pools,
+      control_conn_supervisor: control_conn_supervisor
+    } = state
+
+    peername = {address, state.autodiscovered_nodes_port}
+
+    # Terminate the pool and remove it from the supervisor.
+    _ = Supervisor.terminate_child(pool_supervisor, peername)
+    _ = Supervisor.delete_child(pool_supervisor, peername)
+
+    # Terminate the control connection and remove it from the supervisor.
+
+    {ref, state} =
+      get_and_update_in(state.control_conn_peername_to_node_ref, fn list ->
+        # TODO: Replace with List.keyfind!/3 when we depend on Elixir 1.13+.
+        {^peername, ref} = List.keyfind(list, peername, 0)
+        {ref, List.keydelete(list, peername, 0)}
+      end)
+
+    _ = Supervisor.terminate_child(control_conn_supervisor, ref)
+    _ = Supervisor.delete_child(control_conn_supervisor, ref)
+
+    %__MODULE__{state | pools: Map.delete(pools, peername)}
   end
 
-  defp handle_topology_change(state, %{effect: "MOVED_NODE"} = event) do
+  defp handle_topology_change(state, %TopologyChange{effect: "MOVED_NODE"} = event) do
     _ = Logger.warn("Ignored TOPOLOGY_CHANGE event: #{inspect(event)}")
     state
   end
@@ -549,9 +693,7 @@ defmodule Xandra.Cluster do
   end
 
   defp select_pool(:priority, pools, node_refs) do
-    Enum.find_value(node_refs, fn {_node_ref, address} ->
-      Map.get(pools, address)
-    end)
+    Enum.find_value(node_refs, fn {peername, _node_ref} -> Map.get(pools, peername) end)
   end
 
   defp parse_node(string) do
@@ -576,4 +718,8 @@ defmodule Xandra.Cluster do
 
   defp protocol_version_to_module(other),
     do: raise(ArgumentError, "unknown protocol version: #{inspect(other)}")
+
+  defp peername_to_string({ip, port}) do
+    "#{:inet.ntoa(ip)}:#{port}"
+  end
 end

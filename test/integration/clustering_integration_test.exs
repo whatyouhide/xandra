@@ -18,6 +18,10 @@ defmodule ClusteringTest do
   end
 
   test "basic interactions", %{keyspace: keyspace} do
+    logger_level = Logger.level()
+    on_exit(fn -> Logger.configure(level: logger_level) end)
+    Logger.configure(level: :debug)
+
     statement = "USE #{keyspace}"
 
     log =
@@ -34,7 +38,8 @@ defmodule ClusteringTest do
         Process.sleep(250)
       end)
 
-    assert log =~ "received request to start another connection pool to the same address"
+    assert log =~
+             "Control connection for 127.0.0.1:9042 was already present, shutting this one down"
 
     assert Xandra.Cluster.execute!(TestCluster, statement, _params = [])
   end

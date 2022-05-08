@@ -17,13 +17,17 @@ defmodule Xandra.Mixfile do
       deps: deps(),
 
       # Task aliases
-      aliases: ["test.scylladb": "test --exclude encryption --exclude cassandra_specific"],
+      aliases: aliases(),
 
       # Dialyzer
       dialyzer: [flags: [:no_contracts]],
 
       # Testing
-      preferred_cli_env: ["test.scylladb": :test, "coveralls.html": :test],
+      preferred_cli_env: [
+        "test.scylladb": :test,
+        "test.clustering": :test,
+        "coveralls.html": :test
+      ],
       test_coverage: [tool: ExCoveralls],
 
       # Hex
@@ -52,6 +56,13 @@ defmodule Xandra.Mixfile do
       maintainers: ["Aleksei Magusev", "Andrea Leopardi"],
       licenses: ["ISC"],
       links: %{"GitHub" => @repo_url}
+    ]
+  end
+
+  defp aliases() do
+    [
+      "test.scylladb": "test --exclude encryption --exclude cassandra_specific",
+      "test.clustering": "run test_clustering/run.exs"
     ]
   end
 

@@ -3,7 +3,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   @behaviour :gen_statem
 
-  alias Xandra.{Frame, Simple, Connection.Utils}
+  alias Xandra.{Frame, Simple, Cluster, Connection.Utils}
 
   require Logger
 
@@ -26,6 +26,16 @@ defmodule Xandra.Cluster.ControlConnection do
     new: true,
     buffer: <<>>
   ]
+
+  def child_spec([cluster, node_ref, address, port, options, autodiscovery?]) do
+    args = [cluster, node_ref, address, port, options, autodiscovery?]
+
+    %{
+      id: __MODULE__,
+      type: :worker,
+      start: {__MODULE__, :start_link, args}
+    }
+  end
 
   def start_link(cluster, node_ref, address, port, options, autodiscovery?) do
     transport_options =
@@ -51,6 +61,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   @impl :gen_statem
   def init(data) do
+    Logger.debug("Started control connection process (#{inspect(data.address)})")
     {:ok, :disconnected, data, {:next_event, :internal, :connect}}
   end
 
@@ -88,7 +99,7 @@ defmodule Xandra.Cluster.ControlConnection do
         else
           {:error, _reason} = error ->
             {:connect, :reconnect, data} = disconnect(error, data)
-            timeout_action = {{:timeout, :reconnect}, @default_backoff, data}
+            timeout_action = {{:timeout, :reconnect}, @default_backoff, nil}
             {:keep_state, data, timeout_action}
         end
 
@@ -100,12 +111,18 @@ defmodule Xandra.Cluster.ControlConnection do
 
   def disconnected(:info, {kind, socket, _other}, %__MODULE__{socket: socket})
       when kind in [:tcp_error, :ssl_error] do
+    IO.puts("bbb")
     :keep_state_and_data
   end
 
   def disconnected(:info, {kind, socket}, %__MODULE__{socket: socket})
       when kind in [:tcp_closed, :ssl_closed] do
+    IO.puts("aaa")
     :keep_state_and_data
+  end
+
+  def disconnected({:timeout, :reconnect}, _content, _data) do
+    {:keep_state_and_data, {:next_event, :internal, :connect}}
   end
 
   def disconnect({:error, _reason}, %__MODULE__{} = state) do
@@ -115,8 +132,12 @@ defmodule Xandra.Cluster.ControlConnection do
 
   # Connected state
 
-  def connected(:info, {kind, socket, _reason}, %__MODULE__{socket: socket} = data)
+  def connected(:info, {kind, socket, reason}, %__MODULE__{socket: socket} = data)
       when kind in [:tcp_error, :ssl_error] do
+    Logger.debug(fn ->
+      "Socket error in control connection for #{:inet.ntoa(data.address)}: " <> inspect(reason)
+    end)
+
     data.transport.close(data.socket)
     data = %__MODULE__{data | buffer: <<>>}
     {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
@@ -124,12 +145,16 @@ defmodule Xandra.Cluster.ControlConnection do
 
   def connected(:info, {kind, socket}, %__MODULE__{socket: socket} = data)
       when kind in [:tcp_closed, :ssl_closed] do
+    Logger.debug(fn ->
+      "Socket closed in control connection for #{address_to_human_readable_source(data)}"
+    end)
+
     data.transport.close(data.socket)
     data = %__MODULE__{data | buffer: <<>>, socket: nil}
     {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
   end
 
-  def connected({kind, socket, bytes}, %__MODULE__{socket: socket, buffer: buffer} = data)
+  def connected(:info, {kind, socket, bytes}, %__MODULE__{socket: socket, buffer: buffer} = data)
       when kind in [:tcp, :ssl] do
     data = %__MODULE__{data | buffer: buffer <> bytes}
     data = report_event(data)
@@ -138,22 +163,26 @@ defmodule Xandra.Cluster.ControlConnection do
 
   ## Helper functions
 
+  # A control connection that never came online just came online.
+  defp report_active(
+         %__MODULE__{new: true, cluster: cluster, node_ref: node_ref, socket: socket} = data
+       ) do
+    case inet_mod(data.transport).peername(socket) do
+      {:ok, {_ip, _port} = peername} ->
+        :ok = Cluster.activate(cluster, node_ref, peername)
+        data = %__MODULE__{data | new: false, peername: peername}
+        {:ok, data}
+    end
+  end
+
   defp report_active(%__MODULE__{new: false, cluster: cluster, peername: peername} = data) do
     Xandra.Cluster.update(cluster, {:control_connection_established, peername})
     {:ok, data}
   end
 
-  defp report_active(
-         %__MODULE__{new: true, cluster: cluster, node_ref: node_ref, socket: socket} = data
-       ) do
-    with {:ok, {address, port}} <- inet_mod(data.transport).peername(socket) do
-      Xandra.Cluster.activate(cluster, node_ref, address, port)
-      {:ok, %{data | new: false, peername: address}}
-    end
-  end
-
   defp report_peers(state, peers) do
-    :ok = Xandra.Cluster.discovered_peers(state.cluster, peers)
+    source = address_to_human_readable_source(state)
+    :ok = Xandra.Cluster.discovered_peers(state.cluster, peers, source)
   end
 
   defp startup_connection(transport, socket, supported_options, protocol_module, options) do
@@ -275,4 +304,13 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defp inet_mod(:gen_tcp), do: :inet
   defp inet_mod(:ssl), do: :ssl
+
+  defp address_to_human_readable_source(%__MODULE__{peername: {ip, port}}),
+    do: "#{:inet.ntoa(ip)}:#{port}"
+
+  defp address_to_human_readable_source(%__MODULE__{address: {_, _, _, _} = address, port: port}),
+    do: "#{:inet.ntoa(address)}:#{port}"
+
+  defp address_to_human_readable_source(%__MODULE__{address: address, port: port}),
+    do: "#{address}:#{port}"
 end

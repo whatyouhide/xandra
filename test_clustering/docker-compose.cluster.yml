@@ -1,0 +1,65 @@
+version: '3'
+
+services:
+  seed:
+    build:
+      context: "."
+      dockerfile: cassandra_node.dockerfile
+    environment:
+      - CASSANDRA_CLUSTER_NAME=xandra-cluster
+      - CASSANDRA_DC=xandradc
+      - HEAP_NEWSIZE=1M
+      - MAX_HEAP_SIZE=200M
+
+  node1:
+    build:
+      context: "."
+      dockerfile: cassandra_node.dockerfile
+    environment:
+      - CASSANDRA_SEEDS=seed
+      - CASSANDRA_CLUSTER_NAME=xandra-cluster
+      - CASSANDRA_DC=xandradc
+      - HEAP_NEWSIZE=1M
+      - MAX_HEAP_SIZE=200M
+    depends_on:
+      - seed
+
+  node2:
+    build:
+      context: "."
+      dockerfile: cassandra_node.dockerfile
+    environment:
+      - CASSANDRA_SEEDS=seed
+      - CASSANDRA_CLUSTER_NAME=xandra-cluster
+      - CASSANDRA_DC=xandradc
+      - HEAP_NEWSIZE=1M
+      - MAX_HEAP_SIZE=200M
+    depends_on:
+      - seed
+
+  node3:
+    build:
+      context: "."
+      dockerfile: cassandra_node.dockerfile
+    environment:
+      - CASSANDRA_SEEDS=seed
+      - CASSANDRA_CLUSTER_NAME=xandra-cluster
+      - CASSANDRA_DC=xandradc
+      - HEAP_NEWSIZE=1M
+      - MAX_HEAP_SIZE=200M
+    depends_on:
+      - seed
+
+  elixir:
+    # We need to build from the root of Xandra itself so that we can copy Xandra's code inside
+    # the container, but then we want to use the Dockerfile in this directory.
+    build:
+      context: ".."
+      dockerfile: ./test_clustering/Dockerfile
+    links:
+      - seed
+      - node1
+      - node2
+      - node3
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

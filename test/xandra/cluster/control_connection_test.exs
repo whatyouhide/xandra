@@ -24,15 +24,10 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       _autodiscovery? = true
     ]
 
-    assert {:ok, _ctrl_conn} =
-             start_supervised(%{
-               id: ControlConnection,
-               start: {ControlConnection, :start_link, args},
-               type: :worker
-             })
+    assert {:ok, _ctrl_conn} = start_supervised({ControlConnection, args})
 
-    assert_receive {^mirror_ref, {:"$gen_cast", {:activate, _ref, {127, 0, 0, 1}, 9042}}}
-    assert_receive {^mirror_ref, {:"$gen_cast", {:discovered_peers, []}}}
+    assert_receive {^mirror_ref, {:"$gen_cast", {:activate, _ref, {{127, 0, 0, 1}, 9042}}}}
+    assert_receive {^mirror_ref, {:"$gen_cast", {:discovered_peers, [], "127.0.0.1:9042"}}}
   end
 
   test "reconnecting after a disconnection" do
@@ -58,13 +53,14 @@ defmodule Xandra.Cluster.ControlConnectionTest do
                type: :worker
              })
 
-    assert_receive {^mirror_ref, {:"$gen_cast", {:activate, _ref, {127, 0, 0, 1}, 9042}}}
+    assert_receive {^mirror_ref, {:"$gen_cast", {:activate, _ref, {{127, 0, 0, 1}, 9042}}}}
 
     assert {:connected, data} = :sys.get_state(ctrl_conn)
     send(ctrl_conn, {:tcp_closed, data.socket})
 
     assert_receive {^mirror_ref,
-                    {:"$gen_cast", {:update, {:control_connection_established, {127, 0, 0, 1}}}}}
+                    {:"$gen_cast",
+                     {:update, {:control_connection_established, {{127, 0, 0, 1}, 9042}}}}}
   end
 
   defp mirror(parent, ref) do
