@@ -73,7 +73,7 @@ defmodule Xandra.Mixfile do
       {:nimble_options, "~> 0.4.0"},
 
       # Dev and test dependencies
-      {:ex_doc, "~> 0.20", only: :dev},
+      {:ex_doc, "~> 0.28", only: :dev},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
       {:excoveralls, "~> 0.14.4", only: :test}
     ]
