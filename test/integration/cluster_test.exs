@@ -46,17 +46,63 @@ defmodule Xandra.ClusterTest do
     %{test_ref: test_ref}
   end
 
-  test "option validation" do
-    assert_raise ArgumentError, ~s(invalid item "foo:bar" in the :nodes option), fn ->
-      Xandra.Cluster.start_link(nodes: ["foo:bar"])
+  describe "start_link/1" do
+    test "validates the :nodes option" do
+      message =
+        ~s(list element at position 0 in :nodes failed validation: invalid node: "foo:bar")
+
+      assert_raise NimbleOptions.ValidationError, message, fn ->
+        Xandra.Cluster.start_link(nodes: ["foo:bar"])
+      end
+
+      message =
+        ~s(list element at position 0 in :nodes failed validation: invalid node: "example.com:9042x")
+
+      assert_raise NimbleOptions.ValidationError, message, fn ->
+        Xandra.Cluster.start_link(nodes: ["example.com:9042x"])
+      end
     end
 
-    assert_raise ArgumentError, ~s(invalid item "example.com:9042x" in the :nodes option), fn ->
-      Xandra.Cluster.start_link(nodes: ["example.com:9042x"])
+    test "validates the :autodiscovery option" do
+      message = ~r/expected :autodiscovery to be a boolean/
+
+      assert_raise NimbleOptions.ValidationError, message, fn ->
+        Xandra.Cluster.start_link(nodes: ["example.com:9042"], autodiscovery: "not a boolean")
+      end
     end
 
-    assert_raise ArgumentError, ~s(unknown protocol version: :v99), fn ->
-      Xandra.Cluster.start_link(nodes: ["example.com:9042"], protocol_version: :v99)
+    test "validates the :autodiscovered_nodes_port option" do
+      message = ~r/expected :autodiscovered_nodes_port to be in 0\.\.65535/
+
+      assert_raise NimbleOptions.ValidationError, message, fn ->
+        Xandra.Cluster.start_link(nodes: ["example.com:9042"], autodiscovered_nodes_port: 99_999)
+      end
+    end
+
+    test "validates the :load_balancing option" do
+      message = ~r/expected :load_balancing to be in \[:priority, :random\]/
+
+      assert_raise NimbleOptions.ValidationError, message, fn ->
+        Xandra.Cluster.start_link(nodes: ["example.com:9042"], load_balancing: :inverse)
+      end
+    end
+
+    test "validates the :protocol_version option" do
+      assert_raise ArgumentError, "unknown protocol version: :v99", fn ->
+        Xandra.Cluster.start_link(nodes: ["example.com:9042"], protocol_version: :v99)
+      end
+    end
+  end
+
+  describe "child_spec/1" do
+    test "is provided" do
+      opts = [
+        xandra_module: PoolMock,
+        control_connection_module: ControlConnectionMock,
+        nodes: ["node1.example.com", "node2.example.com"]
+      ]
+
+      assert {:ok, _cluster} = start_supervised({Xandra.Cluster, opts})
     end
   end
 
@@ -68,7 +114,7 @@ defmodule Xandra.ClusterTest do
         nodes: ["node1.example.com", "node2.example.com"]
       ]
 
-      assert {:ok, cluster} = start_supervised({Xandra.Cluster, opts})
+      cluster = start_supervised!({Xandra.Cluster, opts})
 
       assert_receive {^test_ref, ControlConnectionMock, :init_called,
                       %{address: 'node1.example.com'} = args}

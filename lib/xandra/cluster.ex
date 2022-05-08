@@ -86,20 +86,12 @@ defmodule Xandra.Cluster do
 
   @type cluster :: GenServer.server()
 
-  @default_load_balancing :random
+  @default_protocol_version :v3
   @default_port 9042
 
-  @default_start_options [
-    nodes: ["127.0.0.1"],
-    idle_interval: 30_000,
-    protocol_version: :v3,
-    autodiscovery: true,
-    autodiscovered_nodes_port: @default_port
-  ]
-
   defstruct [
-    # Options for the cluster and for the underlying connection pools.
-    :options,
+    # Options for the underlying connection pools.
+    :pool_options,
 
     # Load balancing strategy.
     :load_balancing,
@@ -139,39 +131,81 @@ defmodule Xandra.Cluster do
     control_conn_mod: nil
   ]
 
-  @doc """
-  Starts a cluster connection.
+  start_link_opts_schema = [
+    load_balancing: [
+      type: {:in, [:priority, :random]},
+      default: :random,
+      doc: """
+      Load balancing "strategy". Either `:random` or `:priority`. See the "Load balancing
+      strategies" section in the module documentation. If `:autodiscovery` is `true`,
+      the only supported strategy is `:random`.
+      """
+    ],
+    nodes: [
+      type: {:list, {:custom, __MODULE__, :__validate_node__, []}},
+      default: ["127.0.0.1"],
+      doc: """
+      A list of nodes to use as seed nodes when setting up the cluster. Each node in this list
+      must be a hostname (`"cassandra.example.net"`), IPv4 (`"192.168.0.100"`),
+      or IPv6 (`"16:64:c8:0:2c:58:5c:c7"`) address. An optional port can be specified by
+      including `:<port>` after the address, such as `"cassandra.example.net:9876"`.
+      The behavior of this option depends on the `:autodiscovery` option. See the "Autodiscovery"
+      section. If the `:autodiscovery` option is `false`, the cluster only connects
+      to the nodes in `:nodes` and sets up one additional control connection
+      for each one of these nodes.
+      """
+    ],
+    autodiscovery: [
+      type: :boolean,
+      default: true,
+      doc: """
+      Whether to *autodiscover* peer nodes in the cluster. See the "Autodiscovery" section
+      in the module documentation.
+      """
+    ],
+    autodiscovered_nodes_port: [
+      type: {:in, 0..65535},
+      default: @default_port,
+      doc: """
+      The port to use when connecting to autodiscovered nodes. Cassandra does not advertise
+      the port of nodes when discovering them, so you'll need to specify one explicitly.
+      This might get fixed in future Cassandra versions.
+      """
+    ],
+    name: [
+      type: :any,
+      doc: """
+      The name to register this cluster under. Follows the name registration rules of `GenServer`.
+      """
+    ],
 
-  Note that a cluster connection starts an additional connection for each
-  node specified in `:nodes`. Such "control connection" is used for monitoring
-  cluster updates.
+    # Internal for testing, not exposed.
+    xandra_module: [type: :atom, default: Xandra, doc: false],
+    control_connection_module: [type: :atom, default: ControlConnection, doc: false]
+  ]
+
+  @start_link_opts_schema NimbleOptions.new!(start_link_opts_schema)
+  @start_link_opts_schema_keys Keyword.keys(start_link_opts_schema)
+
+  @doc """
+  Starts connections to a cluster.
 
   ## Options
 
   This function accepts all options accepted by `Xandra.start_link/1` and
-  and forwards them to each connection or pool of connections. The following
+  and forwards them to each underlying connection or pool of connections. The following
   options are specific to this function:
 
-    * `:load_balancing` - (atom) load balancing "strategy". Either `:random`
-      or `:priority`. See the "Load balancing strategies" section in the module
-      documentation. If `:autodiscovery` is `true`, the only supported strategy
-      is `:random`. Defaults to `:random`.
+  #{NimbleOptions.docs(@start_link_opts_schema)}
 
-    * `:nodes` - (list of strings) a list of nodes to use as seed nodes
-      when setting up the cluster. The behaviour of this option depends on
-      the `:autodiscovery` option. See the "Autodiscovery" section below.
-      If the `:autodiscovery` option is `false`, the cluster only connects
-      to the nodes in `:nodes` and sets up one additional control connection
-      for each one of these nodes. Defaults to `["127.0.0.1"]`.
-
-    * `:autodiscovery` - (boolean) whether to autodiscover nodes in the
-      cluster. See the "Autodiscovery" section in the module documentation.
-      Defaults to `true`.
-
-    * `:autodiscovered_nodes_port` - (integer) the port to use when connecting
-      to autodiscovered nodes. Cassandra does not advertise the port of nodes
-      when discovering them, so you'll need to specify one explicitly. This might
-      get fixed in future Cassandra versions. Defaults to `9042`.
+  > #### Control connections {: .neutral}
+  >
+  > A `Xandra.Cluster` starts **one additional "control connection"** for each node.
+  >
+  > If the `:autodiscovery` option is `false`, then this means one additional connection
+  > to each node listed in the `:nodes` option. If `:autodiscovery` is `true`, then
+  > this means an additional connection to each node in `:nodes` plus one for each
+  > "autodiscovered" node.
 
   ## Examples
 
@@ -184,7 +218,7 @@ defmodule Xandra.Cluster do
         )
 
   Starting a pool of five connections to nodes in the same cluster as the given
-  "seed" node:
+  *seed node*:
 
       {:ok, cluster} =
         Xandra.Cluster.start_link(
@@ -202,48 +236,47 @@ defmodule Xandra.Cluster do
         )
 
   """
-  @spec start_link([Xandra.start_option() | {:load_balancing, atom}]) :: GenServer.on_start()
-  def start_link(options) do
-    options = Keyword.merge(@default_start_options, options)
+  @spec start_link([option]) :: GenServer.on_start()
+        when option: Xandra.start_option() | {atom(), term()}
+  def start_link(options) when is_list(options) do
+    {cluster_opts, pool_opts} = Keyword.split(options, @start_link_opts_schema_keys)
+    cluster_opts = NimbleOptions.validate!(cluster_opts, @start_link_opts_schema)
+
+    {nodes, cluster_opts} = Keyword.pop!(cluster_opts, :nodes)
 
     # We don't pop the :protocol_version option because we want to
     # also forward it to the Xandra connections.
-    options =
-      Keyword.put(
-        options,
+    pool_opts =
+      pool_opts
+      |> Keyword.put(
         :protocol_module,
-        protocol_version_to_module(options[:protocol_version])
+        protocol_version_to_module(
+          Keyword.get(pool_opts, :protocol_version, @default_protocol_version)
+        )
       )
+      |> Keyword.delete(:pool)
 
-    # These are mostly used for swapping the real ones with test processes.
-    {xandra_mod, options} = Keyword.pop(options, :xandra_module, Xandra)
-
-    {control_conn_mod, options} =
-      Keyword.pop(options, :control_connection_module, ControlConnection)
-
-    {load_balancing, options} = Keyword.pop(options, :load_balancing, @default_load_balancing)
-    {nodes, options} = Keyword.pop(options, :nodes)
-    {autodiscovery?, options} = Keyword.pop(options, :autodiscovery)
-    {autodiscovered_nodes_port, options} = Keyword.pop(options, :autodiscovered_nodes_port)
-    {name, options} = Keyword.pop(options, :name)
-
-    if autodiscovery? and load_balancing == :priority do
+    if cluster_opts[:autodiscovery] && cluster_opts[:load_balancing] == :priority do
       raise ArgumentError,
             "the :priority load balancing strategy is only supported when :autodiscovery is false"
     end
 
     state = %__MODULE__{
-      options: Keyword.delete(options, :pool),
-      load_balancing: load_balancing,
-      autodiscovery: autodiscovery?,
-      autodiscovered_nodes_port: autodiscovered_nodes_port,
-      xandra_mod: xandra_mod,
-      control_conn_mod: control_conn_mod
+      pool_options: pool_opts,
+      load_balancing: Keyword.fetch!(cluster_opts, :load_balancing),
+      autodiscovery: Keyword.fetch!(cluster_opts, :autodiscovery),
+      autodiscovered_nodes_port: Keyword.fetch!(cluster_opts, :autodiscovered_nodes_port),
+      xandra_mod: Keyword.fetch!(cluster_opts, :xandra_module),
+      control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module)
     }
 
-    nodes = Enum.map(nodes, &parse_node/1)
+    genserver_opts =
+      case Keyword.fetch(cluster_opts, :name) do
+        {:ok, name} -> [name: name]
+        :error -> []
+      end
 
-    GenServer.start_link(__MODULE__, {state, nodes}, name: name)
+    GenServer.start_link(__MODULE__, {state, nodes}, genserver_opts)
   end
 
   # Used internally by Xandra.Cluster.ControlConnection.
@@ -575,7 +608,7 @@ defmodule Xandra.Cluster do
   defp control_conn_child_spec({address, port}, %__MODULE__{} = state) do
     %__MODULE__{
       autodiscovery: autodiscovery?,
-      options: options,
+      pool_options: options,
       control_conn_mod: control_conn_mod
     } = state
 
@@ -585,7 +618,7 @@ defmodule Xandra.Cluster do
   end
 
   defp start_pool(%__MODULE__{} = state, _node_ref, {ip, port} = peername) do
-    options = Keyword.merge(state.options, address: ip, port: port)
+    options = Keyword.merge(state.pool_options, address: ip, port: port)
 
     pool_spec =
       Supervisor.child_spec({state.xandra_mod, options}, id: peername, restart: :transient)
@@ -696,22 +729,6 @@ defmodule Xandra.Cluster do
     Enum.find_value(node_refs, fn {peername, _node_ref} -> Map.get(pools, peername) end)
   end
 
-  defp parse_node(string) do
-    case String.split(string, ":", parts: 2) do
-      [address, port] ->
-        case Integer.parse(port) do
-          {port, ""} ->
-            {String.to_charlist(address), port}
-
-          _ ->
-            raise ArgumentError, "invalid item #{inspect(string)} in the :nodes option"
-        end
-
-      [address] ->
-        {String.to_charlist(address), @default_port}
-    end
-  end
-
   defp protocol_version_to_module(:v3), do: Protocol.V3
 
   defp protocol_version_to_module(:v4), do: Protocol.V4
@@ -721,5 +738,24 @@ defmodule Xandra.Cluster do
 
   defp peername_to_string({ip, port}) do
     "#{:inet.ntoa(ip)}:#{port}"
+  end
+
+  # NimbleOptions custom validators.
+
+  def __validate_node__(node) when is_binary(node) do
+    case String.split(node, ":", parts: 2) do
+      [address, port] ->
+        case Integer.parse(port) do
+          {port, ""} -> {:ok, {String.to_charlist(address), port}}
+          _ -> {:error, "invalid node: #{inspect(node)}"}
+        end
+
+      [address] ->
+        {:ok, {String.to_charlist(address), @default_port}}
+    end
+  end
+
+  def __validate_node__(other) do
+    {:error, "expected node in :nodes to be a string, got: #{inspect(other)}"}
   end
 end
