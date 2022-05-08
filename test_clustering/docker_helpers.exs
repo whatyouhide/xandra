@@ -81,7 +81,7 @@ defmodule Xandra.TestClustering.DockerHelpers do
         wait_for_container_up(name, retry_interval, timeout_left - retry_interval)
 
       true ->
-        flunk("Failed to get node status for node '#{name}':\n#{output}")
+        wait_for_container_up(name, retry_interval, timeout_left - retry_interval)
     end
   end
 end

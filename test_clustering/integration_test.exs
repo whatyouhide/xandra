@@ -51,8 +51,6 @@ defmodule Xandra.TestClustering.IntegrationTest do
     wait_for_passing(30_000, fn ->
       assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster - 1
     end)
-
-    IO.inspect(:sys.get_state(cluster))
   end
 
   @tag :skip
