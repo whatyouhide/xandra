@@ -41,7 +41,7 @@ defmodule Xandra.TestClustering.IntegrationTest do
 
     wait_for_passing(60_000, fn ->
       assert %Xandra.Cluster{} = cluster_state = :sys.get_state(cluster)
-      assert length(cluster_state.control_conn_peername_to_node_ref) == conn_count_in_cluster
+      assert length(cluster_state.node_refs) == conn_count_in_cluster
     end)
 
     # Wait for all pools to be started.
@@ -64,7 +64,7 @@ defmodule Xandra.TestClustering.IntegrationTest do
 
     wait_for_passing(60_000, fn ->
       assert %Xandra.Cluster{} = cluster_state = :sys.get_state(cluster)
-      assert length(cluster_state.control_conn_peername_to_node_ref) == conn_count_in_cluster
+      assert length(cluster_state.node_refs) == conn_count_in_cluster
     end)
 
     # Wait for all pools to be started.
@@ -96,16 +96,16 @@ defmodule Xandra.TestClustering.IntegrationTest do
       wait_for_passing(60_000, fn ->
         assert %Xandra.Cluster{} = cluster_state = :sys.get_state(cluster)
 
-        assert length(cluster_state.control_conn_peername_to_node_ref) == conn_count_in_cluster,
-               "expected #{conn_count_in_cluster} elements in control_conn_peername_to_node_ref, " <>
-                 "got: #{inspect(cluster_state.control_conn_peername_to_node_ref)}"
+        assert length(cluster_state.node_refs) == conn_count_in_cluster,
+               "expected #{conn_count_in_cluster} elements in node_refs, " <>
+                 "got: #{inspect(cluster_state.node_refs)}"
 
         cluster_state
       end)
 
     control_conn_peernames =
       wait_for_passing(30_000, fn ->
-        for {peername, ref} <- cluster_state.control_conn_peername_to_node_ref do
+        for {peername, ref} <- cluster_state.node_refs do
           assert is_reference(ref)
           assert {ip, port} = peername
           assert is_tuple(ip)
@@ -127,8 +127,7 @@ defmodule Xandra.TestClustering.IntegrationTest do
       end)
 
     for {child_id, pid, _, _} <- pool_children do
-      assert {peername, _} =
-               List.keyfind(cluster_state.control_conn_peername_to_node_ref, child_id, 1)
+      assert {peername, _} = List.keyfind(cluster_state.node_refs, child_id, 1)
 
       {:connected, control_conn_state} = :sys.get_state(pid)
       assert peername == control_conn_state.peername

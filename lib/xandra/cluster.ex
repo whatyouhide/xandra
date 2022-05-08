@@ -114,7 +114,7 @@ defmodule Xandra.Cluster do
     # Children under this supervisor are identified by a "node_ref"
     # (t:reference/0) generated when we start each control connection.
     # We keep a reverse lookup of {peername, node_ref} pairs in the
-    # :control_conn_peername_to_node_ref key.
+    # :node_refs key.
     :control_conn_supervisor,
 
     # A map of peername to pool PID pairs.
@@ -126,7 +126,7 @@ defmodule Xandra.Cluster do
     # supervisor. The reason this is a list is that we want to keep
     # it ordered in order to support the :priority strategy,
     # which runs a query through the same order of nodes every time.
-    control_conn_peername_to_node_ref: [],
+    node_refs: [],
 
     # Modules to swap processes when testing.
     xandra_mod: nil,
@@ -488,7 +488,7 @@ defmodule Xandra.Cluster do
       state
       | control_conn_supervisor: control_conn_sup,
         pool_supervisor: pool_sup,
-        control_conn_peername_to_node_ref: node_refs
+        node_refs: node_refs
     }
 
     {:ok, state}
@@ -497,7 +497,7 @@ defmodule Xandra.Cluster do
   @impl true
   def handle_call(:checkout, _from, %__MODULE__{} = state) do
     %__MODULE__{
-      control_conn_peername_to_node_ref: node_refs,
+      node_refs: node_refs,
       load_balancing: load_balancing,
       pools: pools
     } = state
@@ -521,13 +521,13 @@ defmodule Xandra.Cluster do
     # If we did, shut down the control connection that just reported active.
     # Otherwise, store this control connection and start the pool for this
     # peer.
-    if List.keymember?(state.control_conn_peername_to_node_ref, peername, 0) do
+    if List.keymember?(state.node_refs, peername, 0) do
       Logger.debug(
         "Control connection for #{peername_to_string(peername)} was already present, shutting this one down"
       )
 
       state =
-        update_in(state.control_conn_peername_to_node_ref, fn list ->
+        update_in(state.node_refs, fn list ->
           List.keydelete(list, node_ref, 1)
         end)
 
@@ -537,7 +537,7 @@ defmodule Xandra.Cluster do
     else
       # Store the peername alongside the original node_ref that we kept.
       state =
-        update_in(state.control_conn_peername_to_node_ref, fn list ->
+        update_in(state.node_refs, fn list ->
           List.keystore(list, node_ref, 1, {peername, node_ref})
         end)
 
@@ -561,7 +561,7 @@ defmodule Xandra.Cluster do
 
         # Ignore this peer if we already had a control connection (and
         # thus a pool) for it.
-        if List.keymember?(state.control_conn_peername_to_node_ref, peername, 0) do
+        if List.keymember?(state.node_refs, peername, 0) do
           Logger.debug("Connection to node #{peername_to_string({ip, port})} already established")
           acc
         else
@@ -571,7 +571,7 @@ defmodule Xandra.Cluster do
           # Append this node_ref (and later on its peername) to the ordered
           # list of node_refs.
           acc =
-            update_in(acc.control_conn_peername_to_node_ref, fn list ->
+            update_in(acc.node_refs, fn list ->
               List.keystore(list, node_ref, 1, {_peername = nil, node_ref})
             end)
 
@@ -669,7 +669,7 @@ defmodule Xandra.Cluster do
 
     # Ignore this peer if we already had a control connection (and
     # thus a pool) for it.
-    if List.keymember?(state.control_conn_peername_to_node_ref, peername, 0) do
+    if List.keymember?(state.node_refs, peername, 0) do
       Logger.debug("Connection to node #{peername_to_string(peername)} already established")
       state
     else
@@ -679,7 +679,7 @@ defmodule Xandra.Cluster do
       # Append this node_ref (and later on its peername) to the ordered
       # list of node_refs.
       state =
-        update_in(state.control_conn_peername_to_node_ref, fn list ->
+        update_in(state.node_refs, fn list ->
           List.keystore(list, node_ref, 1, {_peername = nil, node_ref})
         end)
 
@@ -705,7 +705,7 @@ defmodule Xandra.Cluster do
     # Terminate the control connection and remove it from the supervisor.
 
     {ref, state} =
-      get_and_update_in(state.control_conn_peername_to_node_ref, fn list ->
+      get_and_update_in(state.node_refs, fn list ->
         # TODO: Replace with List.keyfind!/3 when we depend on Elixir 1.13+.
         {^peername, ref} = List.keyfind(list, peername, 0)
         {ref, List.keydelete(list, peername, 0)}

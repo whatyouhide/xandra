@@ -377,7 +377,7 @@ defmodule Xandra.ClusterTest do
     assert :ok = Xandra.Cluster.activate(cluster, seed1_cc_ref, {seed1_ip, port})
     assert_receive {^test_ref, PoolMock, :init_called, %{address: ^seed1_ip}}
 
-    assert :sys.get_state(cluster).control_conn_peername_to_node_ref == [
+    assert :sys.get_state(cluster).node_refs == [
              {{seed1_ip, port}, seed1_cc_ref},
              {nil, seed2_cc_ref}
            ]
@@ -394,7 +394,7 @@ defmodule Xandra.ClusterTest do
     assert_receive {^test_ref, ControlConnectionMock, :init_called,
                     %{address: ^seed2_ip, node_ref: seed2_peer_cc_ref}}
 
-    assert :sys.get_state(cluster).control_conn_peername_to_node_ref == [
+    assert :sys.get_state(cluster).node_refs == [
              {{seed1_ip, port}, seed1_cc_ref},
              {nil, seed2_cc_ref},
              {nil, seed2_peer_cc_ref}
@@ -407,7 +407,7 @@ defmodule Xandra.ClusterTest do
     assert_receive {^test_ref, PoolMock, :init_called, %{address: ^seed2_ip}}
 
     # Ah, now the address <-> node_ref mapping should be updated correctly.
-    assert :sys.get_state(cluster).control_conn_peername_to_node_ref == [
+    assert :sys.get_state(cluster).node_refs == [
              {{seed1_ip, port}, seed1_cc_ref},
              {nil, seed2_cc_ref},
              {{seed2_ip, port}, seed2_peer_cc_ref}
@@ -424,7 +424,7 @@ defmodule Xandra.ClusterTest do
 
     # Second things second: the address <-> node_ref mapping should be Good™ and we should have
     # removed the unnecessary control connection.
-    assert :sys.get_state(cluster).control_conn_peername_to_node_ref == [
+    assert :sys.get_state(cluster).node_refs == [
              {{seed1_ip, port}, seed1_cc_ref},
              {{seed2_ip, port}, seed2_peer_cc_ref}
            ]
