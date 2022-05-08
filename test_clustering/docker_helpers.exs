@@ -6,7 +6,8 @@ defmodule Xandra.TestClustering.DockerHelpers do
   end
 
   def run!(cmd, args) do
-    {_output, exit_status} = System.cmd(cmd, args, stderr_to_stdout: true, into: IO.stream())
+    {_output, exit_status} =
+      System.cmd(cmd, args, stderr_to_stdout: true, into: IO.stream(:stdio, :line))
 
     if exit_status != 0 do
       flunk("""
