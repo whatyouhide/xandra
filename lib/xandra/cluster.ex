@@ -247,14 +247,13 @@ defmodule Xandra.Cluster do
     # We don't pop the :protocol_version option because we want to
     # also forward it to the Xandra connections.
     pool_opts =
-      pool_opts
-      |> Keyword.put(
+      Keyword.put(
+        pool_opts,
         :protocol_module,
         protocol_version_to_module(
           Keyword.get(pool_opts, :protocol_version, @default_protocol_version)
         )
       )
-      |> Keyword.delete(:pool)
 
     if cluster_opts[:autodiscovery] && cluster_opts[:load_balancing] == :priority do
       raise ArgumentError,
