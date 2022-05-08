@@ -9,20 +9,19 @@ defmodule Xandra.Cluster do
   ## Usage
 
   This module manages connections to different nodes in a Cassandra cluster.
-  Each connection to a node is a `Xandra` connection (so it can also be
-  a pool of connections). When a `Xandra.Cluster` connection is started,
-  one `Xandra` pool of connections will be started for each node specified
-  in the `:nodes` option plus for autodiscovered nodes if the `:autodiscovery`
-  option is `true`.
+  Each connection to a node is a pool of `Xandra` connections. When a `Xandra.Cluster`
+  connection is started, one `Xandra` pool of connections will be started for
+  each node specified in the `:nodes` option plus for autodiscovered nodes
+  if the `:autodiscovery` option is `true`.
 
   The API provided by this module mirrors the API provided by the `Xandra`
   module. Queries executed through this module will be "routed" to nodes
   in the provided list of nodes based on a strategy. See the
-  "Load balancing strategies" section below
+  ["Load balancing strategies" section](#module-load-balancing-strategies).
 
-  Note that regardless of the underlying pool, `Xandra.Cluster` will establish
+  Regardless of the underlying pool, `Xandra.Cluster` will establish
   one extra connection to each node in the specified list of `:nodes` (used for
-  internal purposes).
+  internal purposes). See `start_link/1`.
 
   Here is an example of how one could use `Xandra.Cluster` to connect to
   multiple nodes:
@@ -33,30 +32,32 @@ defmodule Xandra.Cluster do
       )
 
   The code above will establish a pool of ten connections to each of the nodes
-  specified in `:nodes`, for a total of twenty connections going out of the
-  current machine, plus two extra connections (one per node) used for internal
-  purposes.
+  specified in `:nodes`, plus two extra connections (one per node) used for internal
+  purposes, for a total of twenty-two connections going out of the machine.
+
+  ## Child specification
+
+  `Xandra.Cluster` implements a `child_spec/1` function, so it can be used as a child
+  under a supervisor:
+
+      children = [
+        # ...,
+        {Xandra.Cluster, autodiscovery: true, nodes: ["cassandra-seed.example.net"]}
+      ]
 
   ## Autodiscovery
 
-  When the `:autodiscovery` option is `true` (which is the default),
-  `Xandra.Cluster` discovers nodes in the same cluster as the nodes
-  specified in the `:nodes` option. The nodes in `:nodes` act as "seed"
-  nodes. When nodes in the cluster are discovered, a `Xandra` pool of
-  connections is started for each node that is in the **same datacenter**
-  as one of the nodes in `:nodes`. For now, there is no limit on how many
-  nodes in the same datacenter `Xandra.Cluster` discovers and connects to.
+  When the `:autodiscovery` option is `true`, `Xandra.Cluster` discovers peer
+  nodes that live in the same cluster as the nodes specified in the `:nodes`
+  option. The nodes in `:nodes` act as **seed nodes**. When nodes in the cluster
+  are discovered, a `Xandra` pool of connections is started for each node that
+  is in the **same datacenter** as one of the nodes in `:nodes`. For now, there
+  is no limit on how many nodes in the same datacenter `Xandra.Cluster`
+  discovers and connects to.
 
-  As mentioned before, a "control connection" for internal purposes is established
-  to each node in `:nodes`. These control connections are *not* established for
-  autodiscovered nodes. This means that if you only have one seed node in `:nodes`,
-  there will only be one control connection: if that control connection goes down
-  for some reason, you won't receive cluster change events anymore. This will cause
-  disconnections but will not technically break anything.
+  ## Load-balancing strategies
 
-  ## Load balancing strategies
-
-  For now, there are two load balancing "strategies" implemented:
+  These are the available load-balancing strategies:
 
     * `:random` - it will choose one of the connected nodes at random and
       execute the query on that node.
@@ -89,6 +90,7 @@ defmodule Xandra.Cluster do
   @default_protocol_version :v3
   @default_port 9042
 
+  # State.
   defstruct [
     # Options for the underlying connection pools.
     :pool_options,
