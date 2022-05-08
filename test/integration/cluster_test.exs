@@ -440,8 +440,9 @@ defmodule Xandra.ClusterTest do
           pid
         end
 
-      assert random_pids != Enum.sort(random_pids, :asc) and
-               random_pids != Enum.sort(random_pids, :desc)
+      # TODO: Replace the sorting functions with :asc/:desc when we depend on Elixir 1.10+.
+      assert random_pids != Enum.sort(random_pids, &(&1 >= &2)) and
+               random_pids != Enum.sort(random_pids, &(&2 >= &1))
     end
 
     test "with load balancing :priority", %{test_ref: test_ref} do
