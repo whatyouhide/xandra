@@ -7,5 +7,3 @@ RUN sed -i -e "s/\(enable_user_defined_functions: \)false/\1true/" /etc/cassandr
 
 # Disable auto bootstrapping.
 RUN echo "auto_bootstrap: false" >> /etc/cassandra/cassandra.yaml
-
-RUN cat /etc/cassandra/cassandra.yaml

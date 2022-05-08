@@ -1,6 +1,10 @@
+Code.require_file("docker_helpers.exs", __DIR__)
+
 ExUnit.start(trace: true, timeout: 300_000)
 
-Code.require_file("docker_helpers.exs", __DIR__)
+ExUnit.after_suite(fn _results ->
+  Xandra.TestClustering.DockerHelpers.docker_compose!(["down", "--volumes"])
+end)
 
 defmodule Xandra.TestClustering.IntegrationTest do
   use ExUnit.Case
@@ -35,26 +39,53 @@ defmodule Xandra.TestClustering.IntegrationTest do
 
     {:ok, cluster} = Xandra.Cluster.start_link(autodiscovery: true, nodes: ["node1", "seed"])
 
-    wait_for_passing(30_000, fn ->
+    wait_for_passing(60_000, fn ->
       assert %Xandra.Cluster{} = cluster_state = :sys.get_state(cluster)
       assert length(cluster_state.control_conn_peername_to_node_ref) == conn_count_in_cluster
     end)
 
     # Wait for all pools to be started.
-    wait_for_passing(30_000, fn ->
+    wait_for_passing(60_000, fn ->
       assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster
     end)
 
     docker_compose!(["stop", "node2"])
 
     # Wait for the pool for the stopped node to be stopped.
-    wait_for_passing(30_000, fn ->
+    wait_for_passing(60_000, fn ->
       assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster - 1
     end)
   end
 
-  @tag :skip
-  test "if a node goes down and then rejoins, the cluster readds its control connection and pool"
+  test "if a node goes down and then rejoins, the cluster readds its control connection and pool" do
+    conn_count_in_cluster = 4
+
+    {:ok, cluster} = Xandra.Cluster.start_link(autodiscovery: true, nodes: ["node1", "seed"])
+
+    wait_for_passing(60_000, fn ->
+      assert %Xandra.Cluster{} = cluster_state = :sys.get_state(cluster)
+      assert length(cluster_state.control_conn_peername_to_node_ref) == conn_count_in_cluster
+    end)
+
+    # Wait for all pools to be started.
+    wait_for_passing(60_000, fn ->
+      assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster
+    end)
+
+    docker_compose!(["stop", "node2"])
+
+    # Wait for the pool for the stopped node to be stopped.
+    wait_for_passing(60_000, fn ->
+      assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster - 1
+    end)
+
+    docker_compose!(["up", "-d", "node2"])
+
+    # Wait for the pool to the restarted node to be up.
+    wait_for_passing(60_000, fn ->
+      assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster
+    end)
+  end
 
   test "connect and discover peers" do
     conn_count_in_cluster = 4
@@ -62,7 +93,7 @@ defmodule Xandra.TestClustering.IntegrationTest do
     {:ok, cluster} = Xandra.Cluster.start_link(autodiscovery: true, nodes: ["node1", "seed"])
 
     cluster_state =
-      wait_for_passing(30_000, fn ->
+      wait_for_passing(60_000, fn ->
         assert %Xandra.Cluster{} = cluster_state = :sys.get_state(cluster)
 
         assert length(cluster_state.control_conn_peername_to_node_ref) == conn_count_in_cluster,
@@ -73,21 +104,23 @@ defmodule Xandra.TestClustering.IntegrationTest do
       end)
 
     control_conn_peernames =
-      for {peername, ref} <- cluster_state.control_conn_peername_to_node_ref do
-        assert is_reference(ref)
-        assert {ip, port} = peername
-        assert is_tuple(ip)
-        assert port == 9042
+      wait_for_passing(30_000, fn ->
+        for {peername, ref} <- cluster_state.control_conn_peername_to_node_ref do
+          assert is_reference(ref)
+          assert {ip, port} = peername
+          assert is_tuple(ip)
+          assert port == 9042
 
-        peername
-      end
+          peername
+        end
+      end)
 
     assert map_size(cluster_state.pools) == conn_count_in_cluster
 
     assert Enum.sort(Map.keys(cluster_state.pools)) == Enum.sort(control_conn_peernames)
 
     pool_children =
-      wait_for_passing(30_000, fn ->
+      wait_for_passing(60_000, fn ->
         children = Supervisor.which_children(cluster_state.control_conn_supervisor)
         assert length(children) == conn_count_in_cluster
         children

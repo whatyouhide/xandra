@@ -20,7 +20,6 @@ defmodule ClusteringTest do
   test "basic interactions", %{keyspace: keyspace} do
     logger_level = Logger.level()
     on_exit(fn -> Logger.configure(level: logger_level) end)
-    Logger.configure(level: :debug)
 
     statement = "USE #{keyspace}"
 
