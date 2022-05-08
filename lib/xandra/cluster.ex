@@ -671,7 +671,8 @@ defmodule Xandra.Cluster do
 
     {ref, state} =
       get_and_update_in(state.control_conn_peername_to_node_ref, fn list ->
-        {^peername, ref} = List.keyfind!(list, peername, 0)
+        # TODO: Replace with List.keyfind!/3 when we depend on Elixir 1.13+.
+        {^peername, ref} = List.keyfind(list, peername, 0)
         {ref, List.keydelete(list, peername, 0)}
       end)
 
