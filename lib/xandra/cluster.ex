@@ -486,18 +486,17 @@ defmodule Xandra.Cluster do
 
   @impl true
   def init({%__MODULE__{} = state, nodes}) do
-    control_conn_children = Enum.map(nodes, &control_conn_child_spec(&1, state))
-
     # Start supervisors for the pools and the control connections.
-    {:ok, control_conn_sup} = Supervisor.start_link(control_conn_children, strategy: :one_for_one)
+    {:ok, control_conn_sup} = Supervisor.start_link([], strategy: :one_for_one)
     {:ok, pool_sup} = Supervisor.start_link([], strategy: :one_for_one)
 
     state = %__MODULE__{
       state
       | control_conn_supervisor: control_conn_sup,
-        pool_supervisor: pool_sup,
-        node_refs: Enum.map(control_conn_children, &node_ref(ref: &1.id))
+        pool_supervisor: pool_sup
     }
+
+    state = start_control_connections(state, nodes)
 
     {:ok, state}
   end
@@ -568,21 +567,7 @@ defmodule Xandra.Cluster do
       Logger.debug("Connection to node #{peername_to_string(peername)} already established")
     end)
 
-    state =
-      Enum.reduce(new_peernames, state, fn peername, state ->
-        %{id: node_ref} = control_conn_spec = control_conn_child_spec(peername, state)
-
-        # Append this node_ref (and later on its peername) to the ordered
-        # list of node_refs.
-        new_node_ref = node_ref(ref: node_ref)
-
-        acc =
-          update_in(state.node_refs, &List.keystore(&1, node_ref, node_ref(:ref), new_node_ref))
-
-        {:ok, _pid} = Supervisor.start_child(state.control_conn_supervisor, control_conn_spec)
-
-        acc
-      end)
+    state = start_control_connections(state, new_peernames)
 
     {:noreply, state}
   end
@@ -621,6 +606,18 @@ defmodule Xandra.Cluster do
     ]
 
     Supervisor.child_spec({control_conn_mod, opts}, id: opts[:node_ref], restart: :transient)
+  end
+
+  defp start_control_connections(%__MODULE__{} = state, peernames) do
+    Enum.reduce(peernames, state, fn peername, state ->
+      %{id: node_ref} = control_conn_spec = control_conn_child_spec(peername, state)
+      {:ok, _pid} = Supervisor.start_child(state.control_conn_supervisor, control_conn_spec)
+
+      # Append this node_ref (and later on its peername) to the ordered
+      # list of node_refs.
+      new_node_ref = node_ref(ref: node_ref)
+      update_in(state.node_refs, &List.keystore(&1, node_ref, node_ref(:ref), new_node_ref))
+    end)
   end
 
   defp start_pool(%__MODULE__{} = state, _node_ref, {ip, port} = peername) do
