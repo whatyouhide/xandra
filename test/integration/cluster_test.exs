@@ -8,14 +8,12 @@ defmodule Xandra.ClusterTest do
   defmodule PoolMock do
     use GenServer
 
-    def start_link(opts) do
-      GenServer.start_link(__MODULE__, opts)
-    end
+    def start_link(opts), do: GenServer.start_link(__MODULE__, Map.new(opts))
 
     @impl true
     def init(opts) do
       {test_pid, test_ref} = :persistent_term.get(:clustering_test_info)
-      send(test_pid, {test_ref, __MODULE__, :init_called, Map.new(opts)})
+      send(test_pid, {test_ref, __MODULE__, :init_called, opts})
       {:ok, {test_pid, test_ref}}
     end
   end
@@ -23,13 +21,7 @@ defmodule Xandra.ClusterTest do
   defmodule ControlConnectionMock do
     use GenServer
 
-    def child_spec([_cluster, _node_ref, _address, _port, _options, _autodiscovery?] = args) do
-      %{id: __MODULE__, type: :worker, start: {__MODULE__, :start_link, args}}
-    end
-
-    def start_link(cluster, node_ref, address, port, options, autodiscovery?) do
-      GenServer.start_link(__MODULE__, Map.new(binding()))
-    end
+    def start_link(opts), do: GenServer.start_link(__MODULE__, Map.new(opts))
 
     @impl true
     def init(args) do

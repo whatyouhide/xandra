@@ -11,6 +11,21 @@ defmodule Xandra.Cluster.ControlConnection do
   @default_timeout 5_000
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
 
+  # Internal NimbleOptions schema used to validate the options given to start_link/1.
+  # This is only used for internal consistency and having an additional layer of
+  # weak "type checking" (some people might get angry at this).
+  @opts_schema NimbleOptions.new!(
+                 cluster: [type: :pid, required: true],
+                 node_ref: [
+                   type: {:custom, __MODULE__, :__validate_reference__, []},
+                   required: true
+                 ],
+                 address: [type: :any, required: true],
+                 port: [type: {:in, 0..65355}, required: true],
+                 connection_options: [type: :keyword_list, required: true],
+                 autodiscovery: [type: :boolean, required: true]
+               )
+
   defstruct [
     :cluster,
     :node_ref,
@@ -27,31 +42,35 @@ defmodule Xandra.Cluster.ControlConnection do
     buffer: <<>>
   ]
 
-  def child_spec([cluster, node_ref, address, port, options, autodiscovery?]) do
-    args = [cluster, node_ref, address, port, options, autodiscovery?]
-
-    %{
-      id: __MODULE__,
-      type: :worker,
-      start: {__MODULE__, :start_link, args}
-    }
+  # Need to manually define child_spec/1 because :gen_statem doesn't provide any utilities
+  # around that.
+  @spec child_spec(keyword()) :: Supervisor.child_spec()
+  def child_spec(options) when is_list(options) do
+    %{id: __MODULE__, type: :worker, start: {__MODULE__, :start_link, [options]}}
   end
 
-  def start_link(cluster, node_ref, address, port, options, autodiscovery?) do
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(options) when is_list(options) do
+    options = NimbleOptions.validate!(options, @opts_schema)
+
+    connection_options = Keyword.fetch!(options, :connection_options)
+
+    transport = if connection_options[:encryption], do: :ssl, else: :gen_tcp
+
     transport_options =
-      options
+      connection_options
       |> Keyword.get(:transport_options, [])
       |> Keyword.merge(@forced_transport_options)
 
     data = %__MODULE__{
-      cluster: cluster,
-      node_ref: node_ref,
-      address: address,
-      port: port,
-      options: options,
-      transport: if(options[:encryption], do: :ssl, else: :gen_tcp),
-      transport_options: transport_options,
-      autodiscovery: autodiscovery?
+      cluster: Keyword.fetch!(options, :cluster),
+      node_ref: Keyword.fetch!(options, :node_ref),
+      address: Keyword.fetch!(options, :address),
+      port: Keyword.fetch!(options, :port),
+      autodiscovery: Keyword.fetch!(options, :autodiscovery),
+      options: connection_options,
+      transport: transport,
+      transport_options: transport_options
     }
 
     :gen_statem.start_link(__MODULE__, data, [])
@@ -111,13 +130,11 @@ defmodule Xandra.Cluster.ControlConnection do
 
   def disconnected(:info, {kind, socket, _other}, %__MODULE__{socket: socket})
       when kind in [:tcp_error, :ssl_error] do
-    IO.puts("bbb")
     :keep_state_and_data
   end
 
   def disconnected(:info, {kind, socket}, %__MODULE__{socket: socket})
       when kind in [:tcp_closed, :ssl_closed] do
-    IO.puts("aaa")
     :keep_state_and_data
   end
 
@@ -125,43 +142,36 @@ defmodule Xandra.Cluster.ControlConnection do
     {:keep_state_and_data, {:next_event, :internal, :connect}}
   end
 
-  def disconnect({:error, _reason}, %__MODULE__{} = state) do
-    state.transport.close(state.socket)
-    {:connect, :reconnect, %{state | socket: nil, buffer: <<>>}}
-  end
-
   # Connected state
 
   def connected(:info, {kind, socket, reason}, %__MODULE__{socket: socket} = data)
       when kind in [:tcp_error, :ssl_error] do
-    Logger.debug(fn ->
-      "Socket error in control connection for #{:inet.ntoa(data.address)}: " <> inspect(reason)
-    end)
-
-    data.transport.close(data.socket)
-    data = %__MODULE__{data | buffer: <<>>}
+    Logger.debug("Socket error: #{inspect(reason)}")
+    {:connect, :reconnect, data} = disconnect({:error, reason}, data)
     {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
   end
 
   def connected(:info, {kind, socket}, %__MODULE__{socket: socket} = data)
       when kind in [:tcp_closed, :ssl_closed] do
-    Logger.debug(fn ->
-      "Socket closed in control connection for #{address_to_human_readable_source(data)}"
-    end)
-
+    Logger.debug("Socket closed")
     data.transport.close(data.socket)
     data = %__MODULE__{data | buffer: <<>>, socket: nil}
     {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
   end
 
-  def connected(:info, {kind, socket, bytes}, %__MODULE__{socket: socket, buffer: buffer} = data)
+  def connected(:info, {kind, socket, bytes}, %__MODULE__{socket: socket} = data)
       when kind in [:tcp, :ssl] do
-    data = %__MODULE__{data | buffer: buffer <> bytes}
-    data = report_event(data)
+    data = update_in(data.buffer, &(&1 <> bytes))
+    data = consume_new_data(data)
     {:keep_state, data}
   end
 
   ## Helper functions
+
+  defp disconnect({:error, _reason}, %__MODULE__{} = data) do
+    _ = data.transport.close(data.socket)
+    {:connect, :reconnect, %__MODULE__{data | socket: nil, buffer: <<>>}}
+  end
 
   # A control connection that never came online just came online.
   defp report_active(
@@ -269,16 +279,16 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  defp report_event(%{cluster: cluster, buffer: buffer} = state) do
-    case decode_frame(buffer, state.protocol_module) do
+  defp consume_new_data(%__MODULE__{cluster: cluster} = data) do
+    case decode_frame(data.buffer, data.protocol_module) do
       {frame, rest} ->
-        change_event = state.protocol_module.decode_response(frame)
+        change_event = data.protocol_module.decode_response(frame)
         Logger.debug("Received event: #{inspect(change_event)}")
-        Xandra.Cluster.update(cluster, change_event)
-        report_event(%{state | buffer: rest})
+        :ok = Cluster.update(cluster, change_event)
+        consume_new_data(%__MODULE__{data | buffer: rest})
 
       :error ->
-        state
+        data
     end
   end
 
@@ -313,4 +323,14 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defp address_to_human_readable_source(%__MODULE__{address: address, port: port}),
     do: "#{address}:#{port}"
+
+  ## NimbleOptions validation
+
+  def __validate_reference__(value) do
+    if is_reference(value) do
+      {:ok, value}
+    else
+      {:error, "expected reference, got: #{inspect(value)}"}
+    end
+  end
 end
