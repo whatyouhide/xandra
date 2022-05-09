@@ -607,13 +607,20 @@ defmodule Xandra.Cluster do
   defp control_conn_child_spec({address, port}, %__MODULE__{} = state) do
     %__MODULE__{
       autodiscovery: autodiscovery?,
-      pool_options: options,
+      pool_options: pool_options,
       control_conn_mod: control_conn_mod
     } = state
 
-    node_ref = make_ref()
-    start_args = [_cluster = self(), node_ref, address, port, options, autodiscovery?]
-    Supervisor.child_spec({control_conn_mod, start_args}, id: node_ref, restart: :transient)
+    opts = [
+      cluster: self(),
+      node_ref: make_ref(),
+      address: address,
+      port: port,
+      connection_options: pool_options,
+      autodiscovery: autodiscovery?
+    ]
+
+    Supervisor.child_spec({control_conn_mod, opts}, id: opts[:node_ref], restart: :transient)
   end
 
   defp start_pool(%__MODULE__{} = state, _node_ref, {ip, port} = peername) do

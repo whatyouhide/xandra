@@ -15,16 +15,16 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     node_ref = make_ref()
 
-    args = [
-      _cluster = mirror,
-      node_ref,
-      'localhost',
-      9042,
-      _options = [protocol_module: @protocol_module],
-      _autodiscovery? = true
+    opts = [
+      cluster: mirror,
+      node_ref: node_ref,
+      address: 'localhost',
+      port: 9042,
+      connection_options: [protocol_module: @protocol_module],
+      autodiscovery: true
     ]
 
-    assert {:ok, _ctrl_conn} = start_supervised({ControlConnection, args})
+    assert {:ok, _ctrl_conn} = start_supervised({ControlConnection, opts})
 
     assert_receive {^mirror_ref, {:"$gen_cast", {:activate, _ref, {{127, 0, 0, 1}, 9042}}}}
     assert_receive {^mirror_ref, {:"$gen_cast", {:discovered_peers, [], "127.0.0.1:9042"}}}
@@ -37,21 +37,16 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     node_ref = make_ref()
 
-    args = [
-      _cluster = mirror,
-      node_ref,
-      'localhost',
-      9042,
-      _options = [protocol_module: @protocol_module],
-      _autodiscovery? = false
+    opts = [
+      cluster: mirror,
+      node_ref: node_ref,
+      address: 'localhost',
+      port: 9042,
+      connection_options: [protocol_module: @protocol_module],
+      autodiscovery: false
     ]
 
-    assert {:ok, ctrl_conn} =
-             start_supervised(%{
-               id: ControlConnection,
-               start: {ControlConnection, :start_link, args},
-               type: :worker
-             })
+    assert {:ok, ctrl_conn} = start_supervised({ControlConnection, opts})
 
     assert_receive {^mirror_ref, {:"$gen_cast", {:activate, _ref, {{127, 0, 0, 1}, 9042}}}}
 
