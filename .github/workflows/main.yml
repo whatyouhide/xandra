@@ -50,7 +50,7 @@ jobs:
 
       - name: Start Docker and wait for it to be up
         run: |
-          docker-compose up --detach
+          docker-compose up --detach --build
           ./test/docker/health-check-services.sh
 
       - name: Install OTP and Elixir
