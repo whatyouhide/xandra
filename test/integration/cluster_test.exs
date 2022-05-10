@@ -132,9 +132,7 @@ defmodule Xandra.ClusterTest do
 
       assert :ok = Xandra.Cluster.activate(cluster, control_conn_args[:node_ref], {address, port})
 
-      assert_receive {^test_ref, PoolMock, :init_called, pool_opts}
-      assert pool_opts[:address] == address
-      assert pool_opts[:port] == port
+      assert_pool_started(test_ref, {address, port})
     end
 
     test "starts one control connection per node including discovered nodes", %{
@@ -160,21 +158,21 @@ defmodule Xandra.ClusterTest do
       assert :ok = Xandra.Cluster.discovered_peers(cluster, [{199, 0, 0, 10}], "199.0.0.1")
 
       # Assert that the cluster starts a pool for the node going up.
-      assert_receive {^test_ref, PoolMock, :init_called, %{address: {199, 0, 0, 1}}}
+      assert_pool_started(test_ref, "199.0.0.1:9042")
 
       # Assert that the cluster starts a control connection for the discovered peer.
       assert_receive {^test_ref, ControlConnectionMock, :init_called,
                       %{address: {199, 0, 0, 10}, node_ref: discovered_node_ref}}
 
       assert :ok = Xandra.Cluster.activate(cluster, discovered_node_ref, {{199, 0, 0, 10}, 9042})
-      assert_receive {^test_ref, PoolMock, :init_called, %{address: {199, 0, 0, 10}}}
+      assert_pool_started(test_ref, "199.0.0.10:9042")
 
       # Now some fun: simulate that the control connection for the second "seed" node goes up and
       # reports two peers: a new one and a one that was already reported.
       assert :ok = Xandra.Cluster.activate(cluster, args2.node_ref, {{199, 0, 0, 2}, 9042})
 
       # Assert that the cluster starts a pool for the node going up.
-      assert_receive {^test_ref, PoolMock, :init_called, %{address: {199, 0, 0, 2}}}
+      assert_pool_started(test_ref, "199.0.0.2:9042")
 
       assert :ok =
                Xandra.Cluster.discovered_peers(
@@ -207,7 +205,7 @@ defmodule Xandra.ClusterTest do
                     %{address: 'node1', node_ref: ref}}
 
     assert :ok = Xandra.Cluster.activate(cluster, ref, {address, port})
-    assert_receive {^test_ref, PoolMock, :init_called, %{address: ^address}}
+    assert_pool_started(test_ref, peername)
     %{pool_supervisor: pool_sup, pools: %{^peername => pool}} = :sys.get_state(cluster)
 
     assert [{^peername, ^pool, :worker, _}] = Supervisor.which_children(pool_sup)
@@ -256,7 +254,7 @@ defmodule Xandra.ClusterTest do
                     %{address: 'node1', node_ref: ref}}
 
     assert :ok = Xandra.Cluster.activate(cluster, ref, {address, port})
-    assert_receive {^test_ref, PoolMock, :init_called, %{address: ^address}}
+    assert_pool_started(test_ref, peername)
 
     # TopologyChange NEW_NODE
 
@@ -270,7 +268,7 @@ defmodule Xandra.ClusterTest do
                     %{address: ^new_address, node_ref: new_ref}}
 
     assert :ok = Xandra.Cluster.activate(cluster, new_ref, {new_address, 9042})
-    assert_receive {^test_ref, PoolMock, :init_called, %{address: ^new_address}}
+    assert_pool_started(test_ref, {new_address, port})
 
     # TopologyChange REMOVED_NODE
     # (removing the original node)
@@ -339,12 +337,14 @@ defmodule Xandra.ClusterTest do
 
     seed1_ip = {192, 0, 0, 1}
     seed2_ip = {192, 0, 0, 2}
+    seed1_ip_charlist = :inet.ntoa(seed1_ip)
+    seed2_ip_charlist = :inet.ntoa(seed2_ip)
     port = 9042
 
     opts = [
       xandra_module: PoolMock,
       control_connection_module: ControlConnectionMock,
-      nodes: [to_string(:inet.ntoa(seed1_ip)), to_string(:inet.ntoa(seed2_ip))],
+      nodes: [to_string(seed1_ip_charlist), to_string(seed2_ip_charlist)],
       autodiscovery: true
     ]
 
@@ -354,14 +354,14 @@ defmodule Xandra.ClusterTest do
     # First, both control connections are started.
 
     assert_receive {^test_ref, ControlConnectionMock, :init_called,
-                    %{address: '192.0.0.1', node_ref: seed1_cc_ref}}
+                    %{address: ^seed1_ip_charlist, node_ref: seed1_cc_ref}}
 
     assert_receive {^test_ref, ControlConnectionMock, :init_called,
-                    %{address: '192.0.0.2', node_ref: seed2_cc_ref}}
+                    %{address: ^seed2_ip_charlist, node_ref: seed2_cc_ref}}
 
     # Let's say only the first one activates (and its pool starts up too).
     assert :ok = Xandra.Cluster.activate(cluster, seed1_cc_ref, {seed1_ip, port})
-    assert_receive {^test_ref, PoolMock, :init_called, %{address: ^seed1_ip}}
+    assert_pool_started(test_ref, {seed1_ip, port})
 
     assert :sys.get_state(cluster).node_refs == [
              {:node_ref, seed1_cc_ref, {seed1_ip, port}},
@@ -390,7 +390,7 @@ defmodule Xandra.ClusterTest do
 
     # Now the seed2 "peer" control connection reports as active (and we starts its pool).
     assert :ok = Xandra.Cluster.activate(cluster, seed2_peer_cc_ref, {seed2_ip, port})
-    assert_receive {^test_ref, PoolMock, :init_called, %{address: ^seed2_ip}}
+    assert_pool_started(test_ref, {seed2_ip, port})
 
     # Ah, now the address <-> node_ref mapping should be updated correctly.
     assert :sys.get_state(cluster).node_refs == [
@@ -406,7 +406,7 @@ defmodule Xandra.ClusterTest do
     assert :ok = Xandra.Cluster.activate(cluster, seed2_cc_ref, {seed2_ip, port})
 
     # Okay, first things first: we should not start a new pool.
-    refute_receive {^test_ref, PoolMock, :init_called, %{address: ^seed2_ip}}
+    refute_any_pool_started(test_ref)
 
     # Second things second: the address <-> node_ref mapping should be Good™ and we should have
     # removed the unnecessary control connection.
@@ -450,13 +450,13 @@ defmodule Xandra.ClusterTest do
                       %{address: 'node1', node_ref: ref1}}
 
       assert :ok = Xandra.Cluster.activate(cluster, ref1, {{192, 0, 0, 1}, 9042})
-      assert_receive {^test_ref, PoolMock, :init_called, %{address: {192, 0, 0, 1}}}
+      assert_pool_started(test_ref, "192.0.0.1:9042")
 
       assert_receive {^test_ref, ControlConnectionMock, :init_called,
                       %{address: 'node2', node_ref: ref2}}
 
       assert :ok = Xandra.Cluster.activate(cluster, ref2, {{192, 0, 0, 2}, 9042})
-      assert_receive {^test_ref, PoolMock, :init_called, %{address: {192, 0, 0, 2}}}
+      assert_pool_started(test_ref, "192.0.0.2:9042")
 
       pool_pids =
         wait_for_passing(500, fn ->
@@ -492,13 +492,13 @@ defmodule Xandra.ClusterTest do
                       %{address: 'node1', node_ref: ref1}}
 
       assert :ok = Xandra.Cluster.activate(cluster, ref1, {{192, 0, 0, 1}, 9042})
-      assert_receive {^test_ref, PoolMock, :init_called, %{address: {192, 0, 0, 1}}}
+      assert_pool_started(test_ref, "192.0.0.1:9042")
 
       assert_receive {^test_ref, ControlConnectionMock, :init_called,
                       %{address: 'node2', node_ref: ref2}}
 
       assert :ok = Xandra.Cluster.activate(cluster, ref2, {{192, 0, 0, 2}, 9042})
-      assert_receive {^test_ref, PoolMock, :init_called, %{address: {192, 0, 0, 2}}}
+      assert_pool_started(test_ref, "192.0.0.2:9042")
 
       %{{{192, 0, 0, 1}, 9042} => pid1, {{192, 0, 0, 2}, 9042} => pid2} =
         wait_for_passing(500, fn ->
@@ -524,6 +524,20 @@ defmodule Xandra.ClusterTest do
 
       assert GenServer.call(cluster, :checkout) == {:ok, pid2}
     end
+  end
+
+  defp assert_pool_started(test_ref, node) do
+    node =
+      case node do
+        node when is_binary(node) -> node
+        {ip, port} when is_tuple(ip) and port in 0..65535 -> "#{:inet.ntoa(ip)}:#{port}"
+      end
+
+    assert_receive {^test_ref, PoolMock, :init_called, %{nodes: [^node]}}
+  end
+
+  defp refute_any_pool_started(test_ref) do
+    refute_receive {^test_ref, PoolMock, :init_called, _args}
   end
 
   defp wait_for_passing(time_left, fun) when time_left < 0 do

@@ -25,8 +25,7 @@ defmodule Xandra.Connection do
 
   @impl true
   def connect(options) when is_list(options) do
-    address = Keyword.fetch!(options, :address)
-    port = Keyword.fetch!(options, :port)
+    {address, port} = Keyword.fetch!(options, :node)
     prepared_cache = Keyword.fetch!(options, :prepared_cache)
     compressor = Keyword.get(options, :compressor)
     default_consistency = Keyword.fetch!(options, :default_consistency)

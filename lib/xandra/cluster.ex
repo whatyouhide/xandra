@@ -144,7 +144,7 @@ defmodule Xandra.Cluster do
       """
     ],
     nodes: [
-      type: {:list, {:custom, __MODULE__, :__validate_node__, []}},
+      type: {:list, {:custom, Xandra.OptionsValidators, :validate_node, []}},
       default: ["127.0.0.1"],
       doc: """
       A list of nodes to use as seed nodes when setting up the cluster. Each node in this list
@@ -608,8 +608,9 @@ defmodule Xandra.Cluster do
     end)
   end
 
-  defp start_pool(%__MODULE__{} = state, _node_ref, {ip, port} = peername) do
-    options = Keyword.merge(state.pool_options, address: ip, port: port)
+  defp start_pool(%__MODULE__{} = state, _node_ref, {ip, port} = peername)
+       when is_peername(peername) do
+    options = Keyword.merge(state.pool_options, nodes: ["#{:inet.ntoa(ip)}:#{port}"])
 
     pool_spec =
       Supervisor.child_spec({state.xandra_mod, options}, id: peername, restart: :transient)
@@ -723,24 +724,5 @@ defmodule Xandra.Cluster do
 
   defp peername_to_string({ip, port} = peername) when is_peername(peername) do
     "#{:inet.ntoa(ip)}:#{port}"
-  end
-
-  # NimbleOptions custom validators.
-
-  def __validate_node__(node) when is_binary(node) do
-    case String.split(node, ":", parts: 2) do
-      [address, port] ->
-        case Integer.parse(port) do
-          {port, ""} -> {:ok, {String.to_charlist(address), port}}
-          _ -> {:error, "invalid node: #{inspect(node)}"}
-        end
-
-      [address] ->
-        {:ok, {String.to_charlist(address), @default_port}}
-    end
-  end
-
-  def __validate_node__(other) do
-    {:error, "expected node in :nodes to be a string, got: #{inspect(other)}"}
   end
 end
