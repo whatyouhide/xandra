@@ -218,9 +218,6 @@ defmodule Xandra do
   @type start_option :: xandra_start_option | db_connection_start_option
   @type start_options :: [start_option]
 
-  @default_address '127.0.0.1'
-  @default_port 9042
-
   # Raw NimbleOptions schema before parsing. Broken out to work around
   # `mix format`.
   start_link_opts_schema = [
@@ -294,13 +291,13 @@ defmodule Xandra do
       """
     ],
     nodes: [
-      type: {:list, :string},
+      type: {:list, {:custom, Xandra.OptionsValidators, :validate_node, []}},
+      default: ["127.0.0.1"],
       doc: """
-      The Cassandra nodes to connect to. Each node in the list has to be in
-      the form `"ADDRESS:PORT"` or in the form `"ADDRESS"`. If the latter is
-      used, the default port (`#{@default_port}`) will be used for that node.
-      Defaults to `["127.0.0.1"]`. This option must contain only one node.
-      See the documentation for `Xandra.Cluster` for more information on
+      The Cassandra node to connect to. This option is a list for consistency with
+      `Xandra.Cluster`, but if using `Xandra` directly, it can only contain a single node.
+      Such node can have the form `"ADDRESS:PORT"`, or `"ADDRESS"` (port defaults to
+      `9042`). See the documentation for `Xandra.Cluster` for more information on
       connecting to multiple nodes.
       """
     ],
@@ -408,9 +405,22 @@ defmodule Xandra do
     xandra_opts = NimbleOptions.validate!(xandra_opts, @start_link_opts_schema)
     options = Keyword.merge(xandra_opts, db_conn_opts)
 
+    {node, options} =
+      case Keyword.pop(options, :nodes) do
+        {[], _opts} ->
+          raise ArgumentError, "the :nodes option can't be an empty list"
+
+        {[node], opts} ->
+          {node, opts}
+
+        {_nodes, _opts} ->
+          raise ArgumentError,
+                "cannot use multiple nodes in the :nodes option with Xandra, use Xandra.Cluster for that"
+      end
+
     options =
       options
-      |> convert_nodes_options_to_address_and_port()
+      |> Keyword.put(:node, node)
       |> Keyword.put(:pool, DBConnection.ConnectionPool)
       |> Keyword.put(:prepared_cache, Prepared.Cache.new())
 
@@ -1171,57 +1181,5 @@ defmodule Xandra do
           {:error, reason}
       end
     end)
-  end
-
-  # If we have :address and :port, we raise if there's :nodes and otherwise
-  # leave it like that. If we have :nodes, we validate it and turn it into
-  # :address and :port. If we have none, we fill in :address and :port with
-  # defaults.
-  defp convert_nodes_options_to_address_and_port(options) do
-    {nodes, options} = Keyword.pop(options, :nodes)
-    address_and_port? = Keyword.has_key?(options, :address) and Keyword.has_key?(options, :port)
-
-    cond do
-      nodes && address_and_port? ->
-        raise ArgumentError, "passing :nodes alongside :address/:port is not supported"
-
-      address_and_port? ->
-        options
-
-      nodes ->
-        {address, port} = parse_nodes_option(nodes)
-        Keyword.merge(options, address: address, port: port)
-
-      true ->
-        Keyword.merge(options, address: @default_address, port: @default_port)
-    end
-  end
-
-  defp parse_nodes_option([node]) do
-    parse_node(node)
-  end
-
-  defp parse_nodes_option([]) do
-    raise ArgumentError, "the :nodes option can't be an empty list"
-  end
-
-  defp parse_nodes_option(_nodes) do
-    raise ArgumentError, "multi-node use requires Xandra.Cluster instead of Xandra"
-  end
-
-  defp parse_node(string) do
-    case String.split(string, ":", parts: 2) do
-      [address, port] ->
-        case Integer.parse(port) do
-          {port, ""} ->
-            {String.to_charlist(address), port}
-
-          _ ->
-            raise ArgumentError, "invalid item #{inspect(string)} in the :nodes option"
-        end
-
-      [address] ->
-        {String.to_charlist(address), @default_port}
-    end
   end
 end

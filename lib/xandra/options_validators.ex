@@ -27,13 +27,21 @@ defmodule Xandra.OptionsValidators do
   end
 
   @doc false
-  def validate_ip({a, b, c, d} = ip)
-      when is_integer(a) and is_integer(b) and is_integer(c) and is_integer(d) do
-    {:ok, ip}
+  def validate_node(value) when is_binary(value) do
+    case String.split(value, ":", parts: 2) do
+      [address, port] ->
+        case Integer.parse(port) do
+          {port, ""} -> {:ok, {String.to_charlist(address), port}}
+          _ -> {:error, "invalid node: #{inspect(value)}"}
+        end
+
+      [address] ->
+        {:ok, {String.to_charlist(address), 9042}}
+    end
   end
 
-  def validate_ip(other) do
-    {:error, "invalid IP address: #{inspect(other)}"}
+  def validate_node(other) do
+    {:error, "expected node to be a string or a {ip, port} tuple, got: #{inspect(other)}"}
   end
 
   @doc false
