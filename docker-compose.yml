@@ -5,6 +5,8 @@ services:
     build:
       context: ./test/docker
       dockerfile: cassandra.dockerfile
+      args:
+        CASSANDRA_VERSION: "${CASSANDRA_VERSION:-4}"
     ports:
       - "9042:9042"
     environment:
@@ -26,6 +28,7 @@ services:
       dockerfile: cassandra.dockerfile
       args:
         AUTHENTICATION: "true"
+        CASSANDRA_VERSION: "${CASSANDRA_VERSION:-4}"
     ports:
       - "9043:9042"
     environment:
@@ -45,6 +48,8 @@ services:
     build:
       context: ./test/docker
       dockerfile: cassandra_encrypted.dockerfile
+      args:
+        CASSANDRA_VERSION: "${CASSANDRA_VERSION:-3}"
     ports:
       - "9044:9042"
     environment:
