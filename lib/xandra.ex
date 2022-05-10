@@ -190,10 +190,10 @@ defmodule Xandra do
     Connection,
     ConnectionError,
     Error,
+    Frame,
     Prepared,
     Page,
     PageStream,
-    Protocol,
     RetryStrategy,
     Simple
   }
@@ -209,7 +209,10 @@ defmodule Xandra do
           | {:compressor, module}
           | {:authentication, {module, keyword}}
           | {:atom_keys, boolean}
-          | {:protocol_version, :v3 | :v4}
+          | {:protocol_version,
+             unquote(
+               Enum.reduce(Frame.supported_protocols(), &quote(do: unquote(&1) | unquote(&2)))
+             )}
 
   @type db_connection_start_option :: {atom(), any}
   @type start_option :: xandra_start_option | db_connection_start_option
@@ -314,10 +317,11 @@ defmodule Xandra do
       doc: false
     ],
     protocol_version: [
-      type: {:in, [:v3, :v4]},
-      default: :v3,
+      type: {:in, Frame.supported_protocols()},
       doc: """
-      The version of the Cassandra native protocol to use, either `:v3` or `:v4`.
+      The enforced version of the Cassandra native protocol to use. If this option
+      is not present, Xandra will negotiate the protocol with the server, starting
+      with the most recent one and falling back to older ones if needed.
       """
     ],
     show_sensitive_data_on_connection_error: [
@@ -404,14 +408,11 @@ defmodule Xandra do
     xandra_opts = NimbleOptions.validate!(xandra_opts, @start_link_opts_schema)
     options = Keyword.merge(xandra_opts, db_conn_opts)
 
-    {protocol_version, options} = Keyword.pop(options, :protocol_version)
-
     options =
       options
       |> convert_nodes_options_to_address_and_port()
       |> Keyword.put(:pool, DBConnection.ConnectionPool)
       |> Keyword.put(:prepared_cache, Prepared.Cache.new())
-      |> Keyword.put(:protocol_module, protocol_version_to_module(protocol_version))
 
     DBConnection.start_link(Connection, options)
   end
@@ -1223,7 +1224,4 @@ defmodule Xandra do
         {String.to_charlist(address), @default_port}
     end
   end
-
-  defp protocol_version_to_module(:v3), do: Protocol.V3
-  defp protocol_version_to_module(:v4), do: Protocol.V4
 end

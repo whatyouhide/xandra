@@ -3,9 +3,10 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
   alias Xandra.Cluster.ControlConnection
 
-  @protocol_module (case System.get_env("CASSANDRA_NATIVE_PROTOCOL") || "v3" do
+  @protocol_module (case System.get_env("CASSANDRA_NATIVE_PROTOCOL") do
                       "v3" -> Xandra.Protocol.V3
                       "v4" -> Xandra.Protocol.V4
+                      nil -> nil
                     end)
 
   test "reporting data upon successful connection" do

@@ -1,7 +1,7 @@
 defmodule Xandra.Connection.Utils do
   @moduledoc false
 
-  alias Xandra.{ConnectionError, Frame}
+  alias Xandra.{ConnectionError, Error, Frame}
 
   @spec recv_frame(:gen_tcp | :ssl, term, module, nil | module) ::
           {:ok, Frame.t()} | {:error, :closed | :inet.posix()}
@@ -12,26 +12,49 @@ defmodule Xandra.Connection.Utils do
     with {:ok, header} <- transport.recv(socket, length) do
       case Frame.body_length(header) do
         0 ->
-          {:ok, Frame.decode(header, protocol_module)}
+          {:ok, Frame.decode(header)}
 
         body_length ->
           with {:ok, body} <- transport.recv(socket, body_length),
-               do: {:ok, Frame.decode(header, body, protocol_module, compressor)}
+               do: {:ok, Frame.decode(header, body, compressor)}
       end
     end
   end
 
-  @spec request_options(:gen_tcp | :ssl, term, module, nil | module) ::
-          {:ok, term} | {:error, ConnectionError.t()}
-  def request_options(transport, socket, protocol_module, compressor \\ nil) do
+  @spec request_options(:gen_tcp | :ssl, term, nil | Frame.supported_protocol(), nil | module) ::
+          {:ok, map(), negotiated_protocol_module :: module()}
+          | {:error, ConnectionError.t() | Error.t(),
+             {:use_this_protocol_instead, Frame.supported_protocol()}}
+  def request_options(transport, socket, protocol_version, compressor \\ nil)
+      when transport in [:gen_tcp, :ssl] and
+             (is_nil(protocol_version) or protocol_version in unquote(Frame.supported_protocols())) and
+             is_atom(compressor) do
+    tentative_protocol_module =
+      Frame.protocol_version_to_module(protocol_version || Frame.max_supported_protocol())
+
     payload =
       Frame.new(:options)
-      |> protocol_module.encode_request(nil)
-      |> Frame.encode(protocol_module)
+      |> tentative_protocol_module.encode_request(nil)
+      |> Frame.encode(tentative_protocol_module)
 
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- recv_frame(transport, socket, protocol_module, compressor) do
-      {:ok, protocol_module.decode_response(frame)}
+         {:ok, %Frame{} = frame} <-
+           recv_frame(transport, socket, tentative_protocol_module, compressor) do
+      case tentative_protocol_module.decode_response(frame) do
+        %Error{} = error ->
+          if error.message =~ "unsupported protocol version" do
+            if frame.protocol_version in Frame.supported_protocols() do
+              {:error, {:use_this_protocol_instead, frame.protocol_version}}
+            else
+              {:error, {:unsupported_protocol, frame.protocol_version}}
+            end
+          else
+            {:error, error}
+          end
+
+        %{} = options ->
+          {:ok, options, tentative_protocol_module}
+      end
     else
       {:error, reason} ->
         {:error, ConnectionError.new("request options", reason)}

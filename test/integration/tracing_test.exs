@@ -46,7 +46,7 @@ defmodule TracingTest do
     end
   end
 
-  test "tracing enabled when executing simple, prepared, and batch queryes",
+  test "tracing enabled when executing simple, prepared, and batch queries",
        %{conn: conn, keyspace: keyspace} do
     result = Xandra.execute!(conn, "USE system", [], tracing: true)
     assert is_binary(result.tracing_id)

@@ -81,14 +81,13 @@ defmodule Xandra.Cluster do
   use GenServer
 
   alias Xandra.Cluster.{ControlConnection, StatusChange, TopologyChange}
-  alias Xandra.{Batch, ConnectionError, Prepared, Protocol, RetryStrategy}
+  alias Xandra.{Batch, ConnectionError, Prepared, RetryStrategy}
 
   require Logger
   require Record
 
   @type cluster :: GenServer.server()
 
-  @default_protocol_version :v3
   @default_port 9042
 
   # State.
@@ -247,17 +246,6 @@ defmodule Xandra.Cluster do
 
     # TODO: Replace with Keyword.pop!/2 once we depend on Elixir 1.10+.
     {nodes, cluster_opts} = Keyword.pop(cluster_opts, :nodes)
-
-    # We don't pop the :protocol_version option because we want to
-    # also forward it to the Xandra connections.
-    pool_opts =
-      Keyword.put(
-        pool_opts,
-        :protocol_module,
-        protocol_version_to_module(
-          Keyword.get(pool_opts, :protocol_version, @default_protocol_version)
-        )
-      )
 
     if cluster_opts[:autodiscovery] && cluster_opts[:load_balancing] == :priority do
       raise ArgumentError,
@@ -732,13 +720,6 @@ defmodule Xandra.Cluster do
   defp select_pool(:priority, pools, node_refs) do
     Enum.find_value(node_refs, fn node_ref(peername: peername) -> Map.get(pools, peername) end)
   end
-
-  defp protocol_version_to_module(:v3), do: Protocol.V3
-
-  defp protocol_version_to_module(:v4), do: Protocol.V4
-
-  defp protocol_version_to_module(other),
-    do: raise(ArgumentError, "unknown protocol version: #{inspect(other)}")
 
   defp peername_to_string({ip, port} = peername) when is_peername(peername) do
     "#{:inet.ntoa(ip)}:#{port}"

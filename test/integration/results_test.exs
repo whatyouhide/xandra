@@ -46,7 +46,9 @@ defmodule ResultsTest do
   end
 
   # Regression test for https://github.com/lexhide/xandra/issues/187.
+  # This is skipped because for now we shouldn't run it on all C* versions.
   @tag :cassandra_specific
+  @tag :skip
   @tag skip_for_native_protocol: :v4
   test "SCHEMA_CHANGE regression in protocol v3", %{keyspace: keyspace} do
     {:ok, conn} = Xandra.start_link(protocol_version: :v3)

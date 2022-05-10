@@ -6,6 +6,8 @@ defmodule Xandra.Connection do
   alias Xandra.{Batch, ConnectionError, Prepared, Frame, Simple, SetKeyspace}
   alias __MODULE__.Utils
 
+  require Logger
+
   @default_timeout 5_000
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
 
@@ -22,14 +24,14 @@ defmodule Xandra.Connection do
   ]
 
   @impl true
-  def connect(options) do
+  def connect(options) when is_list(options) do
     address = Keyword.fetch!(options, :address)
     port = Keyword.fetch!(options, :port)
     prepared_cache = Keyword.fetch!(options, :prepared_cache)
     compressor = Keyword.get(options, :compressor)
     default_consistency = Keyword.fetch!(options, :default_consistency)
     atom_keys? = Keyword.get(options, :atom_keys, false)
-    protocol_module = Keyword.fetch!(options, :protocol_module)
+    enforced_protocol = Keyword.get(options, :protocol_version)
     transport = if(options[:encryption], do: :ssl, else: :gen_tcp)
 
     transport_options =
@@ -50,12 +52,14 @@ defmodule Xandra.Connection do
           compressor: compressor,
           default_consistency: default_consistency,
           atom_keys?: atom_keys?,
-          protocol_module: protocol_module,
           current_keyspace: nil
         }
 
-        with {:ok, supported_options} <-
-               Utils.request_options(transport, socket, protocol_module),
+        with {:ok, supported_options, protocol_module} <-
+               Utils.request_options(transport, socket, enforced_protocol),
+             state = %__MODULE__{state | protocol_module: protocol_module},
+             Logger.metadata(xandra_protocol_module: state.protocol_module),
+             Logger.debug("Supported options: #{inspect(supported_options)}"),
              :ok <-
                startup_connection(
                  transport,
@@ -67,6 +71,21 @@ defmodule Xandra.Connection do
                ) do
           {:ok, state}
         else
+          {:error, {:unsupported_protocol, protocol_version}} ->
+            raise """
+            native protocol version negotiation with the server failed. The server \
+            wants to use protocol #{inspect(protocol_version)}, but Xandra only \
+            supports these protocols: #{inspect(Frame.supported_protocols())}\
+            """
+
+          {:error, {:use_this_protocol_instead, protocol_version}} ->
+            :ok = transport.close(socket)
+            options = Keyword.put(options, :protocol_version, protocol_version)
+            connect(options)
+
+          {:error, %Xandra.Error{} = error} ->
+            raise error
+
           {:error, reason} = error ->
             disconnect(reason, state)
             error
@@ -120,7 +139,7 @@ defmodule Xandra.Connection do
 
   @impl true
   def handle_prepare(%Prepared{} = prepared, options, %__MODULE__{socket: socket} = state) do
-    prepared = %{
+    prepared = %Prepared{
       prepared
       | default_consistency: state.default_consistency,
         protocol_module: state.protocol_module,

@@ -4,6 +4,7 @@ defmodule Xandra.Frame do
   defstruct [
     :kind,
     :body,
+    :protocol_version,
     stream_id: 0,
     compressor: nil,
     tracing: false,
@@ -13,7 +14,12 @@ defmodule Xandra.Frame do
 
   use Bitwise
 
-  alias Xandra.Protocol
+  @supported_protocols [
+    v4: %{module: Xandra.Protocol.V4, request_version: 0x04, response_version: 0x84},
+    v3: %{module: Xandra.Protocol.V3, request_version: 0x03, response_version: 0x83}
+  ]
+
+  @supported_protocol_versions for {vsn, _} <- @supported_protocols, do: vsn
 
   @type kind ::
           :startup
@@ -35,10 +41,10 @@ defmodule Xandra.Frame do
   @type t(kind) :: %__MODULE__{kind: kind}
   @type t :: t(kind)
 
-  @request_versions %{
-    Protocol.V3 => 0x03,
-    Protocol.V4 => 0x04
-  }
+  @type supported_protocol ::
+          unquote(
+            Enum.reduce(@supported_protocol_versions, &quote(do: unquote(&1) | unquote(&2)))
+          )
 
   @request_opcodes %{
     :startup => 0x01,
@@ -51,11 +57,6 @@ defmodule Xandra.Frame do
     :auth_response => 0x0F
   }
 
-  @response_versions %{
-    Protocol.V3 => 0x83,
-    Protocol.V4 => 0x84
-  }
-
   @response_opcodes %{
     0x00 => :error,
     0x02 => :ready,
@@ -65,6 +66,33 @@ defmodule Xandra.Frame do
     0x0C => :event,
     0x10 => :auth_success
   }
+
+  ## Functions related to the native protocol version.
+
+  @spec max_supported_protocol() :: unquote(hd(@supported_protocol_versions))
+  def max_supported_protocol(), do: unquote(hd(@supported_protocol_versions))
+
+  @spec supported_protocols() :: [supported_protocol, ...]
+  def supported_protocols(), do: @supported_protocol_versions
+
+  for {vsn,
+       %{
+         module: protocol_mod,
+         request_version: request_vsn,
+         response_version: response_vsn
+       }} <- @supported_protocols do
+    defp protocol_module_to_request_version(unquote(protocol_mod)), do: unquote(request_vsn)
+    defp response_version_to_protocol_version(unquote(response_vsn)), do: unquote(vsn)
+  end
+
+  @spec protocol_version_to_module(supported_protocol) :: module
+  def protocol_version_to_module(version)
+
+  for {vsn, %{module: mod}} <- @supported_protocols do
+    def protocol_version_to_module(unquote(vsn)), do: unquote(mod)
+  end
+
+  ## Frame functions.
 
   @spec new(kind, keyword) :: t(kind) when kind: var
   def new(kind, options \\ []) do
@@ -96,7 +124,7 @@ defmodule Xandra.Frame do
     body = maybe_compress_body(compressor, body)
 
     [
-      Map.fetch!(@request_versions, protocol_module),
+      protocol_module_to_request_version(protocol_module),
       encode_flags(compressor, tracing?),
       <<stream_id::16>>,
       Map.fetch!(@request_opcodes, kind),
@@ -105,14 +133,10 @@ defmodule Xandra.Frame do
     ]
   end
 
-  @spec decode(binary, binary, module, nil | module) :: t(kind)
-  def decode(header, body \\ <<>>, protocol_module, compressor \\ nil)
-      when is_binary(body) and is_atom(compressor) do
+  @spec decode(binary, binary, nil | module) :: t(kind)
+  def decode(header, body \\ <<>>, compressor \\ nil)
+      when is_binary(header) and is_binary(body) and is_atom(compressor) do
     <<response_version, flags, _stream_id::16, opcode, _::32>> = header
-
-    # For now, raise if the response version doens't match the requested protocol
-    # because we don't know how to deal with the mismatch.
-    assert_response_version_matches_request(response_version, protocol_module)
 
     compression? = flag_set?(flags, _compression = 0x01)
     tracing? = flag_set?(flags, _tracing = 0x02)
@@ -124,21 +148,11 @@ defmodule Xandra.Frame do
     %__MODULE__{
       kind: kind,
       body: body,
+      protocol_version: response_version_to_protocol_version(response_version),
       tracing: tracing?,
       warning: warning?,
       compressor: compressor
     }
-  end
-
-  defp assert_response_version_matches_request(response_version, protocol_module) do
-    case Map.fetch!(@response_versions, protocol_module) do
-      ^response_version ->
-        :ok
-
-      other ->
-        raise "response version #{inspect(other, base: :hex)} doesn't match the " <>
-                "requested protocol (#{inspect(protocol_module)})"
-    end
   end
 
   defp encode_flags(_compressor = nil, _tracing? = false), do: 0x00

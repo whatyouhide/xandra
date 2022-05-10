@@ -1,16 +1,15 @@
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
 
-  protocol_version =
-    case System.get_env("CASSANDRA_NATIVE_PROTOCOL") || "v3" do
-      "v3" -> :v3
-      "v4" -> :v4
-    end
-
   @default_start_options [
-    protocol_version: protocol_version,
     show_sensitive_data_on_connection_error: true
   ]
+
+  @default_start_options (case System.get_env("CASSANDRA_NATIVE_PROTOCOL") do
+                            "v3" -> Keyword.put(@default_start_options, :protocol_version, :v3)
+                            "v4" -> Keyword.put(@default_start_options, :protocol_version, :v4)
+                            nil -> @default_start_options
+                          end)
 
   using options do
     start_options = Keyword.get(options, :start_options, [])
@@ -65,9 +64,16 @@ defmodule XandraTest.IntegrationCase do
     Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}")
   end
 
-  def protocol_version, do: unquote(protocol_version)
+  def protocol_version, do: unquote(@default_start_options[:protocol_version])
 end
 
 Logger.configure(level: :info)
 
-ExUnit.start(exclude: [skip_for_native_protocol: XandraTest.IntegrationCase.protocol_version()])
+excluded =
+  if vsn = XandraTest.IntegrationCase.protocol_version() do
+    [skip_for_native_protocol: vsn]
+  else
+    []
+  end
+
+ExUnit.start(exclude: excluded)
