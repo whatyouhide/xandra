@@ -78,12 +78,6 @@ defmodule Xandra.ClusterTest do
         Xandra.Cluster.start_link(nodes: ["example.com:9042"], load_balancing: :inverse)
       end
     end
-
-    test "validates the :protocol_version option" do
-      assert_raise ArgumentError, "unknown protocol version: :v99", fn ->
-        Xandra.Cluster.start_link(nodes: ["example.com:9042"], protocol_version: :v99)
-      end
-    end
   end
 
   describe "child_spec/1" do

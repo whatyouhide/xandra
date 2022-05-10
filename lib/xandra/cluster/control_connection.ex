@@ -94,19 +94,21 @@ defmodule Xandra.Cluster.ControlConnection do
   def disconnected(:internal, :connect, %__MODULE__{} = data) do
     %__MODULE__{options: options, address: address, port: port, transport: transport} = data
 
-    protocol_mod = Keyword.fetch!(options, :protocol_module)
-    data = %__MODULE__{data | protocol_module: protocol_mod}
+    # A nil :protocol_version means "negotiate". A non-nil one means "enforce".
+    protocol_version = Keyword.get(options, :protocol_version)
 
     case transport.connect(address, port, data.transport_options, @default_timeout) do
       {:ok, socket} ->
         data = %__MODULE__{data | socket: socket}
 
-        with {:ok, supported_options} <- Utils.request_options(transport, socket, protocol_mod),
+        with {:ok, supported_options, protocol_module} <-
+               Utils.request_options(transport, socket, protocol_version),
+             data = %__MODULE__{data | protocol_module: protocol_module},
              :ok <-
-               startup_connection(transport, socket, supported_options, protocol_mod, options),
+               startup_connection(transport, socket, supported_options, protocol_module, options),
              {:ok, peers_or_nil} <-
-               maybe_discover_peers(data.autodiscovery, transport, socket, protocol_mod),
-             :ok <- register_to_events(transport, socket, protocol_mod),
+               maybe_discover_peers(data.autodiscovery, transport, socket, protocol_module),
+             :ok <- register_to_events(transport, socket, protocol_module),
              :ok <- inet_mod(transport).setopts(socket, active: true) do
           {:ok, data} = report_active(data)
 
@@ -116,6 +118,14 @@ defmodule Xandra.Cluster.ControlConnection do
 
           {:next_state, :connected, data}
         else
+          {:error, {:use_this_protocol_instead, protocol_version}} ->
+            :ok = transport.close(socket)
+            data = update_in(data.options, &Keyword.put(&1, :protocol_version, protocol_version))
+            {:keep_state, data, {:next_event, :internal, :connect}}
+
+          {:error, %Xandra.Error{} = error} ->
+            {:stop, error}
+
           {:error, _reason} = error ->
             {:connect, :reconnect, data} = disconnect(error, data)
             timeout_action = {{:timeout, :reconnect}, @default_backoff, nil}
@@ -280,7 +290,7 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp consume_new_data(%__MODULE__{cluster: cluster} = data) do
-    case decode_frame(data.buffer, data.protocol_module) do
+    case decode_frame(data.buffer) do
       {frame, rest} ->
         change_event = data.protocol_module.decode_response(frame)
         Logger.debug("Received event: #{inspect(change_event)}")
@@ -292,7 +302,7 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  defp decode_frame(buffer, protocol_module) do
+  defp decode_frame(buffer) do
     header_length = Frame.header_length()
 
     case buffer do
@@ -300,11 +310,8 @@ defmodule Xandra.Cluster.ControlConnection do
         body_length = Frame.body_length(header)
 
         case rest do
-          <<body::size(body_length)-bytes, rest::binary>> ->
-            {Frame.decode(header, body, protocol_module), rest}
-
-          _ ->
-            :error
+          <<body::size(body_length)-bytes, rest::binary>> -> {Frame.decode(header, body), rest}
+          _ -> :error
         end
 
       _ ->
@@ -326,6 +333,8 @@ defmodule Xandra.Cluster.ControlConnection do
 
   ## NimbleOptions validation
 
+  # TODO: replace with :reference NimbleOptions built-in once a version of NimbleOptions
+  # that supports that will be released.
   def __validate_reference__(value) do
     if is_reference(value) do
       {:ok, value}
