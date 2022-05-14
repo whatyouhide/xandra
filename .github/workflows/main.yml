@@ -12,7 +12,7 @@ jobs:
       Test (Elixir ${{ matrix.elixir }},
       OTP ${{ matrix.otp }},
       C* ${{ matrix.cassandra_version }},
-      Native protocol ${{ matrix.cassandra_native_protocol || "negotiated "}})
+      Native protocol ${{ matrix.cassandra_native_protocol || 'auto' }})
     runs-on: ubuntu-18.04
     strategy:
       fail-fast: false
@@ -118,7 +118,7 @@ jobs:
       Test ScyllaDB (Elixir ${{ matrix.elixir }},
       OTP ${{ matrix.otp }},
       Scylla ${{ matrix.scylla_version }},
-      Native protocol ${{ matrix.cassandra_native_protocol || "negotiated "}})
+      Native protocol ${{ matrix.cassandra_native_protocol || 'auto' }})
     runs-on: ubuntu-18.04
     strategy:
       fail-fast: false
