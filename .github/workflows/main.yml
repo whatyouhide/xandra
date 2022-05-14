@@ -14,23 +14,36 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Without a forced protocol (let Xandra figure it out), newest C*.
           - otp: "24.2"
             elixir: "1.13"
-            cassandra_version: "4"
-            cassandra_native_protocol: "v4"
+            cassandra_version: "4.0"
             lint: true
+
+          # Without a forced protocol (let Xandra figure it out), older C*.
           - otp: "24.2"
             elixir: "1.13"
             cassandra_version: "3"
-            cassandra_native_protocol: "v3"
+
+          # Native protocol v4 on C* version 3.
           - otp: "24.2"
             elixir: "1.13"
             cassandra_version: "3"
             cassandra_native_protocol: "v4"
+
+          # Force an older protocol: native protocol v3 on newer C* 4.
+          - otp: "24.2"
+            elixir: "1.13"
+            cassandra_version: "4.0"
+            cassandra_native_protocol: "v3"
+
+          # Old C* version, 2.2. We don't specify the native protocol
+          # because Xandra should not use anything that the server doesn't
+          # support anyways.
           - otp: "24.2"
             elixir: "1.13"
             cassandra_version: "2.2"
-            cassandra_native_protocol: "v3"
+
           # Oldest supported Elixir/OTP matrix.
           # Elixir 1.9 supports OTP 20, but telemetry doesn't, so we force
           # OTP 21 here.
@@ -39,7 +52,7 @@ jobs:
             cassandra_version: "3"
             cassandra_native_protocol: "v3"
     env:
-      GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MIX_ENV: test
       CASSANDRA_VERSION: ${{ matrix.cassandra_version }}
       CASSANDRA_NATIVE_PROTOCOL: ${{ matrix.cassandra_native_protocol }}
@@ -103,14 +116,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Negotiated native protocol.
           - otp: "24.2"
             elixir: "1.13"
             scylla_version: "2.3.1"
-            cassandra_native_protocol: "v3"
+
           - otp: "24.2"
             elixir: "1.13"
-            cassandra_version: "2.3.0"
+            scylla_version: "2.3.0"
             cassandra_native_protocol: "v4"
+
           - otp: "24.2"
             elixir: "1.13"
             scylla_version: "2.0.0"

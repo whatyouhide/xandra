@@ -49,7 +49,7 @@ defmodule PreparedTest do
     assert Enum.to_list(page) == []
   end
 
-  @tag :cassandra_specific
+  @tag requires_server_type: :cassandra
   test "dynamic result columns", %{conn: conn} do
     statement = "INSERT INTO users (code, name) VALUES (3, 'Nelson') IF NOT EXISTS"
     assert {:ok, prepared} = Xandra.prepare(conn, statement)

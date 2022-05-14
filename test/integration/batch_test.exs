@@ -136,7 +136,7 @@ defmodule BatchTest do
     assert inspect(batch) == expected
   end
 
-  @tag :cassandra_specific
+  @tag requires_server_type: :cassandra
   test "batch query with lightweight transactions", %{conn: conn} do
     batch =
       Batch.new(:logged)

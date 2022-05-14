@@ -3,7 +3,7 @@ defmodule AtomKeysTest do
 
   alias Xandra.{SchemaChange, SetKeyspace, Void}
 
-  @moduletag :cassandra_specific
+  @moduletag requires_server_type: :cassandra
 
   test "each possible result and prepared", %{conn: conn, keyspace: keyspace} do
     result = Xandra.execute!(conn, "USE #{keyspace}")

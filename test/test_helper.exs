@@ -5,10 +5,10 @@ defmodule XandraTest.IntegrationCase do
     show_sensitive_data_on_connection_error: true
   ]
 
-  @default_start_options (case System.get_env("CASSANDRA_NATIVE_PROTOCOL") do
+  @default_start_options (case System.get_env("CASSANDRA_NATIVE_PROTOCOL", "") do
                             "v3" -> Keyword.put(@default_start_options, :protocol_version, :v3)
                             "v4" -> Keyword.put(@default_start_options, :protocol_version, :v4)
-                            nil -> @default_start_options
+                            "" -> @default_start_options
                           end)
 
   using options do
@@ -69,11 +69,26 @@ end
 
 Logger.configure(level: :info)
 
-excluded =
-  if vsn = XandraTest.IntegrationCase.protocol_version() do
-    [skip_for_native_protocol: vsn]
-  else
-    []
+cassandra_version = System.get_env("CASSANDRA_VERSION", "")
+protocol_version = XandraTest.IntegrationCase.protocol_version()
+
+ex_unit_start_opts =
+  cond do
+    # C* 2.x doesn't support native protocol v4+, so we skip those.
+    String.starts_with?(cassandra_version, "2") ->
+      [exclude: [requires_native_protocol: :v4]]
+
+    # We first exclude all of the tests that require a specific protocol, and
+    # then we re-include all of the ones that require the specific
+    # protocol we forced.
+    protocol_version ->
+      [
+        exclude: [:requires_native_protocol],
+        include: [requires_native_protocol: protocol_version]
+      ]
+
+    true ->
+      []
   end
 
-ExUnit.start(exclude: excluded)
+ExUnit.start(ex_unit_start_opts)

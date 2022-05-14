@@ -3,7 +3,7 @@ defmodule ResultsTest do
 
   alias Xandra.{SchemaChange, SetKeyspace, Void}
 
-  @tag :cassandra_specific
+  @tag requires_server_type: :cassandra
   test "each possible result", %{conn: conn, keyspace: keyspace} do
     assert {:ok, result} = Xandra.execute(conn, "USE #{keyspace}")
     assert result == %SetKeyspace{keyspace: String.downcase(keyspace)}
@@ -47,9 +47,9 @@ defmodule ResultsTest do
 
   # Regression test for https://github.com/lexhide/xandra/issues/187.
   # This is skipped because for now we shouldn't run it on all C* versions.
-  @tag :cassandra_specific
+  @tag requires_server_type: :cassandra
+  @tag requires_native_protocol: :v3
   @tag :skip
-  @tag skip_for_native_protocol: :v4
   test "SCHEMA_CHANGE regression in protocol v3", %{keyspace: keyspace} do
     {:ok, conn} = Xandra.start_link(protocol_version: :v3)
     Xandra.execute!(conn, "USE #{keyspace}")
@@ -71,8 +71,8 @@ defmodule ResultsTest do
   end
 
   describe "SCHEMA_CHANGE updates since native protocol v4" do
-    @describetag :cassandra_specific
-    @describetag skip_for_native_protocol: :v3
+    @describetag requires_server_type: :cassandra
+    @describetag requires_native_protocol: :v4
 
     setup %{start_options: start_options} do
       start_options = Keyword.put(start_options, :protocol_version, :v4)

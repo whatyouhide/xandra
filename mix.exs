@@ -61,7 +61,7 @@ defmodule Xandra.Mixfile do
 
   defp aliases() do
     [
-      "test.scylladb": "test --exclude encryption --exclude cassandra_specific",
+      "test.scylladb": "test --exclude encryption --exclude requires_server_type:cassandra",
       "test.clustering": "run test_clustering/run.exs"
     ]
   end
