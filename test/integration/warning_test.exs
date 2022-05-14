@@ -50,30 +50,28 @@ defmodule WarningTest do
     assert Enum.sort(result) == fruit_names
   end
 
-  # This test is broken when using native protocol v3 on C* 4.0.
-  # See: https://github.com/lexhide/xandra/issues/218
-  # TODO: Run this on C* 4.1 when it will be released.
-  @tag requires_native_protocol: :v3
-  @tag :skip
-  test "regression for crash after warning", %{keyspace: keyspace, start_options: start_options} do
-    start_options = Keyword.put(start_options, :protocol_version, :v3)
-    conn = start_supervised!({Xandra, start_options})
+  # TODO: re-enable this test when we can test on C* 4.1.
+  # @tag requires_native_protocol: :v3
+  # @tag :skip_for_cassandra4_with_protocol_v3
+  # test "regression for crash after warning", %{keyspace: keyspace, start_options: start_options} do
+  #   start_options = Keyword.put(start_options, :protocol_version, :v3)
+  #   conn = start_supervised!({Xandra, start_options})
 
-    Xandra.execute!(conn, "USE #{keyspace}")
+  #   Xandra.execute!(conn, "USE #{keyspace}")
 
-    Xandra.execute!(conn, """
-    CREATE TABLE dimensions (id int, dimension text, PRIMARY KEY (id, dimension))
-    """)
+  #   Xandra.execute!(conn, """
+  #   CREATE TABLE dimensions (id int, dimension text, PRIMARY KEY (id, dimension))
+  #   """)
 
-    ids = Enum.take_random(1..100_000, 10)
-    ids_as_params = Enum.map_join(ids, ", ", fn _ -> "?" end)
+  #   ids = Enum.take_random(1..100_000, 10)
+  #   ids_as_params = Enum.map_join(ids, ", ", fn _ -> "?" end)
 
-    query = """
-    SELECT * FROM dimensions
-    WHERE id IN (#{ids_as_params})
-    GROUP BY id, dimension;
-    """
+  #   query = """
+  #   SELECT * FROM dimensions
+  #   WHERE id IN (#{ids_as_params})
+  #   GROUP BY id, dimension;
+  #   """
 
-    Xandra.execute!(conn, query, Enum.map(ids, &{"int", &1}))
-  end
+  #   Xandra.execute!(conn, query, Enum.map(ids, &{"int", &1}))
+  # end
 end

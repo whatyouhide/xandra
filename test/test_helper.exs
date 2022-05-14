@@ -84,11 +84,37 @@ ex_unit_start_opts =
     protocol_version ->
       [
         exclude: [:requires_native_protocol],
-        include: [requires_native_protocol: protocol_version]
+        include: [requires_native_protocol: Atom.to_string(protocol_version)]
       ]
+
+    # If not native protocol was specified, we default to negotiating, which
+    # picks the latest. We should skip tests that *require* older versions.
+    is_nil(protocol_version) ->
+      [exclude: [requires_native_protocol: :v3]]
 
     true ->
       []
   end
 
+# Some tests are broken when using native protocol v3 on C* 4.0.
+# See: https://github.com/lexhide/xandra/issues/218
+# TODO: Remove this once we run tests on C* 4.1 (once it's released).
+cassandra_version_with_bug? =
+  cassandra_version == (_default_is_4 = "") or
+    String.starts_with?(cassandra_version, "4")
+
+ex_unit_start_opts =
+  if cassandra_version_with_bug? and protocol_version == :v3 do
+    Keyword.update(
+      ex_unit_start_opts,
+      :exclude,
+      [:skip_for_cassandra4_with_protocol_v3],
+      &(&1 ++ [:skip_for_cassandra4_with_protocol_v3])
+    )
+  else
+    ex_unit_start_opts
+  end
+
+require Logger
+Logger.info("Running test suite with options: #{inspect(ex_unit_start_opts)}")
 ExUnit.start(ex_unit_start_opts)
