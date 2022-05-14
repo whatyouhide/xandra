@@ -49,4 +49,31 @@ defmodule WarningTest do
     result = for %{"name" => name} <- Xandra.execute!(conn, "SELECT name FROM fruits"), do: name
     assert Enum.sort(result) == fruit_names
   end
+
+  # This test is broken when using native protocol v3 on C* 4.0.
+  # See: https://github.com/lexhide/xandra/issues/218
+  # TODO: Run this on C* 4.1 when it will be released.
+  @tag skip_for_native_protocol: :v4
+  @tag :skip
+  test "regression for crash after warning", %{keyspace: keyspace, start_options: start_options} do
+    start_options = Keyword.put(start_options, :protocol_version, :v3)
+    conn = start_supervised!({Xandra, start_options})
+
+    Xandra.execute!(conn, "USE #{keyspace}")
+
+    Xandra.execute!(conn, """
+    CREATE TABLE dimensions (id int, dimension text, PRIMARY KEY (id, dimension))
+    """)
+
+    ids = Enum.take_random(1..100_000, 10)
+    ids_as_params = Enum.map_join(ids, ", ", fn _ -> "?" end)
+
+    query = """
+    SELECT * FROM dimensions
+    WHERE id IN (#{ids_as_params})
+    GROUP BY id, dimension;
+    """
+
+    Xandra.execute!(conn, query, Enum.map(ids, &{"int", &1}))
+  end
 end
