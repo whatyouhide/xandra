@@ -69,52 +69,20 @@ end
 
 Logger.configure(level: :info)
 
-cassandra_version = System.get_env("CASSANDRA_VERSION", "")
+cassandra_version = System.get_env("CASSANDRA_VERSION", "4")
 protocol_version = XandraTest.IntegrationCase.protocol_version()
 
-ex_unit_start_opts =
-  cond do
-    # C* 2.x doesn't support native protocol v4+, so we skip those.
-    String.starts_with?(cassandra_version, "2") ->
-      [exclude: [requires_native_protocol: :v4]]
-
-    # We first exclude all of the tests that require a specific protocol, and
-    # then we re-include all of the ones that require the specific
-    # protocol we forced.
-    protocol_version ->
-      [
-        exclude: [:requires_native_protocol],
-        include: [requires_native_protocol: Atom.to_string(protocol_version)]
-      ]
-
-    # If not native protocol was specified, we default to negotiating, which
-    # picks the latest. We should skip tests that *require* older versions.
-    is_nil(protocol_version) ->
-      [exclude: [requires_native_protocol: :v3]]
-
-    true ->
-      []
-  end
-
-# Some tests are broken when using native protocol v3 on C* 4.0.
-# See: https://github.com/lexhide/xandra/issues/218
-# TODO: Remove this once we run tests on C* 4.1 (once it's released).
-cassandra_version_with_bug? =
-  cassandra_version == (_default_is_4 = "") or
-    String.starts_with?(cassandra_version, "4")
-
-ex_unit_start_opts =
-  if cassandra_version_with_bug? and protocol_version == :v3 do
-    Keyword.update(
-      ex_unit_start_opts,
-      :exclude,
-      [:skip_for_cassandra4_with_protocol_v3],
-      &(&1 ++ [:skip_for_cassandra4_with_protocol_v3])
-    )
+max_supported_protocol =
+  if String.starts_with?(cassandra_version, "2") do
+    :v3
   else
-    ex_unit_start_opts
+    Xandra.Frame.max_supported_protocol()
   end
 
-require Logger
-Logger.info("Running test suite with options: #{inspect(ex_unit_start_opts)}")
-ExUnit.start(ex_unit_start_opts)
+native_protocol_excludes =
+  case protocol_version || max_supported_protocol do
+    :v3 -> [min_native_protocol: :v4]
+    :v4 -> [max_native_protocol: :v3]
+  end
+
+ExUnit.start(exclude: native_protocol_excludes)

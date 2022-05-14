@@ -1,4 +1,4 @@
-ARG SCYLLA_VERSION=2.3.1
+ARG SCYLLA_VERSION
 
 FROM scylladb/scylla:$SCYLLA_VERSION
 
@@ -8,4 +8,5 @@ RUN if [ "$AUTHENTICATION" = true ]; then \
   sed -i -e "s/\(authenticator: \)AllowAllAuthenticator/\1PasswordAuthenticator/" /etc/scylla/scylla.yaml; \
   fi
 
-RUN sed -i -e "s/enable_user_defined_functions: false/enable_user_defined_functions: true/" /etc/scylla/scylla.yaml
+RUN echo "experimental_features:\n    - udf" >> /etc/scylla/scylla.yaml && \
+  echo "enable_user_defined_functions: true" >> /etc/scylla/scylla.yaml

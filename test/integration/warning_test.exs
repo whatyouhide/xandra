@@ -3,8 +3,6 @@ defmodule WarningTest do
 
   alias Xandra.Batch
 
-  @moduletag requires_native_protocol: :v4
-
   setup_all %{keyspace: keyspace, start_options: start_options} do
     {:ok, conn} = Xandra.start_link(start_options)
     Xandra.execute!(conn, "USE #{keyspace}")
@@ -20,6 +18,7 @@ defmodule WarningTest do
     :ok
   end
 
+  @tag min_native_protocol: :v4
   test "batch of type \"unlogged\" producing warning", %{conn: conn} do
     # Batches spanning more partitions than "unlogged_batch_across_partitions_warn_threshold"
     # (default: 10) generate a warning. Right now we don't use the warning but the warning
@@ -50,28 +49,31 @@ defmodule WarningTest do
     assert Enum.sort(result) == fruit_names
   end
 
-  # TODO: re-enable this test when we can test on C* 4.1.
-  # @tag requires_native_protocol: :v3
-  # @tag :skip_for_cassandra4_with_protocol_v3
-  # test "regression for crash after warning", %{keyspace: keyspace, start_options: start_options} do
-  #   start_options = Keyword.put(start_options, :protocol_version, :v3)
-  #   conn = start_supervised!({Xandra, start_options})
+  # TODO: unskip this test when we can test on C* 4.1.
+  @tag :skip
+  @tag max_native_protocol: :v3
+  test "server warnings before native protocol v4", %{
+    keyspace: keyspace,
+    start_options: start_options
+  } do
+    start_options = Keyword.put(start_options, :protocol_version, :v3)
+    conn = start_supervised!({Xandra, start_options})
 
-  #   Xandra.execute!(conn, "USE #{keyspace}")
+    Xandra.execute!(conn, "USE #{keyspace}")
 
-  #   Xandra.execute!(conn, """
-  #   CREATE TABLE dimensions (id int, dimension text, PRIMARY KEY (id, dimension))
-  #   """)
+    Xandra.execute!(conn, """
+    CREATE TABLE dimensions (id int, dimension text, PRIMARY KEY (id, dimension))
+    """)
 
-  #   ids = Enum.take_random(1..100_000, 10)
-  #   ids_as_params = Enum.map_join(ids, ", ", fn _ -> "?" end)
+    ids = Enum.take_random(1..100_000, 10)
+    ids_as_params = Enum.map_join(ids, ", ", fn _ -> "?" end)
 
-  #   query = """
-  #   SELECT * FROM dimensions
-  #   WHERE id IN (#{ids_as_params})
-  #   GROUP BY id, dimension;
-  #   """
+    query = """
+    SELECT * FROM dimensions
+    WHERE id IN (#{ids_as_params})
+    GROUP BY id, dimension;
+    """
 
-  #   Xandra.execute!(conn, query, Enum.map(ids, &{"int", &1}))
-  # end
+    Xandra.execute!(conn, query, Enum.map(ids, &{"int", &1}))
+  end
 end
