@@ -173,10 +173,15 @@ defmodule Xandra do
 
   ## Native protocol
 
-  Xandra supports the Cassandra native protocol versions 3 and 4 through the
-  `:protocol_version` option given to `start_link/1`. For now, it's only
-  possible to force a version on the client side (which by default is v3).
-  See `start_link/1`.
+  Xandra supports the following versions of Cassandra's native protocol:
+  #{Enum.join(Xandra.Frame.supported_protocols(), ", ")}.
+
+  By default, Xandra will negotiate the protocol version with the Cassandra server.
+  Xandra will start by trying to use the highest protocol it supports (which is
+  #{Xandra.Frame.max_supported_protocol()}). If the server rejects that, then
+  Xandra will reconnect with the protocol advertised by the server. If you
+  want to force a specific version of the native protocol that Xandra should use,
+  use the `:protocol_version` option.
 
   ## Logging
 
@@ -318,7 +323,8 @@ defmodule Xandra do
       doc: """
       The enforced version of the Cassandra native protocol to use. If this option
       is not present, Xandra will negotiate the protocol with the server, starting
-      with the most recent one and falling back to older ones if needed.
+      with the most recent one and falling back to older ones if needed. See
+      the [relevant section](#module-native-protocol) in the module documentation.
       """
     ],
     show_sensitive_data_on_connection_error: [
