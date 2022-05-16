@@ -218,7 +218,7 @@ defmodule Xandra.Cluster.ControlConnection do
       |> Frame.encode(protocol_module)
 
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, protocol_module) do
+         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket) do
       :ok = protocol_module.decode_response(frame)
     else
       {:error, reason} ->
@@ -263,7 +263,7 @@ defmodule Xandra.Cluster.ControlConnection do
       |> Frame.encode(protocol_module)
 
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, protocol_module) do
+         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket) do
       %Xandra.Page{} = page = protocol_module.decode_response(frame, query)
       [local_info] = Enum.to_list(page)
       {:ok, local_info}
@@ -283,7 +283,7 @@ defmodule Xandra.Cluster.ControlConnection do
       |> Frame.encode(protocol_module)
 
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, protocol_module) do
+         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket) do
       %Xandra.Page{} = page = protocol_module.decode_response(frame, query)
       {:ok, Enum.to_list(page)}
     end

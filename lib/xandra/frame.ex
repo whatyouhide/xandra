@@ -9,12 +9,16 @@ defmodule Xandra.Frame do
     compressor: nil,
     tracing: false,
     warning: false,
+    custom_payload: false,
     atom_keys?: false
   ]
 
   use Bitwise
 
+  alias Xandra.Protocol.CRC
+
   @supported_protocols [
+    v5: %{module: Xandra.Protocol.V5, request_version: 0x05, response_version: 0x85},
     v4: %{module: Xandra.Protocol.V4, request_version: 0x04, response_version: 0x84},
     v3: %{module: Xandra.Protocol.V3, request_version: 0x03, response_version: 0x83}
   ]
@@ -111,8 +115,8 @@ defmodule Xandra.Frame do
     length
   end
 
-  @spec encode(t(kind), module) :: iodata
-  def encode(%__MODULE__{} = frame, protocol_module) when is_atom(protocol_module) do
+  @spec encode_v4(t(kind), module) :: iodata
+  def encode_v4(%__MODULE__{} = frame, protocol_module) when is_atom(protocol_module) do
     %{
       compressor: compressor,
       tracing: tracing?,
@@ -133,6 +137,74 @@ defmodule Xandra.Frame do
     ]
   end
 
+  def encode(%__MODULE__{} = frame, Xandra.Protocol.V5) do
+    frame
+    |> IO.inspect(label: "Encoding frame")
+    |> encode_v4(Xandra.Protocol.V5)
+    |> encode_v5_wrapper()
+  end
+
+  def encode(%__MODULE__{} = frame, protocol_module) do
+    encode_v4(frame, protocol_module)
+  end
+
+  def encode_v5_wrapper(frame_iodata) do
+    buf = <<>>
+    payload = IO.iodata_to_binary(frame_iodata)
+    payload_length = byte_size(payload)
+
+    buf = eh(buf, payload_length, true)
+    payload_crc = CRC.crc32(payload)
+
+    buf = buf <> payload
+
+    write_uint_le(buf, payload_crc)
+
+    # hd = <<payload_length::17-unsigned-little, 1::1, 0::6>>
+
+    # <<hd::3-bytes, CRC.crc24(hd)::24-unsigned-little, payload::binary,
+    #   CRC.crc32(payload)::32-little-unsigned>>
+  end
+
+  defp eh(buf, payload_length, is_self_contained?) do
+    header_data = payload_length
+
+    header_data =
+      if is_self_contained? do
+        header_data ||| 1 <<< 17
+      else
+        header_data
+      end
+
+    buf = write_uint_le(buf, header_data, 3)
+    header_crc = CRC.crc24(<<header_data::24-integer-little>>)
+    write_uint_le(buf, header_crc, 3)
+  end
+
+  def write_uint_le(buf, i, size \\ 4) do
+    if size == 4 do
+      buf <> <<i::32-unsigned-little>>
+    else
+      Enum.reduce(0..(size - 1), buf, fn j, buf ->
+        shift = j * 8
+        buf <> <<i >>> shift &&& 0xFF>>
+      end)
+    end
+  end
+
+  ## Decoding
+
+  def decode_from_binary(binary, compressor) when is_binary(binary) and is_atom(compressor) do
+    header_length = header_length()
+
+    <<header::size(header_length)-binary, rest::binary>> = binary
+
+    body_length = body_length(header)
+    <<body::size(body_length)-binary, _::binary>> = rest
+
+    decode(header, body, compressor)
+  end
+
   @spec decode(binary, binary, nil | module) :: t(kind)
   def decode(header, body \\ <<>>, compressor \\ nil)
       when is_binary(header) and is_binary(body) and is_atom(compressor) do
@@ -140,6 +212,7 @@ defmodule Xandra.Frame do
 
     compression? = flag_set?(flags, _compression = 0x01)
     tracing? = flag_set?(flags, _tracing = 0x02)
+    custom_payload? = flag_set?(flags, _custom_payload = 0x04)
     warning? = flag_set?(flags, _warning? = 0x08)
 
     kind = Map.fetch!(@response_opcodes, opcode)
@@ -151,6 +224,7 @@ defmodule Xandra.Frame do
       protocol_version: response_version_to_protocol_version(response_version),
       tracing: tracing?,
       warning: warning?,
+      custom_payload: custom_payload?,
       compressor: compressor
     }
   end
