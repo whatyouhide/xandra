@@ -46,10 +46,8 @@ defmodule Xandra.Connection.Utils do
         raise "mismatching CRC for header"
       end
 
-      <<payload_length::17-integer-little, is_self_contained_flag::1, header_padding::6>> =
+      <<payload_length::17-integer-little, is_self_contained_flag::1, _header_padding::6>> =
         header_contents
-
-      IO.inspect(header_padding, label: "header pading")
 
       self_contained? = is_self_contained_flag == 0
 
@@ -168,10 +166,16 @@ defmodule Xandra.Connection.Utils do
     payload =
       Frame.new(:auth_response)
       |> protocol_module.encode_request(requested_options, options)
-      |> Frame.encode_v4(protocol_module)
+      |> Frame.encode(protocol_module)
+
+    protocol_format =
+      case protocol_module do
+        Xandra.Protocol.V5 -> :v5_or_more
+        _other -> :v4_or_less
+      end
 
     with :ok <- transport.send(socket, payload),
-         {:ok, frame} <- recv_frame(transport, socket, :v4_or_less, compressor) do
+         {:ok, frame} <- recv_frame(transport, socket, protocol_format, compressor) do
       case frame do
         %Frame{kind: :auth_success} -> :ok
         %Frame{kind: :error} -> {:error, protocol_module.decode_response(frame)}

@@ -5,7 +5,7 @@ defmodule Xandra.Protocol.CRCTest do
 
   describe "crc24/1" do
     test "calculates the CRC24 of the given number of bytes out of the given integer" do
-      binary = <<113, 0, 2, 43, 55, 20>>
+      binary = <<113, 0, 2>>
       expected_crc24 = 1_324_843
 
       assert CRC.crc24(binary) == expected_crc24

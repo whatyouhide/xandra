@@ -139,7 +139,6 @@ defmodule Xandra.Frame do
 
   def encode(%__MODULE__{} = frame, Xandra.Protocol.V5) do
     frame
-    |> IO.inspect(label: "Encoding frame")
     |> encode_v4(Xandra.Protocol.V5)
     |> encode_v5_wrapper()
   end

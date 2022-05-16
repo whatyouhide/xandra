@@ -217,8 +217,15 @@ defmodule Xandra.Cluster.ControlConnection do
       |> protocol_module.encode_request(["STATUS_CHANGE", "TOPOLOGY_CHANGE"])
       |> Frame.encode(protocol_module)
 
+    protocol_format =
+      case protocol_module do
+        Xandra.Protocol.V5 -> :v5_or_more
+        _other -> :v4_or_less
+      end
+
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket) do
+         {:ok, %Frame{} = frame} <-
+           Utils.recv_frame(transport, socket, protocol_format, _compressor = nil) do
       :ok = protocol_module.decode_response(frame)
     else
       {:error, reason} ->
@@ -262,8 +269,15 @@ defmodule Xandra.Cluster.ControlConnection do
       |> protocol_module.encode_request(query)
       |> Frame.encode(protocol_module)
 
+    protocol_format =
+      case protocol_module do
+        Xandra.Protocol.V5 -> :v5_or_more
+        _other -> :v4_or_less
+      end
+
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket) do
+         {:ok, %Frame{} = frame} <-
+           Utils.recv_frame(transport, socket, protocol_format, _compressor = nil) do
       %Xandra.Page{} = page = protocol_module.decode_response(frame, query)
       [local_info] = Enum.to_list(page)
       {:ok, local_info}
@@ -282,8 +296,15 @@ defmodule Xandra.Cluster.ControlConnection do
       |> protocol_module.encode_request(query)
       |> Frame.encode(protocol_module)
 
+    protocol_format =
+      case protocol_module do
+        Xandra.Protocol.V5 -> :v5_or_more
+        _other -> :v4_or_less
+      end
+
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket) do
+         {:ok, %Frame{} = frame} <-
+           Utils.recv_frame(transport, socket, protocol_format, _compressor = nil) do
       %Xandra.Page{} = page = protocol_module.decode_response(frame, query)
       {:ok, Enum.to_list(page)}
     end

@@ -226,7 +226,6 @@ defmodule Xandra.Connection do
       {:ok, query, response, %{state | current_keyspace: keyspace}}
     else
       %_{} = response ->
-        IO.inspect(response, label: "deowiqjdfw")
         {:ok, query, response, state}
 
       {:error, reason} ->
