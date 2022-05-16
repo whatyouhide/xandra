@@ -23,7 +23,8 @@ defmodule Xandra.Cluster.ControlConnection do
                  address: [type: :any, required: true],
                  port: [type: {:in, 0..65355}, required: true],
                  connection_options: [type: :keyword_list, required: true],
-                 autodiscovery: [type: :boolean, required: true]
+                 autodiscovery: [type: :boolean, required: true],
+                 protocol_version: [type: {:in, [:v3, :v4]}]
                )
 
   defstruct [

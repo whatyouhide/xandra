@@ -26,12 +26,15 @@ defmodule ClusteringTest do
 
     log =
       capture_log(fn ->
-        {:ok, cluster} =
-          Xandra.Cluster.start_link(
-            nodes: ["127.0.0.1", "127.0.0.1", "127.0.0.2"],
-            name: TestCluster,
-            load_balancing: :random
+        cluster =
+          start_supervised!(
+            {Xandra.Cluster,
+             nodes: ["127.0.0.1", "127.0.0.1", "127.0.0.2"],
+             name: TestCluster,
+             load_balancing: :random}
           )
+
+        true = Process.link(cluster)
 
         assert await_connected(cluster, _options = [], &Xandra.execute!(&1, statement))
 
