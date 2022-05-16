@@ -49,7 +49,7 @@ services:
       context: ./test/docker
       dockerfile: cassandra_encrypted.dockerfile
       args:
-        CASSANDRA_VERSION: "${CASSANDRA_VERSION:-4}"
+        CASSANDRA_VERSION: "3"
     ports:
       - "9044:9042"
     environment:
