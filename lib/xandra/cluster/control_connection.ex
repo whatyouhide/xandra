@@ -23,8 +23,7 @@ defmodule Xandra.Cluster.ControlConnection do
                  address: [type: :any, required: true],
                  port: [type: {:in, 0..65355}, required: true],
                  connection_options: [type: :keyword_list, required: true],
-                 autodiscovery: [type: :boolean, required: true],
-                 protocol_version: [type: {:in, [:v3, :v4]}]
+                 autodiscovery: [type: :boolean, required: true]
                )
 
   defstruct [
@@ -104,6 +103,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
         with {:ok, supported_options, protocol_module} <-
                Utils.request_options(transport, socket, protocol_version),
+             Logger.debug("Supported options: #{inspect(supported_options)}"),
              data = %__MODULE__{data | protocol_module: protocol_module},
              :ok <-
                startup_connection(transport, socket, supported_options, protocol_module, options),
@@ -111,6 +111,7 @@ defmodule Xandra.Cluster.ControlConnection do
                maybe_discover_peers(data.autodiscovery, transport, socket, protocol_module),
              :ok <- register_to_events(transport, socket, protocol_module),
              :ok <- inet_mod(transport).setopts(socket, active: true) do
+          Logger.debug("Established control connection (protocol #{inspect(protocol_module)})")
           {:ok, data} = report_active(data)
 
           if not is_nil(peers_or_nil) do
@@ -125,6 +126,11 @@ defmodule Xandra.Cluster.ControlConnection do
             {:keep_state, data, {:next_event, :internal, :connect}}
 
           {:error, %Xandra.Error{} = error} ->
+            Logger.error(
+              "Failed to establish control connection because of Cassandra error: " <>
+                Exception.message(error)
+            )
+
             {:stop, error}
 
           {:error, _reason} = error ->
@@ -133,19 +139,25 @@ defmodule Xandra.Cluster.ControlConnection do
             {:keep_state, data, timeout_action}
         end
 
-      {:error, _reason} ->
+      {:error, reason} ->
+        Logger.debug(
+          "Failed to connect to #{inspect(address)}:#{port}: #{:inet.format_error(reason)}"
+        )
+
         timeout_action = {{:timeout, :reconnect}, @default_backoff, data}
         {:keep_state_and_data, timeout_action}
     end
   end
 
-  def disconnected(:info, {kind, socket, _other}, %__MODULE__{socket: socket})
+  def disconnected(:info, {kind, socket, reason}, %__MODULE__{socket: socket})
       when kind in [:tcp_error, :ssl_error] do
+    Logger.debug("Socket error: #{:inet.format_error(reason)}")
     :keep_state_and_data
   end
 
   def disconnected(:info, {kind, socket}, %__MODULE__{socket: socket})
       when kind in [:tcp_closed, :ssl_closed] do
+    Logger.debug("Socket closed")
     :keep_state_and_data
   end
 
@@ -179,7 +191,11 @@ defmodule Xandra.Cluster.ControlConnection do
 
   ## Helper functions
 
-  defp disconnect({:error, _reason}, %__MODULE__{} = data) do
+  defp disconnect({:error, reason}, %__MODULE__{} = data) do
+    Logger.debug(
+      "Disconnecting from #{address_to_human_readable_source(data)} because of error: #{:inet.format_error(reason)}"
+    )
+
     _ = data.transport.close(data.socket)
     {:connect, :reconnect, %__MODULE__{data | socket: nil, buffer: <<>>}}
   end

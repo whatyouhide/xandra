@@ -3,11 +3,11 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
   alias Xandra.Cluster.ControlConnection
 
-  @protocol_module (case System.get_env("CASSANDRA_NATIVE_PROTOCOL") do
-                      "v3" -> Xandra.Protocol.V3
-                      "v4" -> Xandra.Protocol.V4
-                      nil -> nil
-                    end)
+  @protocol_version (case System.get_env("CASSANDRA_NATIVE_PROTOCOL", "") do
+                       "v3" -> :v3
+                       "v4" -> :v4
+                       "" -> nil
+                     end)
 
   test "reporting data upon successful connection" do
     parent = self()
@@ -21,7 +21,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       node_ref: node_ref,
       address: 'localhost',
       port: 9042,
-      connection_options: [protocol_module: @protocol_module],
+      connection_options: [protocol_version: @protocol_version],
       autodiscovery: true
     ]
 
@@ -43,7 +43,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       node_ref: node_ref,
       address: 'localhost',
       port: 9042,
-      connection_options: [protocol_module: @protocol_module],
+      connection_options: [protocol_version: @protocol_version],
       autodiscovery: false
     ]
 

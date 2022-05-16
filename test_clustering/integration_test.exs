@@ -11,6 +11,12 @@ defmodule Xandra.TestClustering.IntegrationTest do
 
   import Xandra.TestClustering.DockerHelpers
 
+  @protocol_version (case System.get_env("CASSANDRA_NATIVE_PROTOCOL", "") do
+                       "v3" -> :v3
+                       "v4" -> :v4
+                       "" -> nil
+                     end)
+
   setup do
     IO.puts("🚧 Starting Cassandra cluster with docker-compose up -d...")
     nodes = ["seed", "node1", "node2", "node3"]
@@ -37,7 +43,12 @@ defmodule Xandra.TestClustering.IntegrationTest do
   test "if a node goes down, the cluster removes its control connection and pool" do
     conn_count_in_cluster = 4
 
-    {:ok, cluster} = Xandra.Cluster.start_link(autodiscovery: true, nodes: ["node1", "seed"])
+    {:ok, cluster} =
+      Xandra.Cluster.start_link(
+        autodiscovery: true,
+        nodes: ["node1", "seed"],
+        protocol_version: @protocol_version
+      )
 
     wait_for_passing(60_000, fn ->
       assert %Xandra.Cluster{} = cluster_state = :sys.get_state(cluster)
@@ -60,7 +71,12 @@ defmodule Xandra.TestClustering.IntegrationTest do
   test "if a node goes down and then rejoins, the cluster readds its control connection and pool" do
     conn_count_in_cluster = 4
 
-    {:ok, cluster} = Xandra.Cluster.start_link(autodiscovery: true, nodes: ["node1", "seed"])
+    {:ok, cluster} =
+      Xandra.Cluster.start_link(
+        autodiscovery: true,
+        nodes: ["node1", "seed"],
+        protocol_version: @protocol_version
+      )
 
     wait_for_passing(60_000, fn ->
       assert %Xandra.Cluster{} = cluster_state = :sys.get_state(cluster)
@@ -90,7 +106,12 @@ defmodule Xandra.TestClustering.IntegrationTest do
   test "connect and discover peers" do
     conn_count_in_cluster = 4
 
-    {:ok, cluster} = Xandra.Cluster.start_link(autodiscovery: true, nodes: ["node1", "seed"])
+    {:ok, cluster} =
+      Xandra.Cluster.start_link(
+        autodiscovery: true,
+        nodes: ["node1", "seed"],
+        protocol_version: @protocol_version
+      )
 
     cluster_state =
       wait_for_passing(60_000, fn ->

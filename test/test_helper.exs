@@ -67,7 +67,7 @@ defmodule XandraTest.IntegrationCase do
   def protocol_version, do: unquote(@default_start_options[:protocol_version])
 end
 
-Logger.configure(level: :info)
+Logger.configure(level: :debug)
 
 excluded =
   if vsn = XandraTest.IntegrationCase.protocol_version() do
