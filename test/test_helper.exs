@@ -8,6 +8,7 @@ defmodule XandraTest.IntegrationCase do
   @default_start_options (case System.get_env("CASSANDRA_NATIVE_PROTOCOL") do
                             "v3" -> Keyword.put(@default_start_options, :protocol_version, :v3)
                             "v4" -> Keyword.put(@default_start_options, :protocol_version, :v4)
+                            "v5" -> Keyword.put(@default_start_options, :protocol_version, :v5)
                             nil -> @default_start_options
                           end)
 
@@ -67,7 +68,7 @@ defmodule XandraTest.IntegrationCase do
   def protocol_version, do: unquote(@default_start_options[:protocol_version])
 end
 
-Logger.configure(level: :debug)
+Logger.configure(level: :info)
 
 excluded =
   if vsn = XandraTest.IntegrationCase.protocol_version() do
