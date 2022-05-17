@@ -896,7 +896,7 @@ defmodule Xandra do
   two-element tuple specifying the type used to encode the value and the value
   itself; when `query` is a prepared query, this is not necessary (and values
   can just be values) as the type information is encoded in the prepared
-  query. See the module documenatation for more information about query
+  query. See the module documentation for more information about query
   parameters, types, and encoding values.
 
   ## Examples
