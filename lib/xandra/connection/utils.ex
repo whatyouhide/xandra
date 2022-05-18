@@ -1,7 +1,7 @@
 defmodule Xandra.Connection.Utils do
   @moduledoc false
 
-  alias Xandra.{ConnectionError, Error, Frame, Protocol.CRC}
+  alias Xandra.{ConnectionError, Error, Frame}
 
   require Logger
 
@@ -13,56 +13,13 @@ defmodule Xandra.Connection.Utils do
   def recv_frame(transport, socket, protocol_format, compressor)
       when transport in [:gen_tcp, :ssl] and protocol_format in [:v4_or_less, :v5_or_more] and
              is_atom(compressor) do
+    fetch_bytes_fun = fn fetch_state, byte_count ->
+      with {:ok, binary} <- transport.recv(socket, byte_count), do: {:ok, binary, fetch_state}
+    end
+
     case protocol_format do
-      :v4_or_less -> recv_frame_v4(transport, socket, compressor)
-      :v5_or_more -> recv_frame_v5(transport, socket, compressor)
-    end
-  end
-
-  defp recv_frame_v4(transport, socket, compressor) do
-    length = Frame.header_length()
-
-    with {:ok, header} <- transport.recv(socket, length) do
-      case Frame.body_length(header) do
-        0 ->
-          {:ok, Frame.decode(header)}
-
-        body_length ->
-          with {:ok, body} <- transport.recv(socket, body_length),
-               do: {:ok, Frame.decode(header, body, compressor)}
-      end
-    end
-  end
-
-  defp recv_frame_v5(transport, socket, compressor) do
-    recv_frame_v5(transport, socket, compressor, _payload_acc = <<>>)
-  end
-
-  defp recv_frame_v5(transport, socket, compressor, payload_acc) do
-    with {:ok, header} <- transport.recv(socket, 6) do
-      <<header_contents::3-bytes, crc24_of_header::24-integer-little>> = header
-
-      if crc24_of_header != CRC.crc24(header_contents) do
-        raise "mismatching CRC for header"
-      end
-
-      <<payload_length::17-integer-little, is_self_contained_flag::1, _header_padding::6>> =
-        header_contents
-
-      self_contained? = is_self_contained_flag == 0
-
-      case transport.recv(socket, payload_length + 4) do
-        {:ok, <<payload::size(payload_length)-bytes, crc32_of_payload::32-integer-little>>} ->
-          if crc32_of_payload != CRC.crc32(payload) do
-            raise "mismatching CRC32 for payload"
-          end
-
-          if self_contained? do
-            {:ok, Frame.decode_from_binary(payload, compressor)}
-          else
-            recv_frame_v5(transport, socket, compressor, payload_acc <> payload)
-          end
-      end
+      :v4_or_less -> Frame.decode_v4(fetch_bytes_fun, :no_fetch_state, compressor)
+      :v5_or_more -> Frame.decode_v5(fetch_bytes_fun, :no_fetch_state, compressor)
     end
   end
 

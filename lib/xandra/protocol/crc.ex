@@ -14,8 +14,8 @@ defmodule Xandra.Protocol.CRC do
   # CRC32_INITIAL = zlib.crc32(b("\xfa\x2d\x55\xca"))
   @crc32_init :erlang.crc32(<<0xFA, 0x2D, 0x55, 0xCA>>)
 
-  @spec crc32(binary()) :: non_neg_integer()
-  def crc32(data) when is_binary(data) do
+  @spec crc32(iodata()) :: non_neg_integer()
+  def crc32(data) do
     :erlang.crc32(@crc32_init, data)
   end
 
