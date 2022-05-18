@@ -11,12 +11,7 @@ defmodule Xandra.TestClustering.IntegrationTest do
 
   import Xandra.TestClustering.DockerHelpers
 
-  @protocol_version (case System.get_env("CASSANDRA_NATIVE_PROTOCOL", "") do
-                       "v3" -> :v3
-                       "v4" -> :v4
-                       "v5" -> :v5
-                       "" -> nil
-                     end)
+  @protocol_version XandraTest.IntegrationCase.protocol_version()
 
   setup do
     IO.puts("🚧 Starting Cassandra cluster with docker-compose up -d...")

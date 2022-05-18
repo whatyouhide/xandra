@@ -168,11 +168,7 @@ defmodule Xandra.Connection.Utils do
       |> protocol_module.encode_request(requested_options, options)
       |> Frame.encode(protocol_module)
 
-    protocol_format =
-      case protocol_module do
-        Xandra.Protocol.V5 -> :v5_or_more
-        _other -> :v4_or_less
-      end
+    protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
 
     with :ok <- transport.send(socket, payload),
          {:ok, frame} <- recv_frame(transport, socket, protocol_format, compressor) do

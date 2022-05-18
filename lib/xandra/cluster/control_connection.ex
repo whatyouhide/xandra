@@ -149,15 +149,17 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  def disconnected(:info, {kind, socket, reason}, %__MODULE__{socket: socket})
+  # TCP/SSL messages that we get when we're already in the "disconnected" state can
+  # be safely ignored.
+  def disconnected(:info, {kind, socket, _reason}, %__MODULE__{socket: socket})
       when kind in [:tcp_error, :ssl_error] do
-    Logger.debug("Socket error: #{:inet.format_error(reason)}")
     :keep_state_and_data
   end
 
+  # TCP/SSL messages that we get when we're already in the "disconnected" state can
+  # be safely ignored.
   def disconnected(:info, {kind, socket}, %__MODULE__{socket: socket})
       when kind in [:tcp_closed, :ssl_closed] do
-    Logger.debug("Socket closed")
     :keep_state_and_data
   end
 
@@ -234,11 +236,7 @@ defmodule Xandra.Cluster.ControlConnection do
       |> protocol_module.encode_request(["STATUS_CHANGE", "TOPOLOGY_CHANGE"])
       |> Frame.encode(protocol_module)
 
-    protocol_format =
-      case protocol_module do
-        Xandra.Protocol.V5 -> :v5_or_more
-        _other -> :v4_or_less
-      end
+    protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
 
     with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <-
@@ -286,11 +284,7 @@ defmodule Xandra.Cluster.ControlConnection do
       |> protocol_module.encode_request(query)
       |> Frame.encode(protocol_module)
 
-    protocol_format =
-      case protocol_module do
-        Xandra.Protocol.V5 -> :v5_or_more
-        _other -> :v4_or_less
-      end
+    protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
 
     with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <-
@@ -313,11 +307,7 @@ defmodule Xandra.Cluster.ControlConnection do
       |> protocol_module.encode_request(query)
       |> Frame.encode(protocol_module)
 
-    protocol_format =
-      case protocol_module do
-        Xandra.Protocol.V5 -> :v5_or_more
-        _other -> :v4_or_less
-      end
+    protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
 
     with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <-

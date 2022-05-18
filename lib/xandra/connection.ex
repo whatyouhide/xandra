@@ -163,11 +163,7 @@ defmodule Xandra.Connection do
           |> state.protocol_module.encode_request(prepared)
           |> Frame.encode(state.protocol_module)
 
-        protocol_format =
-          case state.protocol_module do
-            Xandra.Protocol.V5 -> :v5_or_more
-            _other -> :v4_or_less
-          end
+        protocol_format = Xandra.Protocol.frame_protocol_format(state.protocol_module)
 
         with :ok <- transport.send(socket, payload),
              {:ok, %Frame{} = frame} <-
@@ -211,11 +207,7 @@ defmodule Xandra.Connection do
     %{socket: socket, compressor: compressor, atom_keys?: atom_keys?} = state
     assert_valid_compressor(compressor, options[:compressor])
 
-    protocol_format =
-      case state.protocol_module do
-        Xandra.Protocol.V5 -> :v5_or_more
-        _other -> :v4_or_less
-      end
+    protocol_format = Xandra.Protocol.frame_protocol_format(state.protocol_module)
 
     with :ok <- state.transport.send(socket, payload),
          {:ok, %Frame{} = frame} <-
