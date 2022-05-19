@@ -38,6 +38,7 @@ defmodule Xandra.ConnectionError do
     %__MODULE__{action: action, reason: reason}
   end
 
+  @impl true
   def message(%__MODULE__{action: action, reason: reason}) do
     "action \"#{action}\" failed with reason: #{format_reason(reason)}"
   end
