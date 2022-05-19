@@ -10,13 +10,13 @@ defmodule Xandra.FrameTest do
 
   describe "max_supported_protocol/0" do
     test "returns a protocol version" do
-      assert Frame.max_supported_protocol() == :v5
+      assert Frame.max_supported_protocol() == :v4
     end
   end
 
   describe "supported_protocols/0" do
     test "returns a list of supported protocols" do
-      assert Frame.supported_protocols() == [:v5, :v4, :v3]
+      assert Enum.sort(Frame.supported_protocols()) == [:v3, :v4, :v5]
     end
   end
 

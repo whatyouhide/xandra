@@ -18,8 +18,12 @@ defmodule Xandra.Frame do
   alias Xandra.Protocol.CRC
 
   @supported_protocols [
-    v5: %{module: Xandra.Protocol.V5, request_version: 0x05, response_version: 0x85},
     v4: %{module: Xandra.Protocol.V4, request_version: 0x04, response_version: 0x84},
+    # For now, v5 isn't top in the list because automatic protocol negotiation should still
+    # use v4 until v5 has complete support. This still allows you to force the protocol
+    # to v5 with protocol_version: :v5.
+    # TODO: move this to the top once protocol v5 is stable.
+    v5: %{module: Xandra.Protocol.V5, request_version: 0x05, response_version: 0x85},
     v3: %{module: Xandra.Protocol.V3, request_version: 0x03, response_version: 0x83}
   ]
 
