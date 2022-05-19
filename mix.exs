@@ -12,6 +12,7 @@ defmodule Xandra.Mixfile do
       app: :xandra,
       version: @version,
       elixir: "~> 1.9",
+      elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -50,6 +51,9 @@ defmodule Xandra.Mixfile do
   def application() do
     [extra_applications: [:logger]]
   end
+
+  defp elixirc_paths(:test), do: ["test/support"] ++ elixirc_paths(:dev)
+  defp elixirc_paths(_env), do: ["lib"]
 
   defp package() do
     [
