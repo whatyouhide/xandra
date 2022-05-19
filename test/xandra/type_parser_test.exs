@@ -50,5 +50,9 @@ defmodule Xandra.TypeParserTest do
     assert_raise RuntimeError, ~s(invalid type: "list<int>, int"), fn ->
       parse("list<int>, int")
     end
+
+    assert_raise RuntimeError, ~s(invalid type: "list<int"), fn ->
+      parse("list<int")
+    end
   end
 end
