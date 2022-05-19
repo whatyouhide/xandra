@@ -12,7 +12,8 @@ defmodule Xandra.Authenticator.Password do
   """
   @behaviour Xandra.Authenticator
 
-  def response_body(options) do
+  @impl true
+  def response_body(options) when is_list(options) do
     [
       0x00,
       Keyword.fetch!(options, :username),
