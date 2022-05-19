@@ -120,7 +120,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
           {:next_state, :connected, data}
         else
-          {:error, {:use_this_protocol_instead, protocol_version}} ->
+          {:error, {:use_this_protocol_instead, _failed_protocol_version, protocol_version}} ->
             :ok = transport.close(socket)
             data = update_in(data.options, &Keyword.put(&1, :protocol_version, protocol_version))
             {:keep_state, data, {:next_event, :internal, :connect}}

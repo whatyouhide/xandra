@@ -31,8 +31,8 @@ defmodule Xandra.Connection.Utils do
       when transport in [:gen_tcp, :ssl] and
              (is_nil(protocol_version) or protocol_version in unquote(Frame.supported_protocols())) and
              is_atom(compressor) do
-    tentative_protocol_module =
-      Frame.protocol_version_to_module(protocol_version || Frame.max_supported_protocol())
+    tentative_protocol_version = protocol_version || Frame.max_supported_protocol()
+    tentative_protocol_module = Frame.protocol_version_to_module(tentative_protocol_version)
 
     payload =
       Frame.new(:options)
@@ -43,14 +43,23 @@ defmodule Xandra.Connection.Utils do
          {:ok, %Frame{} = frame} <- recv_frame(transport, socket, :v4_or_less, compressor) do
       case tentative_protocol_module.decode_response(frame) do
         %Error{} = error ->
-          if error.message =~ "unsupported protocol version" do
-            if frame.protocol_version in Frame.supported_protocols() do
-              {:error, {:use_this_protocol_instead, frame.protocol_version}}
-            else
-              {:error, {:unsupported_protocol, frame.protocol_version}}
-            end
-          else
-            {:error, error}
+          cond do
+            error.message =~ "unsupported protocol version" ->
+              if frame.protocol_version in Frame.supported_protocols() do
+                {:error,
+                 {:use_this_protocol_instead, tentative_protocol_version, frame.protocol_version}}
+              else
+                {:error, {:unsupported_protocol, frame.protocol_version}}
+              end
+
+            error.message =~ "Beta version of the protocol" and
+                error.message =~ "but USE_BETA flag is unset" ->
+              {:error,
+               {:use_this_protocol_instead, tentative_protocol_version,
+                Frame.previous_protocol(frame.protocol_version)}}
+
+            true ->
+              {:error, error}
           end
 
         %{} = options ->

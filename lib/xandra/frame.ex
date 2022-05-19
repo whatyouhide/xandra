@@ -10,6 +10,7 @@ defmodule Xandra.Frame do
     tracing: false,
     warning: false,
     custom_payload: false,
+    use_beta: false,
     atom_keys?: false
   ]
 
@@ -18,12 +19,8 @@ defmodule Xandra.Frame do
   alias Xandra.Protocol.CRC
 
   @supported_protocols [
-    v4: %{module: Xandra.Protocol.V4, request_version: 0x04, response_version: 0x84},
-    # For now, v5 isn't top in the list because automatic protocol negotiation should still
-    # use v4 until v5 has complete support. This still allows you to force the protocol
-    # to v5 with protocol_version: :v5.
-    # TODO: move this to the top once protocol v5 is stable.
     v5: %{module: Xandra.Protocol.V5, request_version: 0x05, response_version: 0x85},
+    v4: %{module: Xandra.Protocol.V4, request_version: 0x04, response_version: 0x84},
     v3: %{module: Xandra.Protocol.V3, request_version: 0x03, response_version: 0x83}
   ]
 
@@ -75,6 +72,14 @@ defmodule Xandra.Frame do
     auth_success: 0x10
   ]
 
+  @flags [
+    compression: 0x01,
+    tracing: 0x02,
+    custom_payload: 0x04,
+    warning: 0x08,
+    use_beta: 0x10
+  ]
+
   @max_v5_payload_size_in_bytes 128 * 1024 - 1
 
   for {human_code, opcode} <- @opcodes do
@@ -82,13 +87,27 @@ defmodule Xandra.Frame do
     defp op_for_opcode(unquote(opcode)), do: unquote(human_code)
   end
 
+  for {name, mask} <- @flags do
+    defp flag_mask(unquote(name)), do: unquote(mask)
+    defp flag_set?(byte, unquote(name)), do: (byte &&& unquote(mask)) == unquote(mask)
+  end
+
   ## Functions related to the native protocol version.
 
-  @spec max_supported_protocol() :: unquote(hd(@supported_protocol_versions))
-  def max_supported_protocol(), do: unquote(hd(@supported_protocol_versions))
+  # TODO: replace with hd(@supported_protocol_versions) once we fully support native protocol v5.
+  @spec max_supported_protocol() :: :v4
+  def max_supported_protocol(), do: :v4
 
   @spec supported_protocols() :: [supported_protocol, ...]
   def supported_protocols(), do: @supported_protocol_versions
+
+  @spec previous_protocol(supported_protocol) :: supported_protocol
+  def previous_protocol(protocol_version)
+
+  for {vsn, previous_vsn} <-
+        Enum.zip(@supported_protocol_versions, Enum.drop(@supported_protocol_versions, 1)) do
+    def previous_protocol(unquote(vsn)), do: unquote(previous_vsn)
+  end
 
   for {vsn,
        %{
@@ -136,6 +155,7 @@ defmodule Xandra.Frame do
     %__MODULE__{
       compressor: compressor,
       tracing: tracing?,
+      use_beta: use_beta?,
       kind: kind,
       stream_id: stream_id,
       body: body
@@ -143,9 +163,18 @@ defmodule Xandra.Frame do
 
     body = maybe_compress_body(compressor, body)
 
+    flags =
+      [
+        tracing? && :tracing,
+        compressor && :compression,
+        use_beta? && :use_beta
+      ]
+      |> Enum.filter(& &1)
+      |> encode_flags()
+
     [
       protocol_module_to_request_version(protocol_module),
-      encode_flags(compressor, tracing?),
+      flags,
       <<stream_id::16>>,
       opcode_for_op(kind),
       <<IO.iodata_length(body)::32>>,
@@ -328,10 +357,7 @@ defmodule Xandra.Frame do
       when is_binary(header) and is_binary(body) and is_atom(compressor) do
     <<response_version, flags, stream_id::16, opcode, _::32>> = header
 
-    compression? = flag_set?(flags, _compression = 0x01)
-    tracing? = flag_set?(flags, _tracing = 0x02)
-    custom_payload? = flag_set?(flags, _custom_payload = 0x04)
-    warning? = flag_set?(flags, _warning? = 0x08)
+    compression? = flag_set?(flags, :compression)
 
     kind = op_for_opcode(opcode)
     body = maybe_decompress_body(compression?, compressor, body)
@@ -341,20 +367,16 @@ defmodule Xandra.Frame do
       body: body,
       stream_id: stream_id,
       protocol_version: byte_version_to_protocol_version(response_version),
-      tracing: tracing?,
-      warning: warning?,
-      custom_payload: custom_payload?,
+      tracing: flag_set?(flags, :tracing),
+      warning: flag_set?(flags, :warning),
+      custom_payload: flag_set?(flags, :custom_payload),
+      use_beta: flag_set?(flags, :use_beta),
       compressor: compressor
     }
   end
 
-  defp encode_flags(_compressor = nil, _tracing? = false), do: 0x00
-  defp encode_flags(_compressor = nil, _tracing? = true), do: 0x02
-  defp encode_flags(_compressor = _, _tracing? = false), do: 0x01
-  defp encode_flags(_compressor = _, _tracing? = true), do: 0x03
-
-  defp flag_set?(flags, flag) do
-    (flags &&& flag) == flag
+  defp encode_flags(flags) do
+    Enum.reduce(flags, 0x00, fn name, acc -> acc ||| flag_mask(name) end)
   end
 
   defp maybe_compress_body(_compressor = nil, body), do: body

@@ -78,7 +78,11 @@ defmodule Xandra.Connection do
             supports these protocols: #{inspect(Frame.supported_protocols())}\
             """
 
-          {:error, {:use_this_protocol_instead, protocol_version}} ->
+          {:error, {:use_this_protocol_instead, failed_protocol_version, protocol_version}} ->
+            Logger.debug(
+              "Could not use protocol #{inspect(failed_protocol_version)}, downgrading to #{inspect(protocol_version)}"
+            )
+
             :ok = transport.close(socket)
             options = Keyword.put(options, :protocol_version, protocol_version)
             connect(options)
