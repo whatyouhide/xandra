@@ -103,6 +103,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
         with {:ok, supported_options, protocol_module} <-
                Utils.request_options(transport, socket, protocol_version),
+             Logger.debug("Supported options: #{inspect(supported_options)}"),
              data = %__MODULE__{data | protocol_module: protocol_module},
              :ok <-
                startup_connection(transport, socket, supported_options, protocol_module, options),
@@ -110,6 +111,7 @@ defmodule Xandra.Cluster.ControlConnection do
                maybe_discover_peers(data.autodiscovery, transport, socket, protocol_module),
              :ok <- register_to_events(transport, socket, protocol_module),
              :ok <- inet_mod(transport).setopts(socket, active: true) do
+          Logger.debug("Established control connection (protocol #{inspect(protocol_module)})")
           {:ok, data} = report_active(data)
 
           if not is_nil(peers_or_nil) do
@@ -118,12 +120,17 @@ defmodule Xandra.Cluster.ControlConnection do
 
           {:next_state, :connected, data}
         else
-          {:error, {:use_this_protocol_instead, protocol_version}} ->
+          {:error, {:use_this_protocol_instead, _failed_protocol_version, protocol_version}} ->
             :ok = transport.close(socket)
             data = update_in(data.options, &Keyword.put(&1, :protocol_version, protocol_version))
             {:keep_state, data, {:next_event, :internal, :connect}}
 
           {:error, %Xandra.Error{} = error} ->
+            Logger.error(
+              "Failed to establish control connection because of Cassandra error: " <>
+                Exception.message(error)
+            )
+
             {:stop, error}
 
           {:error, _reason} = error ->
@@ -132,17 +139,25 @@ defmodule Xandra.Cluster.ControlConnection do
             {:keep_state, data, timeout_action}
         end
 
-      {:error, _reason} ->
+      {:error, reason} ->
+        Logger.debug(
+          "Failed to connect to #{inspect(address)}:#{port}: #{:inet.format_error(reason)}"
+        )
+
         timeout_action = {{:timeout, :reconnect}, @default_backoff, data}
         {:keep_state_and_data, timeout_action}
     end
   end
 
-  def disconnected(:info, {kind, socket, _other}, %__MODULE__{socket: socket})
+  # TCP/SSL messages that we get when we're already in the "disconnected" state can
+  # be safely ignored.
+  def disconnected(:info, {kind, socket, _reason}, %__MODULE__{socket: socket})
       when kind in [:tcp_error, :ssl_error] do
     :keep_state_and_data
   end
 
+  # TCP/SSL messages that we get when we're already in the "disconnected" state can
+  # be safely ignored.
   def disconnected(:info, {kind, socket}, %__MODULE__{socket: socket})
       when kind in [:tcp_closed, :ssl_closed] do
     :keep_state_and_data
@@ -178,7 +193,11 @@ defmodule Xandra.Cluster.ControlConnection do
 
   ## Helper functions
 
-  defp disconnect({:error, _reason}, %__MODULE__{} = data) do
+  defp disconnect({:error, reason}, %__MODULE__{} = data) do
+    Logger.debug(
+      "Disconnecting from #{address_to_human_readable_source(data)} because of error: #{:inet.format_error(reason)}"
+    )
+
     _ = data.transport.close(data.socket)
     {:connect, :reconnect, %__MODULE__{data | socket: nil, buffer: <<>>}}
   end
@@ -217,8 +236,11 @@ defmodule Xandra.Cluster.ControlConnection do
       |> protocol_module.encode_request(["STATUS_CHANGE", "TOPOLOGY_CHANGE"])
       |> Frame.encode(protocol_module)
 
+    protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
+
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, protocol_module) do
+         {:ok, %Frame{} = frame} <-
+           Utils.recv_frame(transport, socket, protocol_format, _compressor = nil) do
       :ok = protocol_module.decode_response(frame)
     else
       {:error, reason} ->
@@ -262,8 +284,11 @@ defmodule Xandra.Cluster.ControlConnection do
       |> protocol_module.encode_request(query)
       |> Frame.encode(protocol_module)
 
+    protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
+
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, protocol_module) do
+         {:ok, %Frame{} = frame} <-
+           Utils.recv_frame(transport, socket, protocol_format, _compressor = nil) do
       %Xandra.Page{} = page = protocol_module.decode_response(frame, query)
       [local_info] = Enum.to_list(page)
       {:ok, local_info}
@@ -282,8 +307,11 @@ defmodule Xandra.Cluster.ControlConnection do
       |> protocol_module.encode_request(query)
       |> Frame.encode(protocol_module)
 
+    protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
+
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- Utils.recv_frame(transport, socket, protocol_module) do
+         {:ok, %Frame{} = frame} <-
+           Utils.recv_frame(transport, socket, protocol_format, _compressor = nil) do
       %Xandra.Page{} = page = protocol_module.decode_response(frame, query)
       {:ok, Enum.to_list(page)}
     end

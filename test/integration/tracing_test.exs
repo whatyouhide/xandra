@@ -40,8 +40,8 @@ defmodule TracingTest do
       assert is_binary(void.tracing_id)
     end
 
-    test "Xandra.Prepared", %{conn: conn} do
-      prepared = Xandra.prepare!(conn, "USE system", tracing: true)
+    test "Xandra.Prepared", %{conn: conn, keyspace: keyspace} do
+      prepared = Xandra.prepare!(conn, "USE #{keyspace}", tracing: true)
       assert is_binary(prepared.tracing_id)
     end
   end

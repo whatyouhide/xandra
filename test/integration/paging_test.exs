@@ -30,8 +30,8 @@ defmodule PagingTest do
     :ok
   end
 
-  test "manual paging", %{conn: conn} do
-    query = Xandra.prepare!(conn, "SELECT letter FROM alphabet")
+  test "manual paging", %{conn: conn, keyspace: keyspace} do
+    query = Xandra.prepare!(conn, "SELECT letter FROM #{keyspace}.alphabet")
 
     options = [page_size: 3]
 
@@ -71,8 +71,8 @@ defmodule PagingTest do
     end
   end
 
-  test "streaming pages", %{conn: conn} do
-    query = Xandra.prepare!(conn, "SELECT letter FROM alphabet")
+  test "streaming pages", %{conn: conn, keyspace: keyspace} do
+    query = Xandra.prepare!(conn, "SELECT letter FROM #{keyspace}.alphabet")
 
     assert %PageStream{} = stream = Xandra.stream_pages!(conn, query, [], page_size: 2)
     assert [page1, page2, page3, page4] = Enum.take(stream, 4)

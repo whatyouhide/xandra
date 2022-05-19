@@ -20,7 +20,8 @@ defmodule Xandra.Prepared do
     :default_consistency,
     :protocol_module,
     :tracing_id,
-    :keyspace
+    :keyspace,
+    :result_metadata_id
   ]
 
   @type t :: %__MODULE__{
@@ -32,7 +33,8 @@ defmodule Xandra.Prepared do
           default_consistency: atom | nil,
           protocol_module: module | nil,
           tracing_id: binary | nil,
-          keyspace: binary | nil
+          keyspace: binary | nil,
+          result_metadata_id: binary | nil
         }
 
   @doc false

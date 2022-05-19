@@ -63,3 +63,5 @@ services:
       - node3
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CASSANDRA_NATIVE_PROTOCOL

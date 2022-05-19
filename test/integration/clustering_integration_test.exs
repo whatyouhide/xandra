@@ -17,21 +17,24 @@ defmodule ClusteringTest do
     end
   end
 
-  test "basic interactions", %{keyspace: keyspace} do
+  test "basic interactions", %{keyspace: keyspace, start_options: start_options} do
     logger_level = Logger.level()
     on_exit(fn -> Logger.configure(level: logger_level) end)
     Logger.configure(level: :debug)
 
     statement = "USE #{keyspace}"
 
+    start_options =
+      Keyword.merge(start_options,
+        load_balancing: :random,
+        name: TestCluster,
+        nodes: ["127.0.0.1", "127.0.0.1", "127.0.0.2"]
+      )
+
     log =
       capture_log(fn ->
-        {:ok, cluster} =
-          Xandra.Cluster.start_link(
-            nodes: ["127.0.0.1", "127.0.0.1", "127.0.0.2"],
-            name: TestCluster,
-            load_balancing: :random
-          )
+        cluster = start_supervised!({Xandra.Cluster, start_options})
+        true = Process.link(cluster)
 
         assert await_connected(cluster, _options = [], &Xandra.execute!(&1, statement))
 

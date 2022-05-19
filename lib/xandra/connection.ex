@@ -58,6 +58,7 @@ defmodule Xandra.Connection do
                Utils.request_options(transport, socket, enforced_protocol),
              state = %__MODULE__{state | protocol_module: protocol_module},
              Logger.metadata(xandra_protocol_module: state.protocol_module),
+             Logger.debug("Connected successfully, using protocol #{inspect(protocol_module)}"),
              Logger.debug("Supported options: #{inspect(supported_options)}"),
              :ok <-
                startup_connection(
@@ -77,7 +78,11 @@ defmodule Xandra.Connection do
             supports these protocols: #{inspect(Frame.supported_protocols())}\
             """
 
-          {:error, {:use_this_protocol_instead, protocol_version}} ->
+          {:error, {:use_this_protocol_instead, failed_protocol_version, protocol_version}} ->
+            Logger.debug(
+              "Could not use protocol #{inspect(failed_protocol_version)}, downgrading to #{inspect(protocol_version)}"
+            )
+
             :ok = transport.close(socket)
             options = Keyword.put(options, :protocol_version, protocol_version)
             connect(options)
@@ -162,9 +167,11 @@ defmodule Xandra.Connection do
           |> state.protocol_module.encode_request(prepared)
           |> Frame.encode(state.protocol_module)
 
+        protocol_format = Xandra.Protocol.frame_protocol_format(state.protocol_module)
+
         with :ok <- transport.send(socket, payload),
              {:ok, %Frame{} = frame} <-
-               Utils.recv_frame(transport, socket, state.protocol_module, state.compressor),
+               Utils.recv_frame(transport, socket, protocol_format, state.compressor),
              frame = %{frame | atom_keys?: state.atom_keys?},
              %Prepared{} = prepared <- state.protocol_module.decode_response(frame, prepared) do
           Prepared.Cache.insert(state.prepared_cache, prepared)
@@ -204,9 +211,11 @@ defmodule Xandra.Connection do
     %{socket: socket, compressor: compressor, atom_keys?: atom_keys?} = state
     assert_valid_compressor(compressor, options[:compressor])
 
+    protocol_format = Xandra.Protocol.frame_protocol_format(state.protocol_module)
+
     with :ok <- state.transport.send(socket, payload),
          {:ok, %Frame{} = frame} <-
-           Utils.recv_frame(state.transport, socket, state.protocol_module, compressor),
+           Utils.recv_frame(state.transport, socket, protocol_format, compressor),
          frame = %{frame | atom_keys?: atom_keys?},
          %SetKeyspace{keyspace: keyspace} = response <-
            state.protocol_module.decode_response(frame, query, options) do

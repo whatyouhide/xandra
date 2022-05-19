@@ -17,8 +17,12 @@ jobs:
           - otp: "24.2"
             elixir: "1.13"
             cassandra_version: "4"
-            cassandra_native_protocol: "v4"
+            cassandra_native_protocol: "v5"
             lint: true
+          - otp: "24.2"
+            elixir: "1.13"
+            cassandra_version: "4"
+            cassandra_native_protocol: "v4"
           - otp: "24.2"
             elixir: "1.13"
             cassandra_version: "3"
@@ -103,6 +107,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - otp: "24.2"
+            elixir: "1.13"
+            scylla_version: "2.3.1"
+            cassandra_native_protocol: "v5"
           - otp: "24.2"
             elixir: "1.13"
             scylla_version: "2.3.1"
