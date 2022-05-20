@@ -80,6 +80,7 @@ defmodule Xandra.Mixfile do
       {:ex_doc, "~> 0.28", only: :dev},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
       {:excoveralls, "~> 0.14.4", only: :test},
+      {:nimble_lz4, github: "whatyouhide/nimble_lz4", only: :test},
       {:stream_data, "~> 0.5.0", only: :test}
     ]
   end
