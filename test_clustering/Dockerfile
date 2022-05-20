@@ -10,7 +10,7 @@ ENV MIX_ENV=test
 # Install Docker and Docker Compose to control sibling containers, and Git for installing
 # Git dependencies if necessary.
 RUN apk update && \
-    apk add docker docker-compose
+    apk add docker docker-compose git
 
 # Copy only the files needed to fetch and compile deps.
 COPY mix.exs .
