@@ -1,20 +1,24 @@
 defmodule CompressionTest do
   use XandraTest.IntegrationCase, async: true
 
-  @moduletag :skip
+  @moduletag skip_for_native_protocol: :v5
 
-  defmodule Snappy do
+  defmodule LZ4 do
     @behaviour Xandra.Compressor
 
-    def algorithm(), do: :snappy
+    @impl true
+    def algorithm(), do: :lz4
 
+    @impl true
     def compress(body) do
-      {:ok, compressed_body} = :snappy.compress(body)
-      compressed_body
+      # 32-bit big-endian integer with the size of the uncompressed body followed by
+      # the compressed body.
+      [<<IO.iodata_length(body)::4-unit(8)-integer>>, NimbleLZ4.compress(body)]
     end
 
-    def decompress(compressed_body) do
-      {:ok, body} = :snappy.decompress(compressed_body)
+    @impl true
+    def decompress(<<uncompressed_size::4-unit(8)-integer, compressed_body::binary>>) do
+      {:ok, body} = NimbleLZ4.decompress(compressed_body, uncompressed_size)
       body
     end
   end
@@ -25,15 +29,15 @@ defmodule CompressionTest do
     :ok
   end
 
-  test "compression with the snappy algorithm", %{
+  test "compression with the lz4 algorithm", %{
     keyspace: keyspace,
     start_options: start_options
   } do
     assert {:ok, compressed_conn} =
-             Xandra.start_link(start_options ++ [compressor: Snappy, idle_interval: 200])
+             Xandra.start_link(start_options ++ [compressor: LZ4, idle_interval: 200])
 
     statement = "SELECT * FROM #{keyspace}.users WHERE code = ?"
-    options = [compressor: Snappy]
+    options = [compressor: LZ4]
 
     # We check that sending a non-compressed request which will receive a
     # compressed response works.
