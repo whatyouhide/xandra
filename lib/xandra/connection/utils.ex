@@ -71,6 +71,31 @@ defmodule Xandra.Connection.Utils do
     end
   end
 
+  @spec ping(:gen_tcp | :ssl, term, nil | Frame.supported_protocol(), nil | module) ::
+          {:ok, map(), negotiated_protocol_module :: module()}
+          | {:error, ConnectionError.t() | Error.t(),
+             {:use_this_protocol_instead, Frame.supported_protocol()}}
+  def ping(transport, socket, protocol_module, compressor)
+      when transport in [:gen_tcp, :ssl] and is_atom(protocol_module) and is_atom(compressor) do
+    payload =
+      Frame.new(:options, compressor: compressor)
+      |> protocol_module.encode_request(nil)
+      |> Frame.encode(protocol_module)
+
+    protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
+
+    with :ok <- transport.send(socket, payload),
+         {:ok, %Frame{} = frame} <- recv_frame(transport, socket, protocol_format, compressor) do
+      case protocol_module.decode_response(frame) do
+        %Error{} = error -> {:error, error}
+        %{} = _options -> :ok
+      end
+    else
+      {:error, reason} ->
+        {:error, ConnectionError.new("request options", reason)}
+    end
+  end
+
   @spec startup_connection(:gen_tcp | :ssl, term, map, module, nil | module) ::
           :ok | {:error, ConnectionError.t()}
   def startup_connection(
@@ -88,6 +113,11 @@ defmodule Xandra.Connection.Utils do
       Frame.new(:startup)
       |> protocol_module.encode_request(requested_options)
       |> Frame.encode_v4(protocol_module)
+
+    Logger.debug(
+      "Sending STARTUP frame with protocol #{inspect(protocol_module)} and " <>
+        "requested options: #{inspect(requested_options)}"
+    )
 
     # However, we need to pass the compressor module around when we
     # receive the response to this frame because if we said we want to use

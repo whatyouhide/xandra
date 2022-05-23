@@ -186,13 +186,14 @@ defmodule Xandra.Frame do
   def encode(frame, protocol_module)
 
   def encode(%__MODULE__{} = frame, Xandra.Protocol.V5 = protocol_module) do
-    if not is_nil(frame.compressor) do
-      raise "Xandra doesn't support compression in native protocol v5 yet"
-    end
+    # We have to remove the compressor before encoding for protocol v4,
+    # otherwise we encode the inner frame. We do the compression when we encode
+    # the outer frame with the protocol v5 format.
+    frame = %__MODULE__{frame | compressor: nil}
 
     frame
     |> encode_v4(protocol_module)
-    |> encode_v5_wrappers()
+    |> encode_v5_wrappers(frame.compressor)
   end
 
   def encode(%__MODULE__{} = frame, protocol_module) when is_atom(protocol_module) do
@@ -201,8 +202,8 @@ defmodule Xandra.Frame do
 
   # Made public for testing.
   @doc false
-  @spec encode_v5_wrappers(iodata()) :: iodata()
-  def encode_v5_wrappers(frame_iodata) do
+  @spec encode_v5_wrappers(iodata(), module() | nil) :: iodata()
+  def encode_v5_wrappers(frame_iodata, compressor) when is_atom(compressor) do
     payload_length = IO.iodata_length(frame_iodata)
 
     # Small optimization: if the payload is smaller than the max size, then we don't need to
@@ -217,35 +218,67 @@ defmodule Xandra.Frame do
         |> chunk_binary(@max_v5_payload_size_in_bytes, _acc = [])
       end
 
-    encode_v5_wrappers_for_segments(segments)
+    encode_v5_wrappers_for_segments(segments, compressor)
   end
 
-  defp encode_v5_wrappers_for_segments(segments) when is_list(segments) do
+  defp encode_v5_wrappers_for_segments(segments, compressor) when is_list(segments) do
     self_contained? = match?([_], segments)
 
     for segment <- segments do
       buffer = <<>>
-      payload_length = IO.iodata_length(segment)
+      uncompressed_payload_length = IO.iodata_length(segment)
 
-      buffer = encode_v5_header(buffer, payload_length, self_contained?)
-      buffer = [buffer, segment]
+      if compressor do
+        uncompressed_payload_length = IO.iodata_length(segment)
 
-      payload_crc = CRC.crc32(segment)
-      [buffer, <<payload_crc::4-unit(8)-unsigned-little>>]
+        <<^uncompressed_payload_length::32-big-unsigned, compressed_payload::binary>> =
+          compressor.compress(segment) |> IO.iodata_to_binary()
+
+        buffer =
+          encode_v5_header(
+            buffer,
+            _compressed_payload_length = byte_size(compressed_payload),
+            uncompressed_payload_length,
+            self_contained?
+          )
+
+        buffer = [buffer, compressed_payload]
+        payload_crc = CRC.crc32(compressed_payload)
+        [buffer, <<payload_crc::4-unit(8)-unsigned-little>>]
+      else
+        buffer = encode_v5_header(buffer, uncompressed_payload_length, nil, self_contained?)
+        buffer = [buffer, segment]
+        payload_crc = CRC.crc32(segment)
+        [buffer, <<payload_crc::4-unit(8)-unsigned-little>>]
+      end
     end
   end
 
-  defp encode_v5_header(buffer, payload_length, self_contained?) do
+  defp encode_v5_header(buffer, payload_length, uncompressed_payload_length, self_contained?) do
     header_data = payload_length
+    flag_offset = 17
+
+    {header_data, flag_offset} =
+      if uncompressed_payload_length do
+        {header_data ||| uncompressed_payload_length <<< flag_offset, flag_offset + 17}
+      else
+        {header_data, flag_offset}
+      end
 
     header_data =
       if self_contained? do
-        header_data ||| 1 <<< 17
+        header_data ||| 1 <<< flag_offset
       else
         header_data
       end
 
-    header_data_as_binary = <<header_data::3-unit(8)-unsigned-little>>
+    header_data_as_binary =
+      if uncompressed_payload_length do
+        <<header_data::5-unit(8)-unsigned-little>>
+      else
+        <<header_data::3-unit(8)-unsigned-little>>
+      end
+
     header_crc = CRC.crc24(header_data_as_binary)
 
     [buffer, header_data_as_binary, <<header_crc::3-unit(8)-unsigned-little>>]
@@ -283,11 +316,7 @@ defmodule Xandra.Frame do
         when fetch_state: term(), reason: term()
   def decode_v5(fetch_bytes_fun, fetch_state, compressor)
       when is_function(fetch_bytes_fun, 2) and is_atom(compressor) do
-    if not is_nil(compressor) do
-      raise "Xandra doesn't support compression in native protocol v5 yet"
-    end
-
-    with {:ok, envelope} <- decode_v5_wrapper(fetch_bytes_fun, fetch_state) do
+    with {:ok, envelope} <- decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor) do
       {frame, ""} = decode_from_binary(envelope, compressor)
       {:ok, frame}
     end
@@ -295,16 +324,22 @@ defmodule Xandra.Frame do
 
   # Made public for testing.
   @doc false
-  def decode_v5_wrapper(fetch_bytes_fun, fetch_state) do
-    decode_v5_wrapper(fetch_bytes_fun, fetch_state, _payload_acc = <<>>)
+  def decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor) do
+    decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor, _payload_acc = <<>>)
   end
 
-  defp decode_v5_wrapper(fetch_bytes_fun, fetch_state, payload_acc)
+  defp decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor, payload_acc)
        when is_function(fetch_bytes_fun, 2) do
-    with {:ok, header, fetch_state} <- fetch_bytes_fun.(fetch_state, _byte_count = 6) do
-      <<header_contents::3-bytes, crc24_of_header::3-unit(8)-integer-little>> = header
+    require Logger
+    header_size_in_bytes = if compressor, do: 8, else: 6
 
-      <<header_data::3-unit(8)-integer-little>> = header_contents
+    with {:ok, header, fetch_state} <- fetch_bytes_fun.(fetch_state, header_size_in_bytes) do
+      header_contents_size = header_size_in_bytes - 3
+
+      <<header_contents::size(header_contents_size)-bytes,
+        crc24_of_header::3-unit(8)-integer-little>> = header
+
+      <<header_data::size(header_contents_size)-unit(8)-integer-little>> = header_contents
 
       if crc24_of_header != CRC.crc24(header_contents) do
         raise "mismatching CRC24 for header"
@@ -313,8 +348,17 @@ defmodule Xandra.Frame do
       # Cap the payload length to a max of 17 bits from header_contents.
       payload_length = header_data &&& @max_v5_payload_size_in_bytes
 
-      # The self-contained flag is the 18th bit.
-      self_contained? = (header_data >>> 17 &&& 1) == 1
+      # Shift the first 17 bits.
+      header_data = header_data >>> 17
+
+      {uncompressed_payload_length, header_data} =
+        if compressor do
+          {header_data &&& @max_v5_payload_size_in_bytes, header_data >>> 17}
+        else
+          {nil, header_data}
+        end
+
+      self_contained? = (header_data &&& 1) == 1
 
       case fetch_bytes_fun.(fetch_state, payload_length + 4) do
         {:ok, <<payload::size(payload_length)-bytes, crc32_of_payload::32-integer-little>>,
@@ -323,10 +367,23 @@ defmodule Xandra.Frame do
             raise "mismatching CRC32 for payload"
           end
 
+          # We should not try to decompress the payload if the uncompressed payload size
+          # is 0, apparently, which happens for stuff like void results (from empirical
+          # experience). See the Python driver as an example:
+          # https://github.com/datastax/python-driver/blob/9a645c58ca0ec57f775251f94e55c30aa837b2ad/cassandra/segment.py#L221
+          uncompressed_payload =
+            if compressor && uncompressed_payload_length > 0 do
+              compressor.decompress(
+                <<uncompressed_payload_length::32-big-unsigned, payload::binary>>
+              )
+            else
+              payload
+            end
+
           if self_contained? or payload_length < @max_v5_payload_size_in_bytes do
-            {:ok, payload_acc <> payload}
+            {:ok, payload_acc <> uncompressed_payload}
           else
-            decode_v5_wrapper(fetch_bytes_fun, fetch_state, payload_acc <> payload)
+            decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor, payload_acc <> payload)
           end
 
         {:error, reason} ->
