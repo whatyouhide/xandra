@@ -189,11 +189,11 @@ defmodule Xandra.Frame do
     # We have to remove the compressor before encoding for protocol v4,
     # otherwise we encode the inner frame. We do the compression when we encode
     # the outer frame with the protocol v5 format.
-    frame = %__MODULE__{frame | compressor: nil}
+    {compressor, frame} = get_and_update_in(frame.compressor, &{&1, nil})
 
     frame
     |> encode_v4(protocol_module)
-    |> encode_v5_wrappers(frame.compressor)
+    |> encode_v5_wrappers(compressor)
   end
 
   def encode(%__MODULE__{} = frame, protocol_module) when is_atom(protocol_module) do
