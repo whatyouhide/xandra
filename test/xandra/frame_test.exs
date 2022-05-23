@@ -2,9 +2,8 @@ defmodule Xandra.FrameTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
-  use Bitwise, only_operators: true
-
   alias Xandra.Frame
+  alias Xandra.TestHelper.LZ4Compressor
 
   @max_v5_payload_size_in_bytes 128 * 1024 - 1
 
@@ -52,10 +51,50 @@ defmodule Xandra.FrameTest do
   describe "encoding and decoding with native protocol v5" do
     property "with self-contained random contents, without compression" do
       check all inner_payload <- iodata() do
-        encoded = inner_payload |> Frame.encode_v5_wrappers() |> IO.iodata_to_binary()
-        assert {:ok, redecoded} = Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, encoded)
+        encoded =
+          inner_payload |> Frame.encode_v5_wrappers(_compressor = nil) |> IO.iodata_to_binary()
+
+        assert {:ok, redecoded} =
+                 Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
+
         assert IO.iodata_to_binary(inner_payload) == IO.iodata_to_binary(redecoded)
       end
+    end
+
+    property "with self-contained random contents, with compression" do
+      check all inner_payload <- iodata(),
+                IO.iodata_length(inner_payload) > 0,
+                initial_size: 5 do
+        encoded =
+          inner_payload
+          |> Frame.encode_v5_wrappers(_compressor = LZ4Compressor)
+          |> IO.iodata_to_binary()
+
+        assert {:ok, redecoded} =
+                 Frame.decode_v5_wrapper(
+                   &fetch_bytes_from_binary/2,
+                   encoded,
+                   _compressor = LZ4Compressor
+                 )
+
+        assert IO.iodata_to_binary(inner_payload) == IO.iodata_to_binary(redecoded)
+      end
+    end
+
+    test "with an empty uncompressed payload and with compression, uses the compressed payload" do
+      encoded =
+        ""
+        |> Frame.encode_v5_wrappers(_compressor = LZ4Compressor)
+        |> IO.iodata_to_binary()
+
+      assert {:ok, redecoded} =
+               Frame.decode_v5_wrapper(
+                 &fetch_bytes_from_binary/2,
+                 encoded,
+                 _compressor = LZ4Compressor
+               )
+
+      assert IO.iodata_to_binary(redecoded) == <<0>>
     end
 
     property "with a big inner content that spans multiple frames (not self contained), without compression" do
@@ -65,8 +104,11 @@ defmodule Xandra.FrameTest do
                 max_runs: 3 do
         big_payload = :binary.copy(<<0>>, size)
 
-        encoded = big_payload |> Frame.encode_v5_wrappers() |> IO.iodata_to_binary()
-        assert {:ok, redecoded} = Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, encoded)
+        encoded =
+          big_payload |> Frame.encode_v5_wrappers(_compressor = nil) |> IO.iodata_to_binary()
+
+        assert {:ok, redecoded} =
+                 Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
 
         assert big_payload == IO.iodata_to_binary(redecoded)
       end

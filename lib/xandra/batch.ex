@@ -13,7 +13,8 @@ defmodule Xandra.Batch do
   alias Xandra.{Prepared, Simple}
 
   @enforce_keys [:type]
-  defstruct @enforce_keys ++ [queries: [], default_consistency: nil, protocol_module: nil]
+  defstruct @enforce_keys ++
+              [queries: [], default_consistency: nil, protocol_module: nil, compressor: nil]
 
   @type type :: :logged | :unlogged | :counter
 
@@ -22,7 +23,8 @@ defmodule Xandra.Batch do
           type: type,
           queries: [Simple.t() | Prepared.t()],
           default_consistency: atom() | nil,
-          protocol_module: module() | nil
+          protocol_module: module() | nil,
+          compressor: module()
         }
 
   @type t() :: t(type)
@@ -102,10 +104,10 @@ defmodule Xandra.Batch do
       batch
     end
 
-    def encode(batch, nil, options) do
-      batch = %{batch | queries: Enum.reverse(batch.queries)}
+    def encode(batch, _values = nil, options) do
+      batch = %@for{batch | queries: Enum.reverse(batch.queries)}
 
-      Frame.new(:batch, Keyword.take(options, [:compressor, :tracing]))
+      Frame.new(:batch, tracing: options[:tracing], compressor: batch.compressor)
       |> batch.protocol_module.encode_request(batch, options)
       |> Frame.encode(batch.protocol_module)
     end

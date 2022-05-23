@@ -143,15 +143,17 @@ defmodule Xandra.Connection do
 
   @impl true
   def handle_prepare(%Prepared{} = prepared, options, %__MODULE__{socket: socket} = state) do
+    compressor = get_right_compressor(state, options[:compressor])
+
     prepared = %Prepared{
       prepared
       | default_consistency: state.default_consistency,
         protocol_module: state.protocol_module,
-        keyspace: state.current_keyspace
+        keyspace: state.current_keyspace,
+        compressor: compressor
     }
 
     force? = Keyword.fetch!(options, :force)
-    compressor = assert_valid_compressor(state.compressor, options[:compressor])
     transport = state.transport
 
     case prepared_cache_lookup(state, prepared, force?) do
@@ -186,21 +188,23 @@ defmodule Xandra.Connection do
     end
   end
 
-  def handle_prepare(%Simple{} = simple, _options, state) do
-    simple = %{
+  def handle_prepare(%Simple{} = simple, options, state) do
+    simple = %Simple{
       simple
       | default_consistency: state.default_consistency,
-        protocol_module: state.protocol_module
+        protocol_module: state.protocol_module,
+        compressor: get_right_compressor(state, options[:compressor])
     }
 
     {:ok, simple, state}
   end
 
-  def handle_prepare(%Batch{} = batch, _options, state) do
-    batch = %{
+  def handle_prepare(%Batch{} = batch, options, state) do
+    batch = %Batch{
       batch
       | default_consistency: state.default_consistency,
-        protocol_module: state.protocol_module
+        protocol_module: state.protocol_module,
+        compressor: get_right_compressor(state, options[:compressor])
     }
 
     {:ok, batch, state}
@@ -241,9 +245,13 @@ defmodule Xandra.Connection do
 
   @impl true
   def ping(%__MODULE__{socket: socket, compressor: compressor} = state) do
-    case Utils.request_options(state.transport, socket, state.protocol_module, compressor) do
-      {:ok, _options} ->
+    case Utils.ping(state.transport, socket, state.protocol_module, compressor) do
+      :ok ->
         {:ok, state}
+
+      {:error, %Xandra.Error{} = error} ->
+        raise "unexpected Cassandra error when requesting options just to \"ping\" the " <>
+                "connection: #{Exception.message(error)}"
 
       {:error, %ConnectionError{reason: reason}} ->
         {:disconnect, ConnectionError.new("ping", reason), state}
@@ -304,6 +312,13 @@ defmodule Xandra.Connection do
         compressor,
         options
       )
+    end
+  end
+
+  defp get_right_compressor(%__MODULE__{} = state, provided) do
+    case Xandra.Protocol.frame_protocol_format(state.protocol_module) do
+      :v5_or_more -> assert_valid_compressor(state.compressor, provided) || state.compressor
+      :v4_or_less -> assert_valid_compressor(state.compressor, provided)
     end
   end
 

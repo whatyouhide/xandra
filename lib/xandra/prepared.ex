@@ -19,6 +19,7 @@ defmodule Xandra.Prepared do
     :result_columns,
     :default_consistency,
     :protocol_module,
+    :compressor,
     :tracing_id,
     :keyspace,
     :result_metadata_id
@@ -32,6 +33,7 @@ defmodule Xandra.Prepared do
           result_columns: list | nil,
           default_consistency: atom | nil,
           protocol_module: module | nil,
+          compressor: module | nil,
           tracing_id: binary | nil,
           keyspace: binary | nil,
           result_metadata_id: binary | nil
@@ -65,7 +67,7 @@ defmodule Xandra.Prepared do
     end
 
     def encode(prepared, values, options) when is_list(values) do
-      Frame.new(:execute, Keyword.take(options, [:compressor, :tracing]))
+      Frame.new(:execute, tracing: options[:tracing], compressor: prepared.compressor)
       |> prepared.protocol_module.encode_request(%{prepared | values: values}, options)
       |> Frame.encode(prepared.protocol_module)
     end

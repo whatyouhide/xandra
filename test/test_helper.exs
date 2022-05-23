@@ -31,13 +31,15 @@ defmodule XandraTest.IntegrationCase do
         start_options = Keyword.merge(unquote(default_start_options), unquote(start_options))
         case_template = unquote(case_template)
 
-        case_template.setup_keyspace(keyspace, start_options)
+        {:ok, conn} = Xandra.start_link(start_options)
+
+        case_template.setup_keyspace(conn, keyspace)
 
         on_exit(fn ->
           case_template.drop_keyspace(keyspace, start_options)
         end)
 
-        %{keyspace: keyspace, start_options: start_options}
+        %{keyspace: keyspace, start_options: start_options, setup_conn: conn}
       end
     end
   end
@@ -48,8 +50,7 @@ defmodule XandraTest.IntegrationCase do
     %{conn: conn}
   end
 
-  def setup_keyspace(keyspace, start_options) do
-    {:ok, conn} = Xandra.start_link(start_options)
+  def setup_keyspace(conn, keyspace) do
     Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}")
 
     statement = """
@@ -68,7 +69,7 @@ defmodule XandraTest.IntegrationCase do
   def protocol_version, do: unquote(@default_start_options[:protocol_version])
 end
 
-Logger.configure(level: :info)
+Logger.configure(level: String.to_existing_atom(System.get_env("LOG_LEVEL", "info")))
 
 excluded =
   if vsn = XandraTest.IntegrationCase.protocol_version() do

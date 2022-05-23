@@ -166,10 +166,16 @@ defmodule Xandra do
   behaviour. After this, all compressed data that Cassandra sends to the
   connection will be decompressed using this behaviour module.
 
-  To compress outgoing data (such as when issuing or preparing queries), the
-  `:compressor` option should be specified explicitly. When it's specified, the
+  To compress outgoing data (such as when issuing or preparing queries), the behavior
+  of Xandra depends on the native protocol that it negotiated with the Cassandra server.
+  For native protocol v4 and earlier, the `:compressor` option should be specified
+  explicitly for every request where you want outgoing compressor. When it's specified, the
   given module will be used to compress data. If no `:compressor` option is
-  passed, the outgoing data will not be compressed.
+  passed, the outgoing data will not be compressed. For native protocol v5 or later,
+  Xandra compresses all outgoing data since compression happens at the connection level,
+  so it's not necessary to pass the `:compressor` option when preparing or executing queries.
+  It's still good practice to pass it around so that your code stays agnostic of the
+  native protocol being used.
 
   ## Native protocol
 

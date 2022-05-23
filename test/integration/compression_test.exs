@@ -1,70 +1,68 @@
 defmodule CompressionTest do
   use XandraTest.IntegrationCase, async: true
 
-  @moduletag skip_for_native_protocol: :v5
+  alias Xandra.TestHelper.LZ4Compressor
 
-  defmodule LZ4 do
-    @behaviour Xandra.Compressor
+  setup_all %{keyspace: keyspace, setup_conn: conn} do
+    Xandra.execute!(
+      conn,
+      "CREATE TABLE #{keyspace}.users (code int, name text, PRIMARY KEY (code, name))"
+    )
 
-    @impl true
-    def algorithm(), do: :lz4
+    Xandra.execute!(conn, "INSERT INTO #{keyspace}.users (code, name) VALUES (1, 'Homer')")
 
-    @impl true
-    def compress(body) do
-      # 32-bit big-endian integer with the size of the uncompressed body followed by
-      # the compressed body.
-      [<<IO.iodata_length(body)::4-unit(8)-integer>>, NimbleLZ4.compress(body)]
-    end
-
-    @impl true
-    def decompress(<<uncompressed_size::4-unit(8)-integer, compressed_body::binary>>) do
-      {:ok, body} = NimbleLZ4.decompress(compressed_body, uncompressed_size)
-      body
-    end
-  end
-
-  setup %{conn: conn} do
-    Xandra.execute!(conn, "CREATE TABLE users (code int, name text, PRIMARY KEY (code, name))")
-    Xandra.execute!(conn, "INSERT INTO users (code, name) VALUES (1, 'Homer')")
     :ok
   end
 
-  test "compression with the lz4 algorithm", %{
-    keyspace: keyspace,
-    start_options: start_options
-  } do
-    assert {:ok, compressed_conn} =
-             Xandra.start_link(start_options ++ [compressor: LZ4, idle_interval: 200])
+  describe "compression with the LZ4 algorithm" do
+    setup %{start_options: start_options} do
+      %{start_options: start_options ++ [compressor: LZ4Compressor]}
+    end
 
-    statement = "SELECT * FROM #{keyspace}.users WHERE code = ?"
-    options = [compressor: LZ4]
+    test "pings still work with compression", %{start_options: start_options} do
+      compressed_conn = start_supervised!({Xandra, start_options ++ [idle_interval: 200]})
+      Process.sleep(300)
+      assert Process.alive?(compressed_conn)
+    end
 
-    # We check that sending a non-compressed request which will receive a
-    # compressed response works.
-    assert {:ok, %Xandra.Page{} = page} = Xandra.execute(compressed_conn, statement, [{"int", 1}])
-    assert Enum.to_list(page) == [%{"code" => 1, "name" => "Homer"}]
+    test "with simple queries", %{keyspace: keyspace, start_options: start_options} do
+      compressed_conn = start_supervised!({Xandra, start_options})
 
-    # Compressing simple queries.
-    assert {:ok, %Xandra.Page{} = page} =
-             Xandra.execute(compressed_conn, statement, [{"int", 1}], options)
+      for options <- [[], [compressor: LZ4Compressor]] do
+        statement = "SELECT * FROM #{keyspace}.users WHERE code = ?"
 
-    assert Enum.to_list(page) == [%{"code" => 1, "name" => "Homer"}]
+        assert {:ok, %Xandra.Page{} = page} =
+                 Xandra.execute(compressed_conn, statement, [{"int", 1}], options)
 
-    # Compressing preparing queries and executing prepared queries.
-    assert {:ok, prepared} = Xandra.prepare(compressed_conn, statement, options)
-    assert {:ok, %Xandra.Page{} = page} = Xandra.execute(compressed_conn, prepared, [1], options)
-    assert Enum.to_list(page) == [%{"code" => 1, "name" => "Homer"}]
+        assert Enum.to_list(page) == [%{"code" => 1, "name" => "Homer"}]
+      end
+    end
 
-    # This sleep is needed to test pings with compression, and its value must
-    # be bigger than :idle_interval.
-    Process.sleep(250)
+    test "with prepared queries", %{keyspace: keyspace, start_options: start_options} do
+      compressed_conn = start_supervised!({Xandra, start_options})
 
-    # Compressing batch queries.
-    batch =
-      Xandra.Batch.new()
-      |> Xandra.Batch.add("INSERT INTO #{keyspace}.users (code, name) VALUES (2, 'Marge')")
-      |> Xandra.Batch.add("DELETE FROM #{keyspace}.users WHERE code = ?", [{"int", 1}])
+      for options <- [[], [compressor: LZ4Compressor]] do
+        statement = "SELECT * FROM #{keyspace}.users WHERE code = ?"
+        assert {:ok, prepared} = Xandra.prepare(compressed_conn, statement, options)
 
-    assert {:ok, %Xandra.Void{}} = Xandra.execute(compressed_conn, batch, options)
+        assert {:ok, %Xandra.Page{} = page} =
+                 Xandra.execute(compressed_conn, prepared, [1], options)
+
+        assert Enum.to_list(page) == [%{"code" => 1, "name" => "Homer"}]
+      end
+    end
+
+    test "with batch queries", %{keyspace: keyspace, start_options: start_options} do
+      compressed_conn = start_supervised!({Xandra, start_options})
+
+      for options <- [[], [compressor: LZ4Compressor]] do
+        batch =
+          Xandra.Batch.new()
+          |> Xandra.Batch.add("INSERT INTO #{keyspace}.users (code, name) VALUES (2, 'Marge')")
+          |> Xandra.Batch.add("DELETE FROM #{keyspace}.users WHERE code = ?", [{"int", 2}])
+
+        assert {:ok, %Xandra.Void{}} = Xandra.execute(compressed_conn, batch, options)
+      end
+    end
   end
 end
