@@ -3,6 +3,8 @@ defmodule Xandra.Protocol.V5 do
 
   use Bitwise
 
+  import Xandra.Protocol, only: [decode_string: 1]
+
   alias Xandra.{
     Batch,
     Error,
@@ -19,12 +21,6 @@ defmodule Xandra.Protocol.V5 do
 
   # We need these two macros to make
   # a single match context possible.
-
-  defmacrop decode_string({:<-, _, [value, buffer]}) do
-    quote do
-      <<size::16, unquote(value)::size(size)-bytes, unquote(buffer)::bits>> = unquote(buffer)
-    end
-  end
 
   defmacrop decode_uuid({:<-, _, [value, buffer]}) do
     quote do
