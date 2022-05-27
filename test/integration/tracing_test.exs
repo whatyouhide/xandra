@@ -51,7 +51,7 @@ defmodule TracingTest do
     result = Xandra.execute!(conn, "USE system", [], tracing: true)
     assert is_binary(result.tracing_id)
 
-    prepared = Xandra.prepare!(conn, "USE system")
+    prepared = Xandra.prepare!(conn, "SELECT * FROM system.local")
     result = Xandra.execute!(conn, prepared, [], tracing: true)
     assert is_binary(result.tracing_id)
 

@@ -51,6 +51,10 @@ defmodule UseTest do
     end
   end
 
+  # TODO: unskip this once we can test on C* 4.1+.
+  # This test is skipped because the prepared statement without an explicit keyspace generates a
+  # warning, and for protocol v3 on C* 4 there is a bug with warnings.
+  @tag skip_for_native_protocol: :v3
   test "use statement followed by a prepared statement", %{conn: conn, keyspaces: keyspaces} do
     for keyspace <- keyspaces do
       statement = "USE #{keyspace}"

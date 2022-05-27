@@ -25,8 +25,8 @@ defmodule PreparedTest do
     :ok
   end
 
-  test "prepared functionality", %{conn: conn} do
-    statement = "SELECT name FROM users WHERE code = :code"
+  test "prepared functionality", %{keyspace: keyspace, conn: conn} do
+    statement = "SELECT name FROM #{keyspace}.users WHERE code = :code"
     assert {:ok, prepared} = Xandra.prepare(conn, statement)
     # Successive call to prepare uses cache.
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement)
@@ -50,8 +50,8 @@ defmodule PreparedTest do
   end
 
   @tag :cassandra_specific
-  test "dynamic result columns", %{conn: conn} do
-    statement = "INSERT INTO users (code, name) VALUES (3, 'Nelson') IF NOT EXISTS"
+  test "dynamic result columns", %{keyspace: keyspace, conn: conn} do
+    statement = "INSERT INTO #{keyspace}.users (code, name) VALUES (3, 'Nelson') IF NOT EXISTS"
     assert {:ok, prepared} = Xandra.prepare(conn, statement)
 
     assert {:ok, page} = Xandra.execute(conn, prepared)
@@ -61,18 +61,18 @@ defmodule PreparedTest do
     assert Enum.to_list(page) == [%{"[applied]" => false, "code" => 3, "name" => "Nelson"}]
   end
 
-  test "inspecting prepared queries", %{conn: conn} do
-    prepared = Xandra.prepare!(conn, "SELECT * FROM users")
+  test "inspecting prepared queries", %{keyspace: keyspace, conn: conn} do
+    prepared = Xandra.prepare!(conn, "SELECT * FROM #{keyspace}.users")
 
     assert inspect(prepared) ==
-             ~s(#Xandra.Prepared<[statement: "SELECT * FROM users", tracing_id: nil]>)
+             ~s(#Xandra.Prepared<[statement: "SELECT * FROM #{keyspace}.users", tracing_id: nil]>)
   end
 
-  test "missing named params raise an error", %{conn: conn} do
+  test "missing named params raise an error", %{keyspace: keyspace, conn: conn} do
     message = "missing named parameter \"name\" for prepared query, got: %{\"code\" => 1}"
 
     assert_raise ArgumentError, message, fn ->
-      statement = "INSERT INTO users (code, name) VALUES (:code, :name)"
+      statement = "INSERT INTO #{keyspace}.users (code, name) VALUES (:code, :name)"
       prepared_insert = Xandra.prepare!(conn, statement)
       Xandra.execute(conn, prepared_insert, %{"code" => 1})
     end

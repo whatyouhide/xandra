@@ -430,7 +430,7 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "set_of_tinyint") == nil
   end
 
-  test "user-defined types", %{conn: conn} do
+  test "user-defined types", %{conn: conn, keyspace: keyspace} do
     statement = """
     CREATE TYPE full_name
     (first_name text,
@@ -455,7 +455,7 @@ defmodule DataTypesTest do
 
     Xandra.execute!(conn, statement)
 
-    statement = "INSERT INTO users (id, profile) VALUES (?, ?)"
+    statement = "INSERT INTO #{keyspace}.users (id, profile) VALUES (?, ?)"
 
     foo_profile = %{
       "nickname" => "foo",
@@ -495,7 +495,7 @@ defmodule DataTypesTest do
 
     Xandra.execute!(conn, statement)
 
-    statement = "INSERT INTO users (id, profile) VALUES (?, ?)"
+    statement = "INSERT INTO #{keyspace}.users (id, profile) VALUES (?, ?)"
 
     baz_profile = %{
       "nickname" => "baz",

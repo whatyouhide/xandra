@@ -22,11 +22,11 @@ defmodule NotSetTest do
     assert is_integer(writetime)
   end
 
-  test "not_set values in prepared statements", %{conn: conn} do
+  test "not_set values in prepared statements", %{keyspace: keyspace, conn: conn} do
     statement = "CREATE TABLE cars (id int PRIMARY KEY, name text)"
     Xandra.execute!(conn, statement)
 
-    statement = "INSERT INTO cars (id, name) VALUES (?, ?)"
+    statement = "INSERT INTO #{keyspace}.cars (id, name) VALUES (?, ?)"
     prepared = Xandra.prepare!(conn, statement)
 
     Xandra.execute!(conn, prepared, [1, "Tesla"])

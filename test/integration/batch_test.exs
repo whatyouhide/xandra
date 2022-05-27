@@ -18,8 +18,8 @@ defmodule BatchTest do
     :ok
   end
 
-  test "batch of type \"logged\"", %{conn: conn} do
-    statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
+  test "batch of type \"logged\"", %{keyspace: keyspace, conn: conn} do
+    statement = "INSERT INTO #{keyspace}.users (id, name) VALUES (:id, :name)"
     prepared_insert = Xandra.prepare!(conn, statement)
 
     batch =
@@ -80,9 +80,10 @@ defmodule BatchTest do
   end
 
   test "named params are supported in prepared queries even if they aren't in the protocol", %{
-    conn: conn
+    conn: conn,
+    keyspace: keyspace
   } do
-    statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
+    statement = "INSERT INTO #{keyspace}.users (id, name) VALUES (:id, :name)"
     prepared_insert = Xandra.prepare!(conn, statement)
 
     batch = Batch.add(Batch.new(), prepared_insert, %{"id" => 1, "name" => "Beth"})
@@ -105,11 +106,14 @@ defmodule BatchTest do
     end
   end
 
-  test "an error is raised if a named parameter is missing for prepared queries", %{conn: conn} do
+  test "an error is raised if a named parameter is missing for prepared queries", %{
+    conn: conn,
+    keyspace: keyspace
+  } do
     message = "missing named parameter \"name\" for prepared query, got: %{\"id\" => 1}"
 
     assert_raise ArgumentError, message, fn ->
-      statement = "INSERT INTO users (id, name) VALUES (:id, :name)"
+      statement = "INSERT INTO #{keyspace}.users (id, name) VALUES (:id, :name)"
       prepared_insert = Xandra.prepare!(conn, statement)
       batch = Batch.add(Batch.new(), prepared_insert, %{"id" => 1})
       Xandra.execute(conn, batch)
@@ -120,8 +124,8 @@ defmodule BatchTest do
     assert {:ok, %Void{}} = Xandra.execute(conn, Batch.new())
   end
 
-  test "inspecting batch queries", %{conn: conn} do
-    prepared = Xandra.prepare!(conn, "DELETE FROM users WHERE id = ?")
+  test "inspecting batch queries", %{conn: conn, keyspace: keyspace} do
+    prepared = Xandra.prepare!(conn, "DELETE FROM #{keyspace}.users WHERE id = ?")
 
     batch =
       Batch.new(:logged)
@@ -131,7 +135,7 @@ defmodule BatchTest do
     expected =
       ~s/#Xandra.Batch<[type: :logged, / <>
         ~s/queries: [{"INSERT INTO users (id, name) VALUES (1, 'Marge')", []}, / <>
-        ~s/{#Xandra.Prepared<[statement: "DELETE FROM users WHERE id = ?", tracing_id: nil]>, [2]}]]>/
+        ~s/{#Xandra.Prepared<[statement: "DELETE FROM #{keyspace}.users WHERE id = ?", tracing_id: nil]>, [2]}]]>/
 
     assert inspect(batch) == expected
   end

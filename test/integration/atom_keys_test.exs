@@ -32,7 +32,7 @@ defmodule AtomKeysTest do
     result = Xandra.execute!(conn, statement, [{"int", 321}])
     assert Enum.to_list(result) == []
 
-    statement = "SELECT * FROM numbers_atom_keys WHERE figure = :figure"
+    statement = "SELECT * FROM #{keyspace}.numbers_atom_keys WHERE figure = :figure"
     result = Xandra.execute!(conn, statement, %{"figure" => {"int", 123}})
     assert Enum.to_list(result) == [%{figure: 123}]
 
