@@ -3,7 +3,7 @@ defmodule Xandra.Protocol.V4 do
 
   use Bitwise
 
-  import Xandra.Protocol, only: [decode_string: 1]
+  import Xandra.Protocol, only: [decode_string: 1, decode_uuid: 1]
 
   alias Xandra.{
     Batch,
@@ -15,15 +15,11 @@ defmodule Xandra.Protocol.V4 do
     TypeParser
   }
 
+  alias Xandra.Protocol, as: Proto
+
   alias Xandra.Cluster.{StatusChange, TopologyChange}
 
   @unix_epoch_days 0x80000000
-
-  defmacrop decode_uuid({:<-, _, [value, buffer]}) do
-    quote do
-      <<unquote(value)::16-bytes, unquote(buffer)::bits>> = unquote(buffer)
-    end
-  end
 
   defmacrop decode_value({:<-, _, [value, buffer]}, type, do: block) do
     quote do
@@ -341,7 +337,7 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp encode_value(:date, %Date{} = value) do
-    value = date_to_unix_days(value)
+    value = Proto.date_to_unix_days(value)
     <<value + @unix_epoch_days::32>>
   end
 
@@ -412,7 +408,7 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp encode_value(:time, %Time{} = time) do
-    value = time_to_nanoseconds(time)
+    value = Proto.time_to_nanoseconds(time)
     <<value::64>>
   end
 
@@ -820,7 +816,7 @@ defmodule Xandra.Protocol.V4 do
 
   defp decode_value(<<value::64>>, {:time, [format]}) do
     case format do
-      :time -> time_from_nanoseconds(value)
+      :time -> Proto.time_from_nanoseconds(value)
       :integer -> value
     end
   end
@@ -839,7 +835,7 @@ defmodule Xandra.Protocol.V4 do
     unix_days = value - @unix_epoch_days
 
     case format do
-      :date -> date_from_unix_days(unix_days)
+      :date -> Proto.date_from_unix_days(unix_days)
       :integer -> unix_days
     end
   end
@@ -1147,21 +1143,5 @@ defmodule Xandra.Protocol.V4 do
   defp decode_string_list(<<buffer::bits>>, count, acc) do
     decode_string(item <- buffer)
     decode_string_list(buffer, count - 1, [item | acc])
-  end
-
-  defp date_from_unix_days(days) do
-    Date.add(~D[1970-01-01], days)
-  end
-
-  defp date_to_unix_days(date) do
-    Date.diff(date, ~D[1970-01-01])
-  end
-
-  defp time_from_nanoseconds(nanoseconds) do
-    Time.add(~T[00:00:00], nanoseconds, :nanosecond)
-  end
-
-  defp time_to_nanoseconds(time) do
-    Time.diff(time, ~T[00:00:00.000000], :nanosecond)
   end
 end
