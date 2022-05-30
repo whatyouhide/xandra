@@ -111,8 +111,8 @@ defmodule Xandra.Protocol.V3 do
 
     flags =
       0x00
-      |> set_flag(_serial_consistency = 0x10, serial_consistency)
-      |> set_flag(_default_timestamp = 0x20, timestamp)
+      |> Proto.set_flag(_serial_consistency = 0x10, serial_consistency)
+      |> Proto.set_flag(_default_timestamp = 0x20, timestamp)
 
     encoded_queries = [<<length(queries)::16>>] ++ Enum.map(queries, &encode_query_in_batch/1)
 
@@ -166,24 +166,11 @@ defmodule Xandra.Protocol.V3 do
     end
   end
 
-  defp set_flag(mask, bit, value) do
-    if value do
-      mask ||| bit
-    else
-      mask
-    end
-  end
-
   defp set_query_values_flag(mask, values) do
     cond do
-      values == [] or values == %{} ->
-        mask
-
-      is_list(values) ->
-        mask ||| 0x01
-
-      is_map(values) ->
-        mask ||| 0x01 ||| 0x40
+      values == [] or values == %{} -> mask
+      is_list(values) -> Proto.set_flag(mask, 0x01, true)
+      is_map(values) -> mask |> Proto.set_flag(0x01, true) |> Proto.set_flag(0x40, true)
     end
   end
 
@@ -197,11 +184,11 @@ defmodule Xandra.Protocol.V3 do
     flags =
       0x00
       |> set_query_values_flag(values)
-      |> set_flag(_page_size = 0x04, true)
-      |> set_flag(_metadata_presence = 0x02, skip_metadata?)
-      |> set_flag(_paging_state = 0x08, paging_state)
-      |> set_flag(_serial_consistency = 0x10, serial_consistency)
-      |> set_flag(_default_timestamp = 0x20, timestamp)
+      |> Proto.set_flag(_page_size = 0x04, true)
+      |> Proto.set_flag(_metadata_presence = 0x02, skip_metadata?)
+      |> Proto.set_flag(_paging_state = 0x08, paging_state)
+      |> Proto.set_flag(_serial_consistency = 0x10, serial_consistency)
+      |> Proto.set_flag(_default_timestamp = 0x20, timestamp)
 
     encoded_values =
       if values == [] or values == %{} do

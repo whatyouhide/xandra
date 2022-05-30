@@ -1,6 +1,15 @@
 defmodule Xandra.Protocol do
   @moduledoc false
 
+  import Bitwise
+
+  @valid_flag_bits for shift <- 0..7, do: 1 <<< shift
+  @flag_mask_range 0x00..0xFF
+
+  @type flag_mask() :: 0x00..0xFF
+  @type flag_bit() ::
+          unquote(Enum.reduce(@valid_flag_bits, &quote(do: unquote(&1) | unquote(&2))))
+
   # Takes a protocol module and returns the protocol "format", that is, whether frames (= envelopes) should be wrapped inside the v5+ frame wrapper or not.
   @spec frame_protocol_format(module()) :: :v4_or_less | :v5_or_more
   def frame_protocol_format(protocol_module)
@@ -17,6 +26,23 @@ defmodule Xandra.Protocol do
 
     quote do
       <<size::16, unquote(value)::size(size)-bytes, unquote(buffer)::bits>> = unquote(buffer)
+    end
+  end
+
+  defmacro decode_value({:<-, _, [value, buffer]}, type, do: block) do
+    assert_not_a_variable(buffer)
+
+    quote do
+      <<size::32-signed, unquote(buffer)::bits>> = unquote(buffer)
+
+      if size < 0 do
+        unquote(value) = nil
+        unquote(block)
+      else
+        <<data::size(size)-bytes, unquote(buffer)::bits>> = unquote(buffer)
+        unquote(value) = decode_value(data, unquote(type))
+        unquote(block)
+      end
     end
   end
 
@@ -47,6 +73,17 @@ defmodule Xandra.Protocol do
   @spec time_to_nanoseconds(Calendar.time()) :: integer()
   def time_to_nanoseconds(time) do
     Time.diff(time, ~T[00:00:00.000000], :nanosecond)
+  end
+
+  @spec set_flag(flag_mask(), pos_integer(), term()) :: flag_mask()
+  def set_flag(bitmask, flag_bit, value_present)
+      when is_integer(bitmask) and bitmask in @flag_mask_range and is_integer(flag_bit) and
+             flag_bit in @valid_flag_bits do
+    if value_present do
+      bitmask ||| flag_bit
+    else
+      bitmask
+    end
   end
 
   defp assert_not_a_variable(ast) do
