@@ -81,6 +81,7 @@ defmodule Xandra.Frame do
   ]
 
   @max_v5_payload_size_in_bytes 128 * 1024 - 1
+  @v5_payload_length_bits 17
 
   for {human_code, opcode} <- @opcodes do
     defp opcode_for_op(unquote(human_code)), do: unquote(opcode)
@@ -222,66 +223,56 @@ defmodule Xandra.Frame do
   end
 
   defp encode_v5_wrappers_for_segments(segments, compressor) when is_list(segments) do
-    self_contained? = match?([_], segments)
-
-    for segment <- segments do
-      buffer = <<>>
-      uncompressed_payload_length = IO.iodata_length(segment)
-
-      if compressor do
-        uncompressed_payload_length = IO.iodata_length(segment)
-
-        <<^uncompressed_payload_length::32-big-unsigned, compressed_payload::binary>> =
-          compressor.compress(segment) |> IO.iodata_to_binary()
-
-        buffer =
-          encode_v5_header(
-            buffer,
-            _compressed_payload_length = byte_size(compressed_payload),
-            uncompressed_payload_length,
-            self_contained?
-          )
-
-        buffer = [buffer, compressed_payload]
-        payload_crc = CRC.crc32(compressed_payload)
-        [buffer, <<payload_crc::4-unit(8)-unsigned-little>>]
-      else
-        buffer = encode_v5_header(buffer, uncompressed_payload_length, nil, self_contained?)
-        buffer = [buffer, segment]
-        payload_crc = CRC.crc32(segment)
-        [buffer, <<payload_crc::4-unit(8)-unsigned-little>>]
-      end
-    end
+    self_contained_flag = if match?([_], segments), do: 1, else: 0
+    Enum.map(segments, &encode_v5_segment(&1, self_contained_flag, compressor))
   end
 
-  defp encode_v5_header(buffer, payload_length, uncompressed_payload_length, self_contained?) do
-    header_data = payload_length
-    flag_offset = 17
+  defp encode_v5_segment(segment, self_contained_flag, _compressor = nil) do
+    uncompressed_payload_length = IO.iodata_length(segment)
 
-    {header_data, flag_offset} =
-      if uncompressed_payload_length do
-        {header_data ||| uncompressed_payload_length <<< flag_offset, flag_offset + 17}
-      else
-        {header_data, flag_offset}
-      end
+    [
+      encode_v5_header_uncompressed(uncompressed_payload_length, self_contained_flag),
+      segment,
+      <<CRC.crc32(segment)::4-unit(8)-unsigned-little>>
+    ]
+  end
 
+  defp encode_v5_segment(segment, self_contained_flag, compressor) when is_atom(compressor) do
+    uncompressed_payload_length = IO.iodata_length(segment)
+
+    <<^uncompressed_payload_length::32-big-unsigned, compressed_payload::binary>> =
+      compressor.compress(segment) |> IO.iodata_to_binary()
+
+    [
+      encode_v5_header_compressed(
+        _compressed_payload_length = byte_size(compressed_payload),
+        uncompressed_payload_length,
+        self_contained_flag
+      ),
+      compressed_payload,
+      <<CRC.crc32(compressed_payload)::4-unit(8)-unsigned-little>>
+    ]
+  end
+
+  defp encode_v5_header_uncompressed(payload_length, self_contained_flag) do
+    header_data = payload_length ||| self_contained_flag <<< @v5_payload_length_bits
+
+    header_data_as_binary = <<header_data::3-unit(8)-unsigned-little>>
+    [header_data_as_binary | <<CRC.crc24(header_data_as_binary)::3-unit(8)-unsigned-little>>]
+  end
+
+  defp encode_v5_header_compressed(
+         compressed_payload_length,
+         uncompressed_payload_length,
+         self_contained_flag
+       ) do
     header_data =
-      if self_contained? do
-        header_data ||| 1 <<< flag_offset
-      else
-        header_data
-      end
+      compressed_payload_length ||| uncompressed_payload_length <<< @v5_payload_length_bits
 
-    header_data_as_binary =
-      if uncompressed_payload_length do
-        <<header_data::5-unit(8)-unsigned-little>>
-      else
-        <<header_data::3-unit(8)-unsigned-little>>
-      end
+    header_data = header_data ||| self_contained_flag <<< (@v5_payload_length_bits * 2)
 
-    header_crc = CRC.crc24(header_data_as_binary)
-
-    [buffer, header_data_as_binary, <<header_crc::3-unit(8)-unsigned-little>>]
+    header_data_as_binary = <<header_data::5-unit(8)-unsigned-little>>
+    [header_data_as_binary | <<CRC.crc24(header_data_as_binary)::3-unit(8)-unsigned-little>>]
   end
 
   ## Decoding
@@ -330,7 +321,6 @@ defmodule Xandra.Frame do
 
   defp decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor, payload_acc)
        when is_function(fetch_bytes_fun, 2) do
-    require Logger
     header_size_in_bytes = if compressor, do: 8, else: 6
 
     with {:ok, header, fetch_state} <- fetch_bytes_fun.(fetch_state, header_size_in_bytes) do
@@ -349,11 +339,11 @@ defmodule Xandra.Frame do
       payload_length = header_data &&& @max_v5_payload_size_in_bytes
 
       # Shift the first 17 bits.
-      header_data = header_data >>> 17
+      header_data = header_data >>> @v5_payload_length_bits
 
       {uncompressed_payload_length, header_data} =
         if compressor do
-          {header_data &&& @max_v5_payload_size_in_bytes, header_data >>> 17}
+          {header_data &&& @max_v5_payload_size_in_bytes, header_data >>> @v5_payload_length_bits}
         else
           {nil, header_data}
         end
