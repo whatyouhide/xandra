@@ -537,7 +537,7 @@ defmodule Xandra.ClusterTest do
   end
 
   defp refute_any_pool_started(test_ref) do
-    refute_receive {^test_ref, PoolMock, :init_called, _args}
+    refute_receive {^test_ref, PoolMock, :init_called, _args}, 50
   end
 
   defp wait_for_passing(time_left, fun) when time_left < 0 do

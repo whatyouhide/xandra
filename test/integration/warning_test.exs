@@ -3,7 +3,7 @@ defmodule WarningTest do
 
   alias Xandra.Batch
 
-  @moduletag skip_for_native_protocol: :v3
+  @moduletag :skip_for_native_protocol_v3
 
   setup_all %{keyspace: keyspace, start_options: start_options} do
     {:ok, conn} = Xandra.start_link(start_options)
@@ -53,7 +53,7 @@ defmodule WarningTest do
   # This test is broken when using native protocol v3 on C* 4.0.
   # See: https://github.com/lexhide/xandra/issues/218
   # TODO: Run this on C* 4.1 when it will be released.
-  @tag skip_for_native_protocol: :v4
+  @tag :skip_for_native_protocol_v4
   @tag :skip
   test "regression for crash after warning", %{keyspace: keyspace, start_options: start_options} do
     start_options = Keyword.put(start_options, :protocol_version, :v3)
