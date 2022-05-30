@@ -27,6 +27,7 @@ defmodule Xandra.Mixfile do
       preferred_cli_env: [
         "test.scylladb": :test,
         "test.clustering": :test,
+        "test.native_protocols": :test,
         "coveralls.html": :test
       ],
       test_coverage: [tool: ExCoveralls],
