@@ -3,12 +3,11 @@ defmodule PagingTest do
 
   alias Xandra.{Page, PageStream}
 
-  setup_all %{keyspace: keyspace, start_options: start_options} do
-    {:ok, conn} = Xandra.start_link(start_options)
-    Xandra.execute!(conn, "USE #{keyspace}")
+  setup_all %{keyspace: keyspace, setup_conn: setup_conn} do
+    Xandra.execute!(setup_conn, "USE #{keyspace}")
 
     statement = "CREATE TABLE alphabet (lang text, letter text, PRIMARY KEY (lang, letter))"
-    Xandra.execute!(conn, statement)
+    Xandra.execute!(setup_conn, statement)
 
     statement = """
     BEGIN BATCH
@@ -25,7 +24,7 @@ defmodule PagingTest do
     APPLY BATCH
     """
 
-    Xandra.execute!(conn, statement)
+    Xandra.execute!(setup_conn, statement)
 
     :ok
   end

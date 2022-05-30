@@ -1,17 +1,13 @@
 defmodule WarningTest do
-  use XandraTest.IntegrationCase, async: true, start_options: [protocol_version: :v4]
+  use XandraTest.IntegrationCase, async: true
 
   alias Xandra.Batch
 
   @moduletag :skip_for_native_protocol_v3
 
-  setup_all %{keyspace: keyspace, start_options: start_options} do
-    {:ok, conn} = Xandra.start_link(start_options)
-    Xandra.execute!(conn, "USE #{keyspace}")
-
-    statement = "CREATE TABLE fruits (id int, name text, PRIMARY KEY (id))"
-    Xandra.execute!(conn, statement)
-
+  setup_all %{keyspace: keyspace, setup_conn: setup_conn} do
+    Xandra.execute!(setup_conn, "USE #{keyspace}")
+    Xandra.execute!(setup_conn, "CREATE TABLE fruits (id int, name text, PRIMARY KEY (id))")
     :ok
   end
 

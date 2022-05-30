@@ -1,29 +1,26 @@
 defmodule UseTest do
   use XandraTest.IntegrationCase, async: true
 
-  setup_all %{keyspace: keyspace, start_options: start_options} do
-    {:ok, conn} = Xandra.start_link(start_options)
-
+  setup_all %{keyspace: keyspace, setup_conn: setup_conn, start_options: start_options} do
     other_keyspace = keyspace <> "_2"
-    Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{other_keyspace}")
+    Xandra.execute!(setup_conn, "DROP KEYSPACE IF EXISTS #{other_keyspace}")
 
     statement = """
     CREATE KEYSPACE #{other_keyspace}
     WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
     """
 
-    Xandra.execute!(conn, statement)
+    Xandra.execute!(setup_conn, statement)
 
     keyspaces = [keyspace, other_keyspace]
 
     for keyspace <- keyspaces do
       statement = "CREATE TABLE #{keyspace}.whoami (whoami text, PRIMARY KEY (whoami))"
-
-      Xandra.execute!(conn, statement)
+      Xandra.execute!(setup_conn, statement)
 
       statement = "INSERT INTO #{keyspace}.whoami (whoami) VALUES (:whoami)"
       params = %{"whoami" => {"text", keyspace}}
-      Xandra.execute!(conn, statement, params)
+      Xandra.execute!(setup_conn, statement, params)
     end
 
     on_exit(fn ->

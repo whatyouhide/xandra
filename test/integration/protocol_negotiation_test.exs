@@ -11,6 +11,6 @@ defmodule ProtocolNegotiationTest do
   #
   test "beta protocol v5" do
     conn = start_supervised!({Xandra, show_sensitive_data_on_connection_error: true})
-    Xandra.execute!(conn, "SELECT * FROM system.local")
+    assert %Xandra.Page{} = Xandra.execute!(conn, "SELECT * FROM system.local")
   end
 end

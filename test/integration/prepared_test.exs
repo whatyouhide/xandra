@@ -1,12 +1,11 @@
 defmodule PreparedTest do
   use XandraTest.IntegrationCase, async: true
 
-  setup_all %{keyspace: keyspace, start_options: start_options} do
-    {:ok, conn} = Xandra.start_link(start_options)
-    Xandra.execute!(conn, "USE #{keyspace}")
+  setup_all %{keyspace: keyspace, setup_conn: setup_conn} do
+    Xandra.execute!(setup_conn, "USE #{keyspace}")
 
     statement = "CREATE TABLE users (code int, name text, PRIMARY KEY (code, name))"
-    Xandra.execute!(conn, statement)
+    Xandra.execute!(setup_conn, statement)
 
     statement = """
     BEGIN BATCH
@@ -20,7 +19,7 @@ defmodule PreparedTest do
     APPLY BATCH
     """
 
-    Xandra.execute!(conn, statement)
+    Xandra.execute!(setup_conn, statement)
 
     :ok
   end

@@ -3,13 +3,9 @@ defmodule BatchTest do
 
   alias Xandra.{Batch, Error, Void, Page}
 
-  setup_all %{keyspace: keyspace, start_options: start_options} do
-    {:ok, conn} = Xandra.start_link(start_options)
-    Xandra.execute!(conn, "USE #{keyspace}")
-
-    statement = "CREATE TABLE users (id int, name text, PRIMARY KEY (id))"
-    Xandra.execute!(conn, statement)
-
+  setup_all %{keyspace: keyspace, setup_conn: setup_conn} do
+    Xandra.execute!(setup_conn, "USE #{keyspace}")
+    Xandra.execute!(setup_conn, "CREATE TABLE users (id int, name text, PRIMARY KEY (id))")
     :ok
   end
 
