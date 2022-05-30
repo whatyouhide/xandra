@@ -97,6 +97,81 @@ defmodule Xandra.FrameTest do
       assert IO.iodata_to_binary(redecoded) == <<0>>
     end
 
+    test "with mismatching CRC for the header (without compression)" do
+      <<header_data::3-bytes, _header_crc::3-bytes, rest::binary>> =
+        ""
+        |> Frame.encode_v5_wrappers(_compressor = nil)
+        |> IO.iodata_to_binary()
+
+      malformed_crc = <<1, 2, 3>>
+      malformed_encoded = <<header_data::binary, malformed_crc::binary, rest::binary>>
+
+      assert_raise RuntimeError, "mismatching CRC24 for header", fn ->
+        Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, malformed_encoded, _compressor = nil)
+      end
+    end
+
+    test "with mismatching CRC for the payload (without compression)" do
+      payload = :crypto.strong_rand_bytes(Enum.random(0..10))
+      payload_size = byte_size(payload)
+
+      <<header::6-bytes, ^payload::size(payload_size)-binary, _payload_crc::4-bytes>> =
+        payload
+        |> Frame.encode_v5_wrappers(_compressor = nil)
+        |> IO.iodata_to_binary()
+
+      malformed_crc = <<1, 2, 3, 4>>
+      malformed_encoded = <<header::binary, payload::binary, malformed_crc::binary>>
+
+      assert_raise RuntimeError, "mismatching CRC32 for payload", fn ->
+        Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, malformed_encoded, _compressor = nil)
+      end
+    end
+
+    test "with mismatching CRC for the header (with compression)" do
+      <<header_data::5-bytes, _header_crc::3-bytes, rest::binary>> =
+        ""
+        |> Frame.encode_v5_wrappers(_compressor = LZ4Compressor)
+        |> IO.iodata_to_binary()
+
+      malformed_crc = <<1, 2, 3>>
+      malformed_encoded = <<header_data::binary, malformed_crc::binary, rest::binary>>
+
+      assert_raise RuntimeError, "mismatching CRC24 for header", fn ->
+        Frame.decode_v5_wrapper(
+          &fetch_bytes_from_binary/2,
+          malformed_encoded,
+          _compressor = LZ4Compressor
+        )
+      end
+    end
+
+    test "with mismatching CRC for the payload (with compression)" do
+      payload = :crypto.strong_rand_bytes(Enum.random(0..10))
+
+      <<_length::4-bytes, compressed_payload::binary>> =
+        payload |> LZ4Compressor.compress() |> IO.iodata_to_binary()
+
+      compressed_payload_size = byte_size(compressed_payload)
+
+      <<header::8-bytes, ^compressed_payload::size(compressed_payload_size)-bytes,
+        _payload_crc::4-bytes>> =
+        payload
+        |> Frame.encode_v5_wrappers(_compressor = LZ4Compressor)
+        |> IO.iodata_to_binary()
+
+      malformed_crc = <<1, 2, 3, 4>>
+      malformed_encoded = <<header::binary, compressed_payload::binary, malformed_crc::binary>>
+
+      assert_raise RuntimeError, "mismatching CRC32 for payload", fn ->
+        Frame.decode_v5_wrapper(
+          &fetch_bytes_from_binary/2,
+          malformed_encoded,
+          _compressor = LZ4Compressor
+        )
+      end
+    end
+
     property "with a big inner content that spans multiple frames (not self contained), without compression" do
       size_range = (@max_v5_payload_size_in_bytes + 1)..(@max_v5_payload_size_in_bytes * 3)
 
