@@ -42,6 +42,10 @@ defmodule Xandra.Connection.Utils do
     with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <- recv_frame(transport, socket, :v4_or_less, compressor) do
       case tentative_protocol_module.decode_response(frame) do
+        # If a protocol version is forced, we should not gracefully downgrade.
+        %Error{} = error when not is_nil(protocol_version) ->
+          {:error, error}
+
         %Error{} = error ->
           cond do
             error.message =~ "unsupported protocol version" ->
