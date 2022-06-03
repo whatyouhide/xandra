@@ -25,7 +25,7 @@ defmodule ProtocolNegotiationTest do
             )
 
           ref = Process.monitor(conn)
-          assert_receive {:DOWN, ^ref, _, _, :killed}
+          assert_receive {:DOWN, ^ref, _, _, :killed}, 500
         end)
 
       assert log =~ "Beta version of the protocol used (5/v5-beta), but USE_BETA flag is unset"
