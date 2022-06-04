@@ -1088,20 +1088,7 @@ defmodule Xandra.Protocol.V3 do
 
   defp decode_string_multimap(<<buffer::bits>>, count, acc) do
     decode_string(key <- buffer)
-    {value, buffer} = decode_string_list(buffer)
+    {value, buffer} = Proto.decode_string_list(buffer)
     decode_string_multimap(buffer, count - 1, [{key, value} | acc])
-  end
-
-  defp decode_string_list(<<count::16, buffer::bits>>) do
-    decode_string_list(buffer, count, [])
-  end
-
-  defp decode_string_list(<<buffer::bits>>, 0, acc) do
-    {Enum.reverse(acc), buffer}
-  end
-
-  defp decode_string_list(<<buffer::bits>>, count, acc) do
-    decode_string(item <- buffer)
-    decode_string_list(buffer, count - 1, [item | acc])
   end
 end

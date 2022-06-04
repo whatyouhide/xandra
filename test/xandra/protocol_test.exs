@@ -1,5 +1,6 @@
 defmodule Xandra.ProtocolTest do
   use ExUnit.Case, async: true
+  use ExUnitProperties
 
   import Xandra.Protocol
 
@@ -50,6 +51,19 @@ defmodule Xandra.ProtocolTest do
           end
         )
       end
+    end
+  end
+
+  describe "decode_string_list/1" do
+    property "works for zero strings" do
+      check all cruft <- bitstring(), max_runs: 5 do
+        assert decode_string_list(<<0::16, cruft::bits>>) == {[], cruft}
+      end
+    end
+
+    test "decodes strings" do
+      assert decode_string_list(<<2::16, 3::16, "foo"::binary, 2::16, "ab"::binary, 1::1>>) ==
+               {["foo", "ab"], <<1::1>>}
     end
   end
 end

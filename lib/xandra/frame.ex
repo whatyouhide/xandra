@@ -11,7 +11,8 @@ defmodule Xandra.Frame do
     warning: false,
     custom_payload: false,
     use_beta: false,
-    atom_keys?: false
+    atom_keys?: false,
+    warnings: []
   ]
 
   use Bitwise

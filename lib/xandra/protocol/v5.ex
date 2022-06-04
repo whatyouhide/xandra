@@ -527,7 +527,7 @@ defmodule Xandra.Protocol.V5 do
   def decode_response(frame, query \\ nil, options \\ [])
 
   def decode_response(%Frame{kind: :error, body: body, warning: warning?}, _query, _options) do
-    body = decode_warnings(body, warning?)
+    {_warnings, body} = decode_warnings(body, warning?)
     {reason, buffer} = decode_error_reason(body)
     Error.new(reason, decode_error_message(reason, buffer))
   end
@@ -570,25 +570,12 @@ defmodule Xandra.Protocol.V5 do
       )
       when kind in [Simple, Prepared, Batch] do
     {body, tracing_id} = decode_tracing_id(body, tracing?)
-    body = decode_warnings(body, warning?)
+    {_warnings, body} = decode_warnings(body, warning?)
     decode_result_response(body, query, tracing_id, Keyword.put(options, :atom_keys?, atom_keys?))
   end
 
-  # We decode to consume the warning from the body but we ignore the result
-  defp decode_warnings(body, _warning? = false) do
-    body
-  end
-
-  defp decode_warnings(body, _warning? = true) do
-    {warnings, body} = decode_string_list(body)
-
-    Enum.each(warnings, fn warning ->
-      require Logger
-      Logger.warn(warning)
-    end)
-
-    body
-  end
+  defp decode_warnings(body, _warning? = false), do: {[], body}
+  defp decode_warnings(body, _warning? = true), do: Proto.decode_string_list(body)
 
   defp decode_inet(<<size, data::size(size)-bytes, buffer::bits>>) do
     address = decode_value(data, :inet)
@@ -712,7 +699,7 @@ defmodule Xandra.Protocol.V5 do
   defp decode_change_options(<<buffer::bits>>, target) when target in ["FUNCTION", "AGGREGATE"] do
     decode_string(keyspace <- buffer)
     decode_string(subject <- buffer)
-    {values, buffer} = decode_string_list(buffer)
+    {values, buffer} = Proto.decode_string_list(buffer)
     <<>> = buffer
     %{keyspace: keyspace, subject: subject, arguments: values}
   end
@@ -1128,20 +1115,7 @@ defmodule Xandra.Protocol.V5 do
 
   defp decode_string_multimap(<<buffer::bits>>, count, acc) do
     decode_string(key <- buffer)
-    {value, buffer} = decode_string_list(buffer)
+    {value, buffer} = Proto.decode_string_list(buffer)
     decode_string_multimap(buffer, count - 1, [{key, value} | acc])
-  end
-
-  defp decode_string_list(<<count::16, buffer::bits>>) do
-    decode_string_list(buffer, count, [])
-  end
-
-  defp decode_string_list(<<buffer::bits>>, 0, acc) do
-    {Enum.reverse(acc), buffer}
-  end
-
-  defp decode_string_list(<<buffer::bits>>, count, acc) do
-    decode_string(item <- buffer)
-    decode_string_list(buffer, count - 1, [item | acc])
   end
 end

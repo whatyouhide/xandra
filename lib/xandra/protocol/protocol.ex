@@ -10,6 +10,13 @@ defmodule Xandra.Protocol do
   @type flag_bit() ::
           unquote(Enum.reduce(@valid_flag_bits, &quote(do: unquote(&1) | unquote(&2))))
 
+  defp assert_not_a_variable(ast) do
+    if not match?({var, _context, nil} when is_atom(var), ast) do
+      raise ArgumentError,
+            "the right-hand side of <- must be a variable, got: #{Macro.to_string(ast)}"
+    end
+  end
+
   # Takes a protocol module and returns the protocol "format", that is, whether frames (= envelopes) should be wrapped inside the v5+ frame wrapper or not.
   @spec frame_protocol_format(module()) :: :v4_or_less | :v5_or_more
   def frame_protocol_format(protocol_module)
@@ -55,6 +62,21 @@ defmodule Xandra.Protocol do
     end
   end
 
+  # A [short] n, followed by n [string].
+  # https://github.com/apache/cassandra/blob/ce4ae43a310a809fb0c82a7f48001a0f8206e156/doc/native_protocol_v5.spec#L383
+  def decode_string_list(<<count::16, buffer::bits>>) do
+    decode_string_list(buffer, count, [])
+  end
+
+  defp decode_string_list(<<buffer::bits>>, 0, acc) do
+    {Enum.reverse(acc), buffer}
+  end
+
+  defp decode_string_list(<<buffer::bits>>, count, acc) do
+    decode_string(item <- buffer)
+    decode_string_list(buffer, count - 1, [item | acc])
+  end
+
   @spec date_from_unix_days(integer()) :: Calendar.date()
   def date_from_unix_days(days) when is_integer(days) do
     Date.add(~D[1970-01-01], days)
@@ -83,13 +105,6 @@ defmodule Xandra.Protocol do
       bitmask ||| flag_bit
     else
       bitmask
-    end
-  end
-
-  defp assert_not_a_variable(ast) do
-    if not match?({var, _context, nil} when is_atom(var), ast) do
-      raise ArgumentError,
-            "the right-hand side of <- must be a variable, got: #{Macro.to_string(ast)}"
     end
   end
 end
