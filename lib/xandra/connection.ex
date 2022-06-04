@@ -173,18 +173,20 @@ defmodule Xandra.Connection do
 
         with :ok <- transport.send(socket, payload),
              {:ok, %Frame{} = frame} <-
-               Utils.recv_frame(transport, socket, protocol_format, state.compressor),
-             frame = %{frame | atom_keys?: state.atom_keys?},
-             {%Prepared{} = prepared, _warnings} <-
-               state.protocol_module.decode_response(frame, prepared) do
-          Prepared.Cache.insert(state.prepared_cache, prepared)
-          {:ok, prepared, state}
+               Utils.recv_frame(transport, socket, protocol_format, state.compressor) do
+          frame = %Frame{frame | atom_keys?: state.atom_keys?}
+
+          case state.protocol_module.decode_response(frame, prepared) do
+            {%Prepared{} = prepared, _warnings} ->
+              Prepared.Cache.insert(state.prepared_cache, prepared)
+              {:ok, prepared, state}
+
+            %Xandra.Error{} = reason ->
+              {:error, reason, state}
+          end
         else
           {:error, reason} ->
             {:disconnect, ConnectionError.new("prepare", reason), state}
-
-          %Xandra.Error{} = reason ->
-            {:error, reason, state}
         end
     end
   end
@@ -220,18 +222,23 @@ defmodule Xandra.Connection do
 
     with :ok <- state.transport.send(socket, payload),
          {:ok, %Frame{} = frame} <-
-           Utils.recv_frame(state.transport, socket, protocol_format, compressor),
-         frame = %{frame | atom_keys?: atom_keys?},
-         {%SetKeyspace{keyspace: keyspace} = response, _warnings} <-
-           state.protocol_module.decode_response(frame, query, options) do
-      {:ok, query, response, %{state | current_keyspace: keyspace}}
+           Utils.recv_frame(state.transport, socket, protocol_format, compressor) do
+      frame = %Frame{frame | atom_keys?: atom_keys?}
+
+      case state.protocol_module.decode_response(frame, query, options) do
+        {%_{} = response, _warnings} ->
+          state =
+            case response do
+              %SetKeyspace{keyspace: keyspace} -> %__MODULE__{state | current_keyspace: keyspace}
+              _other -> state
+            end
+
+          {:ok, query, response, state}
+
+        %Xandra.Error{} = error ->
+          {:ok, query, error, state}
+      end
     else
-      {%_{} = response, _warnings} ->
-        {:ok, query, response, state}
-
-      %Xandra.Error{} = error ->
-        {:ok, query, error, state}
-
       {:error, reason} ->
         {:disconnect, ConnectionError.new("execute", reason), state}
     end
