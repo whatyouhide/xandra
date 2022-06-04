@@ -515,12 +515,13 @@ defmodule Xandra.Protocol.V3 do
   @spec decode_response(Frame.t(:ready), nil) :: :ok
   @spec decode_response(Frame.t(:supported), nil) :: %{optional(String.t()) => [String.t()]}
   @spec decode_response(Frame.t(:result), Simple.t() | Prepared.t() | Batch.t()) ::
-          Xandra.result() | Prepared.t()
+          {Xandra.result() | Prepared.t(), warnings :: []}
   def decode_response(frame, query \\ nil, options \\ [])
 
   def decode_response(%Frame{kind: :error, body: body}, _query, _options) do
     {reason, buffer} = decode_error_reason(body)
-    Error.new(reason, decode_error_message(reason, buffer))
+    # Warnings are not supported in native protocol v3.
+    Error.new(reason, decode_error_message(reason, buffer), _warnings = [])
   end
 
   def decode_response(%Frame{kind: :ready, body: <<>>}, nil, _options) do
@@ -555,7 +556,17 @@ defmodule Xandra.Protocol.V3 do
       )
       when kind in [Simple, Prepared, Batch] do
     {body, tracing_id} = decode_tracing_id(body, tracing?)
-    decode_result_response(body, query, tracing_id, Keyword.put(options, :atom_keys?, atom_keys?))
+
+    result =
+      decode_result_response(
+        body,
+        query,
+        tracing_id,
+        Keyword.put(options, :atom_keys?, atom_keys?)
+      )
+
+    # Warnings are not supported in native protocol v3.
+    {result, _warnings = []}
   end
 
   defp decode_inet(<<size, data::size(size)-bytes, buffer::bits>>) do

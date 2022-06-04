@@ -523,13 +523,13 @@ defmodule Xandra.Protocol.V5 do
   @spec decode_response(Frame.t(:ready), nil) :: :ok
   @spec decode_response(Frame.t(:supported), nil) :: %{optional(String.t()) => [String.t()]}
   @spec decode_response(Frame.t(:result), Simple.t() | Prepared.t() | Batch.t()) ::
-          Xandra.result() | Prepared.t()
+          {Xandra.result() | Prepared.t(), warnings :: [String.t()]}
   def decode_response(frame, query \\ nil, options \\ [])
 
   def decode_response(%Frame{kind: :error, body: body, warning: warning?}, _query, _options) do
-    {_warnings, body} = decode_warnings(body, warning?)
+    {warnings, body} = decode_warnings(body, warning?)
     {reason, buffer} = decode_error_reason(body)
-    Error.new(reason, decode_error_message(reason, buffer))
+    Error.new(reason, decode_error_message(reason, buffer), warnings)
   end
 
   def decode_response(%Frame{kind: :ready, body: <<>>}, nil, _options) do
@@ -570,8 +570,17 @@ defmodule Xandra.Protocol.V5 do
       )
       when kind in [Simple, Prepared, Batch] do
     {body, tracing_id} = decode_tracing_id(body, tracing?)
-    {_warnings, body} = decode_warnings(body, warning?)
-    decode_result_response(body, query, tracing_id, Keyword.put(options, :atom_keys?, atom_keys?))
+    {warnings, body} = decode_warnings(body, warning?)
+
+    result =
+      decode_result_response(
+        body,
+        query,
+        tracing_id,
+        Keyword.put(options, :atom_keys?, atom_keys?)
+      )
+
+    {result, warnings}
   end
 
   defp decode_warnings(body, _warning? = false), do: {[], body}

@@ -15,15 +15,17 @@ defmodule Xandra.Error do
   example, for logging purposes), it is possible to use `Exception.message/1` to
   get a formatted version of the error.
   """
-  defexception [:reason, :message]
+  defexception [:reason, :message, warnings: []]
 
   @type t :: %__MODULE__{
           reason: atom,
-          message: String.t()
+          message: String.t(),
+          warnings: [String.t()]
         }
 
-  @spec new(atom, String.t()) :: t
-  def new(reason, message) when is_atom(reason) and is_binary(message) do
-    %__MODULE__{reason: reason, message: message}
+  @spec new(atom, String.t(), [String.t()]) :: t
+  def new(reason, message, warnings)
+      when is_atom(reason) and is_binary(message) and is_list(warnings) do
+    %__MODULE__{reason: reason, message: message, warnings: warnings}
   end
 end

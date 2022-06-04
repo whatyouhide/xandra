@@ -518,13 +518,13 @@ defmodule Xandra.Protocol.V4 do
   @spec decode_response(Frame.t(:ready), nil) :: :ok
   @spec decode_response(Frame.t(:supported), nil) :: %{optional(String.t()) => [String.t()]}
   @spec decode_response(Frame.t(:result), Simple.t() | Prepared.t() | Batch.t()) ::
-          Xandra.result() | Prepared.t()
+          {Xandra.result() | Prepared.t(), warnings :: []}
   def decode_response(frame, query \\ nil, options \\ [])
 
   def decode_response(%Frame{kind: :error, body: body, warning: warning?}, _query, _options) do
-    {_warnings, body} = decode_warnings(body, warning?)
+    {warnings, body} = decode_warnings(body, warning?)
     {reason, buffer} = decode_error_reason(body)
-    Error.new(reason, decode_error_message(reason, buffer))
+    Error.new(reason, decode_error_message(reason, buffer), warnings)
   end
 
   def decode_response(%Frame{kind: :ready, body: <<>>}, nil, _options) do
@@ -565,8 +565,17 @@ defmodule Xandra.Protocol.V4 do
       )
       when kind in [Simple, Prepared, Batch] do
     {body, tracing_id} = decode_tracing_id(body, tracing?)
-    {_warnings, body} = decode_warnings(body, warning?)
-    decode_result_response(body, query, tracing_id, Keyword.put(options, :atom_keys?, atom_keys?))
+    {warnings, body} = decode_warnings(body, warning?)
+
+    result =
+      decode_result_response(
+        body,
+        query,
+        tracing_id,
+        Keyword.put(options, :atom_keys?, atom_keys?)
+      )
+
+    {result, warnings}
   end
 
   # We decode to consume the warning from the body but we ignore the result
@@ -595,10 +604,10 @@ defmodule Xandra.Protocol.V4 do
 
   # Page
   defp decode_result_response(<<0x0002::32-signed, buffer::bits>>, query, tracing_id, options) do
-    page = new_page(query)
+    %Page{} = page = new_page(query)
     {page, buffer} = decode_metadata(buffer, page, Keyword.fetch!(options, :atom_keys?))
     columns = rewrite_column_types(page.columns, options)
-    %{page | content: decode_page_content(buffer, columns), tracing_id: tracing_id}
+    %Page{page | content: decode_page_content(buffer, columns), tracing_id: tracing_id}
   end
 
   # SetKeyspace
@@ -620,7 +629,7 @@ defmodule Xandra.Protocol.V4 do
     {%{columns: bound_columns}, buffer} = decode_metadata_prepared(buffer, %Page{}, atom_keys?)
     {%{columns: result_columns}, <<>>} = decode_metadata(buffer, %Page{}, atom_keys?)
 
-    %{
+    %Prepared{
       prepared
       | id: id,
         bound_columns: bound_columns,

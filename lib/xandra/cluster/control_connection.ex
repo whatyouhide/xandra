@@ -289,7 +289,7 @@ defmodule Xandra.Cluster.ControlConnection do
     with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <-
            Utils.recv_frame(transport, socket, protocol_format, _compressor = nil) do
-      %Xandra.Page{} = page = protocol_module.decode_response(frame, query)
+      {%Xandra.Page{} = page, _warnings} = protocol_module.decode_response(frame, query)
       [local_info] = Enum.to_list(page)
       {:ok, local_info}
     end
@@ -312,7 +312,7 @@ defmodule Xandra.Cluster.ControlConnection do
     with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <-
            Utils.recv_frame(transport, socket, protocol_format, _compressor = nil) do
-      %Xandra.Page{} = page = protocol_module.decode_response(frame, query)
+      {%Xandra.Page{} = page, _warnings} = protocol_module.decode_response(frame, query)
       {:ok, Enum.to_list(page)}
     end
   end
@@ -320,7 +320,7 @@ defmodule Xandra.Cluster.ControlConnection do
   defp consume_new_data(%__MODULE__{cluster: cluster} = data) do
     case decode_frame(data.buffer) do
       {frame, rest} ->
-        change_event = data.protocol_module.decode_response(frame)
+        {change_event, _warnings} = data.protocol_module.decode_response(frame)
         Logger.debug("Received event: #{inspect(change_event)}")
         :ok = Cluster.update(cluster, change_event)
         consume_new_data(%__MODULE__{data | buffer: rest})

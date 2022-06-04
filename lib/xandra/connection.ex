@@ -175,7 +175,8 @@ defmodule Xandra.Connection do
              {:ok, %Frame{} = frame} <-
                Utils.recv_frame(transport, socket, protocol_format, state.compressor),
              frame = %{frame | atom_keys?: state.atom_keys?},
-             %Prepared{} = prepared <- state.protocol_module.decode_response(frame, prepared) do
+             {%Prepared{} = prepared, _warnings} <-
+               state.protocol_module.decode_response(frame, prepared) do
           Prepared.Cache.insert(state.prepared_cache, prepared)
           {:ok, prepared, state}
         else
@@ -221,12 +222,15 @@ defmodule Xandra.Connection do
          {:ok, %Frame{} = frame} <-
            Utils.recv_frame(state.transport, socket, protocol_format, compressor),
          frame = %{frame | atom_keys?: atom_keys?},
-         %SetKeyspace{keyspace: keyspace} = response <-
+         {%SetKeyspace{keyspace: keyspace} = response, _warnings} <-
            state.protocol_module.decode_response(frame, query, options) do
       {:ok, query, response, %{state | current_keyspace: keyspace}}
     else
-      %_{} = response ->
+      {%_{} = response, _warnings} ->
         {:ok, query, response, state}
+
+      %Xandra.Error{} = error ->
+        {:ok, query, error, state}
 
       {:error, reason} ->
         {:disconnect, ConnectionError.new("execute", reason), state}
