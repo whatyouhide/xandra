@@ -522,7 +522,7 @@ defmodule Xandra.Protocol.V4 do
   def decode_response(frame, query \\ nil, options \\ [])
 
   def decode_response(%Frame{kind: :error, body: body, warning: warning?}, _query, _options) do
-    {warnings, body} = decode_warnings(body, warning?)
+    {warnings, body} = Proto.decode_warnings(body, warning?)
     {reason, buffer} = decode_error_reason(body)
     Error.new(reason, decode_error_message(reason, buffer), warnings)
   end
@@ -565,7 +565,7 @@ defmodule Xandra.Protocol.V4 do
       )
       when kind in [Simple, Prepared, Batch] do
     {body, tracing_id} = decode_tracing_id(body, tracing?)
-    {warnings, body} = decode_warnings(body, warning?)
+    {warnings, body} = Proto.decode_warnings(body, warning?)
 
     result =
       decode_result_response(
@@ -579,8 +579,6 @@ defmodule Xandra.Protocol.V4 do
   end
 
   # We decode to consume the warning from the body but we ignore the result
-  defp decode_warnings(body, _warning? = false), do: {[], body}
-  defp decode_warnings(body, _warning? = true), do: Proto.decode_string_list(body)
 
   defp decode_inet(<<size, data::size(size)-bytes, buffer::bits>>) do
     address = decode_value(data, :inet)

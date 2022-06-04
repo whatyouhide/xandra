@@ -64,6 +64,7 @@ defmodule Xandra.Protocol do
 
   # A [short] n, followed by n [string].
   # https://github.com/apache/cassandra/blob/ce4ae43a310a809fb0c82a7f48001a0f8206e156/doc/native_protocol_v5.spec#L383
+  @spec decode_string_list(bitstring()) :: {[String.t()], bitstring()}
   def decode_string_list(<<count::16, buffer::bits>>) do
     decode_string_list(buffer, count, [])
   end
@@ -76,6 +77,11 @@ defmodule Xandra.Protocol do
     decode_string(item <- buffer)
     decode_string_list(buffer, count - 1, [item | acc])
   end
+
+  # Only used in native protocol v4+.
+  @spec decode_warnings(bitstring(), boolean()) :: {[String.t()], bitstring()}
+  def decode_warnings(body, _warning? = false), do: {[], body}
+  def decode_warnings(body, _warning? = true), do: decode_string_list(body)
 
   @spec date_from_unix_days(integer()) :: Calendar.date()
   def date_from_unix_days(days) when is_integer(days) do
