@@ -20,7 +20,9 @@ defmodule Xandra.Connection do
     :default_consistency,
     :atom_keys?,
     :protocol_module,
-    :current_keyspace
+    :current_keyspace,
+    :address,
+    :port
   ]
 
   @impl true
@@ -51,7 +53,9 @@ defmodule Xandra.Connection do
           compressor: compressor,
           default_consistency: default_consistency,
           atom_keys?: atom_keys?,
-          current_keyspace: nil
+          current_keyspace: nil,
+          address: address,
+          port: port
         }
 
         with {:ok, supported_options, protocol_module} <-
@@ -177,7 +181,8 @@ defmodule Xandra.Connection do
           frame = %Frame{frame | atom_keys?: state.atom_keys?}
 
           case state.protocol_module.decode_response(frame, prepared) do
-            {%Prepared{} = prepared, _warnings} ->
+            {%Prepared{} = prepared, warnings} ->
+              maybe_execute_telemetry_event_for_warnings(state, prepared, warnings)
               Prepared.Cache.insert(state.prepared_cache, prepared)
               {:ok, prepared, state}
 
@@ -226,7 +231,9 @@ defmodule Xandra.Connection do
       frame = %Frame{frame | atom_keys?: atom_keys?}
 
       case state.protocol_module.decode_response(frame, query, options) do
-        {%_{} = response, _warnings} ->
+        {%_{} = response, warnings} ->
+          maybe_execute_telemetry_event_for_warnings(state, query, warnings)
+
           state =
             case response do
               %SetKeyspace{keyspace: keyspace} -> %__MODULE__{state | current_keyspace: keyspace}
@@ -241,6 +248,17 @@ defmodule Xandra.Connection do
     else
       {:error, reason} ->
         {:disconnect, ConnectionError.new("execute", reason), state}
+    end
+  end
+
+  defp maybe_execute_telemetry_event_for_warnings(%__MODULE__{} = state, query, warnings) do
+    if warnings != [] do
+      metadata =
+        state
+        |> Map.take([:address, :port, :current_keyspace])
+        |> Map.put(:query, query)
+
+      :telemetry.execute([:xandra, :server_warnings], %{warnings: warnings}, metadata)
     end
   end
 
