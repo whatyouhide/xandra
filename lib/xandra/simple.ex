@@ -1,5 +1,7 @@
 defmodule Xandra.Simple do
-  @moduledoc false
+  @moduledoc """
+  A data structure used internally to represent simple queries.
+  """
 
   defstruct [:statement, :values, :default_consistency, :protocol_module, :compressor]
 

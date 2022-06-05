@@ -20,7 +20,9 @@ defmodule Xandra.Connection do
     :default_consistency,
     :atom_keys?,
     :protocol_module,
-    :current_keyspace
+    :current_keyspace,
+    :address,
+    :port
   ]
 
   @impl true
@@ -51,7 +53,9 @@ defmodule Xandra.Connection do
           compressor: compressor,
           default_consistency: default_consistency,
           atom_keys?: atom_keys?,
-          current_keyspace: nil
+          current_keyspace: nil,
+          address: address,
+          port: port
         }
 
         with {:ok, supported_options, protocol_module} <-
@@ -173,18 +177,21 @@ defmodule Xandra.Connection do
 
         with :ok <- transport.send(socket, payload),
              {:ok, %Frame{} = frame} <-
-               Utils.recv_frame(transport, socket, protocol_format, state.compressor),
-             frame = %{frame | atom_keys?: state.atom_keys?},
-             {%Prepared{} = prepared, _warnings} <-
-               state.protocol_module.decode_response(frame, prepared) do
-          Prepared.Cache.insert(state.prepared_cache, prepared)
-          {:ok, prepared, state}
+               Utils.recv_frame(transport, socket, protocol_format, state.compressor) do
+          frame = %Frame{frame | atom_keys?: state.atom_keys?}
+
+          case state.protocol_module.decode_response(frame, prepared) do
+            {%Prepared{} = prepared, warnings} ->
+              maybe_execute_telemetry_event_for_warnings(state, prepared, warnings)
+              Prepared.Cache.insert(state.prepared_cache, prepared)
+              {:ok, prepared, state}
+
+            %Xandra.Error{} = reason ->
+              {:error, reason, state}
+          end
         else
           {:error, reason} ->
             {:disconnect, ConnectionError.new("prepare", reason), state}
-
-          %Xandra.Error{} = reason ->
-            {:error, reason, state}
         end
     end
   end
@@ -220,20 +227,38 @@ defmodule Xandra.Connection do
 
     with :ok <- state.transport.send(socket, payload),
          {:ok, %Frame{} = frame} <-
-           Utils.recv_frame(state.transport, socket, protocol_format, compressor),
-         frame = %{frame | atom_keys?: atom_keys?},
-         {%SetKeyspace{keyspace: keyspace} = response, _warnings} <-
-           state.protocol_module.decode_response(frame, query, options) do
-      {:ok, query, response, %{state | current_keyspace: keyspace}}
+           Utils.recv_frame(state.transport, socket, protocol_format, compressor) do
+      frame = %Frame{frame | atom_keys?: atom_keys?}
+
+      case state.protocol_module.decode_response(frame, query, options) do
+        {%_{} = response, warnings} ->
+          maybe_execute_telemetry_event_for_warnings(state, query, warnings)
+
+          state =
+            case response do
+              %SetKeyspace{keyspace: keyspace} -> %__MODULE__{state | current_keyspace: keyspace}
+              _other -> state
+            end
+
+          {:ok, query, response, state}
+
+        %Xandra.Error{} = error ->
+          {:ok, query, error, state}
+      end
     else
-      {%_{} = response, _warnings} ->
-        {:ok, query, response, state}
-
-      %Xandra.Error{} = error ->
-        {:ok, query, error, state}
-
       {:error, reason} ->
         {:disconnect, ConnectionError.new("execute", reason), state}
+    end
+  end
+
+  defp maybe_execute_telemetry_event_for_warnings(%__MODULE__{} = state, query, warnings) do
+    if warnings != [] do
+      metadata =
+        state
+        |> Map.take([:address, :port, :current_keyspace])
+        |> Map.put(:query, query)
+
+      :telemetry.execute([:xandra, :server_warnings], %{warnings: warnings}, metadata)
     end
   end
 

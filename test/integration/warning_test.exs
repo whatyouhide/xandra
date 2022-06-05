@@ -4,6 +4,7 @@ defmodule WarningTest do
   alias Xandra.Batch
 
   @moduletag :skip_for_native_protocol_v3
+  @moduletag :cassandra_specific
 
   setup_all %{keyspace: keyspace, setup_conn: setup_conn} do
     Xandra.execute!(setup_conn, "USE #{keyspace}")
@@ -16,7 +17,7 @@ defmodule WarningTest do
     :ok
   end
 
-  test "batch of type \"unlogged\" producing warning", %{conn: conn} do
+  test "batch of type \"unlogged\" producing warning", %{conn: conn, keyspace: keyspace} do
     # Batches spanning more partitions than "unlogged_batch_across_partitions_warn_threshold"
     # (default: 10) generate a warning. Right now we don't use the warning but the warning
     # causes the payload to be different so we need to test that we're able to decode this
@@ -40,10 +41,19 @@ defmodule WarningTest do
         Batch.add(acc, "INSERT INTO fruits (id, name) VALUES (#{index}, '#{name}')")
       end)
 
+    mirror_telemetry_event([:xandra, :server_warnings])
     Xandra.execute!(conn, batch)
 
     result = for %{"name" => name} <- Xandra.execute!(conn, "SELECT name FROM fruits"), do: name
     assert Enum.sort(result) == fruit_names
+
+    assert_receive {:telemetry_event, [:xandra, :server_warnings], measurements, metadata}
+    assert %{warnings: [warning]} = measurements
+    assert warning =~ "Unlogged batch covering 11 partitions"
+    assert metadata.address == '127.0.0.1'
+    assert metadata.port == 9042
+    assert metadata.current_keyspace == keyspace
+    assert inspect(metadata.query) == inspect(batch)
   end
 
   # This test is broken when using native protocol v3 on C* 4.0.
@@ -71,5 +81,19 @@ defmodule WarningTest do
     """
 
     Xandra.execute!(conn, query, Enum.map(ids, &{"int", &1}))
+  end
+
+  defp mirror_telemetry_event(event_name) do
+    :telemetry.attach(
+      make_ref(),
+      event_name,
+      &__MODULE__.mirror_telemetry_event_handler/4,
+      %{test_pid: self()}
+    )
+  end
+
+  # Public to use &__MODULE__.fun/4 and avoid Telemetry warnings.
+  def mirror_telemetry_event_handler(event_name, measurements, meta, %{test_pid: test_pid}) do
+    send(test_pid, {:telemetry_event, event_name, measurements, meta})
   end
 end

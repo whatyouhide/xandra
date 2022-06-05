@@ -77,6 +77,7 @@ defmodule Xandra.Mixfile do
       {:db_connection, "~> 2.0"},
       {:decimal, "~> 1.7", optional: true},
       {:nimble_options, "~> 0.4.0"},
+      {:telemetry, "~> 0.4.3 or ~> 1.0"},
 
       # Dev and test dependencies
       {:ex_doc, "~> 0.28", only: :dev},
