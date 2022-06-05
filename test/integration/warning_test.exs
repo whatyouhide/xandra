@@ -4,6 +4,7 @@ defmodule WarningTest do
   alias Xandra.Batch
 
   @moduletag :skip_for_native_protocol_v3
+  @moduletag :cassandra_specific
 
   setup_all %{keyspace: keyspace, setup_conn: setup_conn} do
     Xandra.execute!(setup_conn, "USE #{keyspace}")
