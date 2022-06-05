@@ -15,6 +15,8 @@ jobs:
       matrix:
         otp: ["24.2"]
         elixir: ["1.13"]
+    env:
+      MIX_ENV: test
     steps:
       - name: Clone the repository
         uses: actions/checkout@v2
@@ -33,6 +35,10 @@ jobs:
             deps
             _build
           key: ${{ runner.os }}-mix-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
+
+      - name: Install and compile dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        run: mix do deps.get --only test, deps.compile
 
       - name: Check formatting
         run: mix format --check-formatted
