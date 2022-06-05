@@ -43,7 +43,8 @@ defmodule Xandra.Mixfile do
         source_ref: "v#{@version}",
         source_url: @repo_url,
         extras: [
-          "pages/Data types comparison table.md"
+          "pages/Data types comparison table.md",
+          "pages/Compatibility.md"
         ]
       ]
     ]
