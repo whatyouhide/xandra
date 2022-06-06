@@ -82,6 +82,7 @@ defmodule Xandra.Frame do
 
   @max_v5_payload_size_in_bytes 128 * 1024 - 1
   @v5_payload_length_bits 17
+  @v5_header_crc_bytes 3
 
   for {human_code, opcode} <- @opcodes do
     defp opcode_for_op(unquote(human_code)), do: unquote(opcode)
@@ -316,18 +317,69 @@ defmodule Xandra.Frame do
   # Made public for testing.
   @doc false
   def decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor) do
-    decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor, _payload_acc = <<>>)
+    case decode_next_v5_wrapper(fetch_bytes_fun, fetch_state, compressor) do
+      {:done, payload, _fetch_state} ->
+        {:ok, payload}
+
+      {:not_self_contained, payload, fetch_state} ->
+        v4_header_length = header_length()
+        <<v4_header::size(v4_header_length)-bytes, v4_payload_start::binary>> = payload
+
+        decode_v5_wrapper_not_self_contained(
+          fetch_bytes_fun,
+          fetch_state,
+          compressor,
+          _v4_frame_length = body_length(v4_header),
+          _v4_fetched_body_bytes = byte_size(v4_payload_start),
+          _payload_acc = payload
+        )
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
-  defp decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor, payload_acc)
+  defp decode_v5_wrapper_not_self_contained(
+         fetch_bytes_fun,
+         fetch_state,
+         compressor,
+         v4_frame_length,
+         v4_fetched_body_bytes,
+         payload_acc
+       ) do
+    if v4_fetched_body_bytes >= v4_frame_length do
+      {:ok, IO.iodata_to_binary(payload_acc)}
+    else
+      case decode_next_v5_wrapper(fetch_bytes_fun, fetch_state, compressor) do
+        {:error, reason} ->
+          {:error, reason}
+
+        {:not_self_contained, chunk, _fetch_state}
+        when byte_size(chunk) + v4_fetched_body_bytes >= v4_frame_length ->
+          {:ok, IO.iodata_to_binary([payload_acc | chunk])}
+
+        {:not_self_contained, chunk, fetch_state} ->
+          decode_v5_wrapper_not_self_contained(
+            fetch_bytes_fun,
+            fetch_state,
+            compressor,
+            v4_frame_length,
+            v4_fetched_body_bytes + byte_size(chunk),
+            [payload_acc | chunk]
+          )
+      end
+    end
+  end
+
+  defp decode_next_v5_wrapper(fetch_bytes_fun, fetch_state, compressor)
        when is_function(fetch_bytes_fun, 2) do
     header_size_in_bytes = if compressor, do: 8, else: 6
 
     with {:ok, header, fetch_state} <- fetch_bytes_fun.(fetch_state, header_size_in_bytes) do
-      header_contents_size = header_size_in_bytes - 3
+      header_contents_size = header_size_in_bytes - @v5_header_crc_bytes
 
       <<header_contents::size(header_contents_size)-bytes,
-        crc24_of_header::3-unit(8)-integer-little>> = header
+        crc24_of_header::@v5_header_crc_bytes-unit(8)-integer-little>> = header
 
       <<header_data::size(header_contents_size)-unit(8)-integer-little>> = header_contents
 
@@ -370,10 +422,10 @@ defmodule Xandra.Frame do
               payload
             end
 
-          if self_contained? or payload_length < @max_v5_payload_size_in_bytes do
-            {:ok, payload_acc <> uncompressed_payload}
+          if self_contained? do
+            {:done, uncompressed_payload, fetch_state}
           else
-            decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor, payload_acc <> payload)
+            {:not_self_contained, uncompressed_payload, fetch_state}
           end
 
         {:error, reason} ->

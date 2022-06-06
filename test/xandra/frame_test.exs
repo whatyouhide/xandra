@@ -97,6 +97,55 @@ defmodule Xandra.FrameTest do
       assert IO.iodata_to_binary(redecoded) == <<0>>
     end
 
+    property "with a big inner content that spans multiple frames (not self contained), without compression" do
+      size_range = (@max_v5_payload_size_in_bytes + 1)..(@max_v5_payload_size_in_bytes * 3)
+
+      check all size <- integer(size_range),
+                max_runs: 5 do
+        # We put the v4- header here because we use the length it contains in order to decide when
+        # to stop parsing.
+        inner_frame = <<0::5-unit(8), size::32>> <> :binary.copy(<<0>>, size)
+
+        encoded =
+          inner_frame |> Frame.encode_v5_wrappers(_compressor = nil) |> IO.iodata_to_binary()
+
+        assert {:ok, redecoded} =
+                 Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
+
+        assert inner_frame == IO.iodata_to_binary(redecoded)
+      end
+    end
+
+    property "with v4- frames inside the v5+ wrappers" do
+      check all kind <- kind_generator(),
+                tracing? <- boolean(),
+                body <- binary(),
+                stream_id <- map(integer(), &abs/1) do
+        protocol_module = Frame.protocol_version_to_module(:v5)
+
+        frame = Frame.new(kind, compressor: nil, tracing: tracing?)
+
+        frame = %Frame{
+          frame
+          | body: body,
+            stream_id: stream_id,
+            protocol_version: :v5
+        }
+
+        encoded =
+          frame
+          |> Frame.encode(protocol_module)
+          |> IO.iodata_to_binary()
+
+        assert {:ok, redecoded_frame} =
+                 Frame.decode_v5(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
+
+        assert redecoded_frame == frame
+      end
+    end
+  end
+
+  describe "decode_v5_wrapper/3" do
     test "with mismatching CRC for the header (without compression)" do
       <<header_data::3-bytes, _header_crc::3-bytes, rest::binary>> =
         ""
@@ -172,49 +221,11 @@ defmodule Xandra.FrameTest do
       end
     end
 
-    property "with a big inner content that spans multiple frames (not self contained), without compression" do
-      size_range = (@max_v5_payload_size_in_bytes + 1)..(@max_v5_payload_size_in_bytes * 3)
+    test "bubbles up errors returned by the \"fetch_bytes_fun\"" do
+      faulty_fetch_bytes_fun = fn _fetch_state, _byte_count -> {:error, :some_error} end
 
-      check all size <- integer(size_range),
-                max_runs: 3 do
-        big_payload = :binary.copy(<<0>>, size)
-
-        encoded =
-          big_payload |> Frame.encode_v5_wrappers(_compressor = nil) |> IO.iodata_to_binary()
-
-        assert {:ok, redecoded} =
-                 Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
-
-        assert big_payload == IO.iodata_to_binary(redecoded)
-      end
-    end
-
-    property "with v4- frames inside the v5+ wrappers" do
-      check all kind <- kind_generator(),
-                tracing? <- boolean(),
-                body <- binary(),
-                stream_id <- map(integer(), &abs/1) do
-        protocol_module = Frame.protocol_version_to_module(:v5)
-
-        frame = Frame.new(kind, compressor: nil, tracing: tracing?)
-
-        frame = %Frame{
-          frame
-          | body: body,
-            stream_id: stream_id,
-            protocol_version: :v5
-        }
-
-        encoded =
-          frame
-          |> Frame.encode(protocol_module)
-          |> IO.iodata_to_binary()
-
-        assert {:ok, redecoded_frame} =
-                 Frame.decode_v5(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
-
-        assert redecoded_frame == frame
-      end
+      assert Frame.decode_v5_wrapper(faulty_fetch_bytes_fun, _payload = "", _compressor = nil) ==
+               {:error, :some_error}
     end
   end
 
