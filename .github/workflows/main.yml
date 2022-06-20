@@ -90,7 +90,7 @@ jobs:
     env:
       CASSANDRA_VERSION: ${{ matrix.cassandra_version }}
       CASSANDRA_NATIVE_PROTOCOL: ${{ matrix.cassandra_native_protocol }}
-      NIMBLELZ4_FORCE_BUILD: ${{ matrix.elixir == "1.9" && "true" }}
+      NIMBLELZ4_FORCE_BUILD: ${{ matrix.elixir == '1.9' && 'true' }}
 
     steps:
       - name: Clone the repository
