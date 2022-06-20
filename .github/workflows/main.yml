@@ -37,7 +37,7 @@ jobs:
           key: ${{ runner.os }}-mix-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
 
       - name: Install and compile dependencies
-        if: steps.cache-deps.outputs.cache-hit != 'true'
+        # if: steps.cache-deps.outputs.cache-hit != 'true'
         run: mix do deps.get --only test, deps.compile
 
       - name: Check formatting
@@ -45,7 +45,7 @@ jobs:
 
       - name: Check no unused dependencies
         run: mix deps.get && mix deps.unlock --check-unused
-        if: ${{ steps.cache-deps.outputs.cache-hit != 'true' }}
+        # if: ${{ steps.cache-deps.outputs.cache-hit != 'true' }}
 
       - name: Compile with --warnings-as-errors
         run: mix compile --warnings-as-errors --force
