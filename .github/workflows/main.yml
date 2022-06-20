@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+env:
+  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+  MIX_ENV: test
+
 jobs:
   lint:
     name: Lint
@@ -15,8 +19,6 @@ jobs:
       matrix:
         otp: ["24.2"]
         elixir: ["1.13"]
-    env:
-      MIX_ENV: test
     steps:
       - name: Clone the repository
         uses: actions/checkout@v2
@@ -86,8 +88,6 @@ jobs:
             cassandra_version: "3"
             cassandra_native_protocol: "v3"
     env:
-      GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      MIX_ENV: test
       CASSANDRA_VERSION: ${{ matrix.cassandra_version }}
       CASSANDRA_NATIVE_PROTOCOL: ${{ matrix.cassandra_native_protocol }}
       NIMBLELZ4_FORCE_BUILD: ${{ matrix.elixir == "1.9" && "true" }}
@@ -153,8 +153,6 @@ jobs:
             cassandra_native_protocol: "v3"
 
     env:
-      GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      MIX_ENV: test
       SCYLLA_VERSION: ${{ matrix.scylla_version }}
       CASSANDRA_NATIVE_PROTOCOL: ${{ matrix.cassandra_native_protocol }}
 
