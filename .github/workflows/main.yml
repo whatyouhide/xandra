@@ -27,32 +27,32 @@ jobs:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
 
-      # - name: Cache dependencies
-      #   id: cache-deps
-      #   uses: actions/cache@v2
-      #   with:
-      #     path: |
-      #       deps
-      #       _build
-      #     key: ${{ runner.os }}-mix-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
+      - name: Cache dependencies
+        id: cache-deps
+        uses: actions/cache@v2
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
 
       - name: Install and compile dependencies
-        # if: steps.cache-deps.outputs.cache-hit != 'true'
+        if: steps.cache-deps.outputs.cache-hit != 'true'
         run: mix do deps.get --only test, deps.compile
 
       - name: Check formatting
         run: mix format --check-formatted
 
-      # - name: Check no unused dependencies
-      #   run: mix deps.get && mix deps.unlock --check-unused
-      #   if: ${{ steps.cache-deps.outputs.cache-hit != 'true' }}
+      - name: Check no unused dependencies
+        run: mix deps.get && mix deps.unlock --check-unused
+        if: ${{ steps.cache-deps.outputs.cache-hit != 'true' }}
 
       - name: Compile with --warnings-as-errors
         run: mix compile --warnings-as-errors --force
 
   test:
     name: Test (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, C* ${{ matrix.cassandra_version }}, Native protocol ${{ matrix.cassandra_native_protocol }})
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -90,6 +90,7 @@ jobs:
       MIX_ENV: test
       CASSANDRA_VERSION: ${{ matrix.cassandra_version }}
       CASSANDRA_NATIVE_PROTOCOL: ${{ matrix.cassandra_native_protocol }}
+      NIMBLELZ4_FORCE_BUILD: ${{ matrix.elixir == "1.9" && "true" }}
 
     steps:
       - name: Clone the repository
@@ -106,17 +107,17 @@ jobs:
           otp-version: ${{matrix.otp}}
           elixir-version: ${{matrix.elixir}}
 
-      # - name: Cache dependencies
-      #   id: cache-deps
-      #   uses: actions/cache@v2
-      #   with:
-      #     path: |
-      #       deps
-      #       _build
-      #     key: ${{ runner.os }}-mix-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
+      - name: Cache dependencies
+        id: cache-deps
+        uses: actions/cache@v2
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
 
       - name: Install and compile dependencies
-        # if: steps.cache-deps.outputs.cache-hit != 'true'
+        if: steps.cache-deps.outputs.cache-hit != 'true'
         run: |
           mix deps.get --only test
           mix deps.compile
@@ -133,7 +134,7 @@ jobs:
 
   test_scylla:
     name: Test ScyllaDB (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Scylla ${{ matrix.scylla_version }}, Native protocol ${{ matrix.cassandra_native_protocol }})
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
