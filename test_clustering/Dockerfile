@@ -12,12 +12,6 @@ ENV MIX_ENV=test
 RUN apk update && \
     apk add docker docker-compose git curl openssl musl-dev build-base
 
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-ENV RUSTFLAGS="-C target-feature=-crt-static"
-
-
 # Copy only the files needed to fetch and compile deps.
 COPY mix.exs .
 COPY mix.lock .
