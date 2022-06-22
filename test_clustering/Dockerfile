@@ -1,5 +1,5 @@
 ARG ELIXIR_VERSION=1.13.4
-ARG OTP_VERSION=23.3.4.9
+ARG OTP_VERSION=24.2
 
 FROM hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-alpine-3.14.2
 
@@ -10,7 +10,7 @@ ENV MIX_ENV=test
 # Install Docker and Docker Compose to control sibling containers, and Git for installing
 # Git dependencies if necessary.
 RUN apk update && \
-    apk add docker docker-compose git curl openssl musl-dev build-base
+    apk add docker docker-compose git curl openssl
 
 # Copy only the files needed to fetch and compile deps.
 COPY mix.exs .

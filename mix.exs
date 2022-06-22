@@ -83,7 +83,7 @@ defmodule Xandra.Mixfile do
       {:ex_doc, "~> 0.28", only: :dev},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
       {:excoveralls, "~> 0.14.4", only: :test},
-      {:nimble_lz4, "~> 0.1.0", only: [:dev, :test]},
+      {:nimble_lz4, "~> 0.1.2", only: [:dev, :test]},
       {:stream_data, "~> 0.5.0", only: :test}
     ]
   end
