@@ -61,6 +61,7 @@ defmodule Xandra.FrameTest do
       end
     end
 
+    @tag :compression
     property "with self-contained random contents, with compression" do
       check all inner_payload <- iodata(),
                 IO.iodata_length(inner_payload) > 0,
@@ -81,6 +82,7 @@ defmodule Xandra.FrameTest do
       end
     end
 
+    @tag :compression
     test "with an empty uncompressed payload and with compression, uses the compressed payload" do
       encoded =
         ""
@@ -177,6 +179,7 @@ defmodule Xandra.FrameTest do
       end
     end
 
+    @tag :compression
     test "with mismatching CRC for the header (with compression)" do
       <<header_data::5-bytes, _header_crc::3-bytes, rest::binary>> =
         ""
@@ -195,6 +198,7 @@ defmodule Xandra.FrameTest do
       end
     end
 
+    @tag :compression
     test "with mismatching CRC for the payload (with compression)" do
       payload = :crypto.strong_rand_bytes(Enum.random(0..10))
 

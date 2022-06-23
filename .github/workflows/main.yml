@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+env:
+  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+  MIX_ENV: test
+
 jobs:
   lint:
     name: Lint
@@ -15,8 +19,6 @@ jobs:
       matrix:
         otp: ["24.2"]
         elixir: ["1.13"]
-    env:
-      MIX_ENV: test
     steps:
       - name: Clone the repository
         uses: actions/checkout@v2
@@ -52,7 +54,7 @@ jobs:
 
   test:
     name: Test (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, C* ${{ matrix.cassandra_version }}, Native protocol ${{ matrix.cassandra_native_protocol }})
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -86,10 +88,9 @@ jobs:
             cassandra_version: "3"
             cassandra_native_protocol: "v3"
     env:
-      GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      MIX_ENV: test
       CASSANDRA_VERSION: ${{ matrix.cassandra_version }}
       CASSANDRA_NATIVE_PROTOCOL: ${{ matrix.cassandra_native_protocol }}
+      NIMBLELZ4_FORCE_BUILD: ${{ matrix.elixir == '1.9' && 'true' }}
 
     steps:
       - name: Clone the repository
@@ -133,7 +134,7 @@ jobs:
 
   test_scylla:
     name: Test ScyllaDB (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Scylla ${{ matrix.scylla_version }}, Native protocol ${{ matrix.cassandra_native_protocol }})
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -152,8 +153,6 @@ jobs:
             cassandra_native_protocol: "v3"
 
     env:
-      GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      MIX_ENV: test
       SCYLLA_VERSION: ${{ matrix.scylla_version }}
       CASSANDRA_NATIVE_PROTOCOL: ${{ matrix.cassandra_native_protocol }}
 
