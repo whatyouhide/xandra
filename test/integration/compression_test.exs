@@ -3,6 +3,8 @@ defmodule CompressionTest do
 
   alias Xandra.TestHelper.LZ4Compressor
 
+  @moduletag :compression
+
   setup_all %{keyspace: keyspace, setup_conn: conn} do
     Xandra.execute!(
       conn,

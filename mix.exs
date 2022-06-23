@@ -83,8 +83,12 @@ defmodule Xandra.Mixfile do
       {:ex_doc, "~> 0.28", only: :dev},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
       {:excoveralls, "~> 0.14.4", only: :test},
-      {:nimble_lz4, "~> 0.1.2", only: [:dev, :test]},
       {:stream_data, "~> 0.5.0", only: :test}
-    ]
+    ] ++
+      if Version.match?(System.version(), "~> 1.11") do
+        [{:nimble_lz4, "~> 0.1.2", only: [:dev, :test]}]
+      else
+        []
+      end
   end
 end
