@@ -133,7 +133,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
             {:stop, error}
 
-          {:error, _reason} = error ->
+          {:error, %Xandra.ConnectionError{}} = error ->
             {:connect, :reconnect, data} = disconnect(error, data)
             timeout_action = {{:timeout, :reconnect}, @default_backoff, nil}
             {:keep_state, data, timeout_action}

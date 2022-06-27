@@ -76,7 +76,7 @@ defmodule Xandra.Connection.Utils do
   end
 
   @spec ping(:gen_tcp | :ssl, term, nil | Frame.supported_protocol(), nil | module) ::
-          {:ok, map(), negotiated_protocol_module :: module()}
+          :ok
           | {:error, ConnectionError.t() | Error.t(),
              {:use_this_protocol_instead, Frame.supported_protocol()}}
   def ping(transport, socket, protocol_module, compressor)

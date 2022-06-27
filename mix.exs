@@ -21,7 +21,10 @@ defmodule Xandra.Mixfile do
       aliases: aliases(),
 
       # Dialyzer
-      dialyzer: [flags: [:no_contracts, :no_improper_lists]],
+      dialyzer: [
+        flags: [:no_contracts, :no_improper_lists],
+        plt_add_apps: [:ssl, :crypto, :mix, :ex_unit]
+      ],
 
       # Testing
       preferred_cli_env: [
@@ -81,7 +84,7 @@ defmodule Xandra.Mixfile do
 
       # Dev and test dependencies
       {:ex_doc, "~> 0.28", only: :dev},
-      {:dialyxir, "~> 1.1", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.14.4", only: :test},
       {:stream_data, "~> 0.5.0", only: :test}
     ] ++

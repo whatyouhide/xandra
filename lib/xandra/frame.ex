@@ -282,7 +282,7 @@ defmodule Xandra.Frame do
           (fetch_state, pos_integer() -> {:ok, binary(), fetch_state} | {:error, reason}),
           fetch_state,
           module() | nil
-        ) :: {:ok, binary()} | {:error, reason}
+        ) :: {:ok, t()} | {:error, reason}
         when fetch_state: term(), reason: term()
   def decode_v4(fetch_bytes_fun, fetch_state, compressor)
       when is_function(fetch_bytes_fun, 2) and is_atom(compressor) do
@@ -304,7 +304,7 @@ defmodule Xandra.Frame do
           (fetch_state, pos_integer() -> {:ok, binary(), fetch_state} | {:error, reason}),
           fetch_state,
           module() | nil
-        ) :: {:ok, binary()} | {:error, reason}
+        ) :: {:ok, t()} | {:error, reason}
         when fetch_state: term(), reason: term()
   def decode_v5(fetch_bytes_fun, fetch_state, compressor)
       when is_function(fetch_bytes_fun, 2) and is_atom(compressor) do
