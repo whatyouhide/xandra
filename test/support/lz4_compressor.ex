@@ -13,6 +13,8 @@ defmodule Xandra.TestHelper.LZ4Compressor do
     [<<IO.iodata_length(body)::4-unit(8)-integer>>, NimbleLZ4.compress(body)]
   end
 
+  @dialyzer {:nowarn_function, decompress: 1}
+
   @impl true
   def decompress(<<uncompressed_size::4-unit(8)-integer, compressed_body::binary>>) do
     assert {:ok, body} = NimbleLZ4.decompress(compressed_body, uncompressed_size)

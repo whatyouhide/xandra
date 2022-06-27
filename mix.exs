@@ -21,7 +21,10 @@ defmodule Xandra.Mixfile do
       aliases: aliases(),
 
       # Dialyzer
-      dialyzer: [flags: [:no_contracts, :no_improper_lists], plt_add_apps: [:ssl, :crypto]],
+      dialyzer: [
+        flags: [:no_contracts, :no_improper_lists],
+        plt_add_apps: [:ssl, :crypto, :mix, :ex_unit]
+      ],
 
       # Testing
       preferred_cli_env: [
