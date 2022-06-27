@@ -21,7 +21,7 @@ defmodule Xandra.Mixfile do
       aliases: aliases(),
 
       # Dialyzer
-      dialyzer: [flags: [:no_contracts]],
+      dialyzer: [flags: [:no_contracts, :no_improper_lists]],
 
       # Testing
       preferred_cli_env: [
