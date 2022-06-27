@@ -81,7 +81,7 @@ defmodule Xandra.Mixfile do
 
       # Dev and test dependencies
       {:ex_doc, "~> 0.28", only: :dev},
-      {:dialyxir, "~> 1.1", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.14.4", only: :test},
       {:stream_data, "~> 0.5.0", only: :test}
     ] ++
