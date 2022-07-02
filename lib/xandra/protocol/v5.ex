@@ -3,7 +3,7 @@ defmodule Xandra.Protocol.V5 do
 
   use Bitwise
 
-  import Xandra.Protocol, only: [decode_string: 1, decode_uuid: 1]
+  import Xandra.Protocol, only: [decode_string: 1, decode_uuid: 1, decode_value: 3]
 
   alias Xandra.{
     Batch,
@@ -20,24 +20,6 @@ defmodule Xandra.Protocol.V5 do
   alias Xandra.Cluster.{StatusChange, TopologyChange}
 
   @unix_epoch_days 0x80000000
-
-  # We need these two macros to make
-  # a single match context possible.
-
-  defmacrop decode_value({:<-, _, [value, buffer]}, type, do: block) do
-    quote do
-      <<size::32-signed, unquote(buffer)::bits>> = unquote(buffer)
-
-      if size < 0 do
-        unquote(value) = nil
-        unquote(block)
-      else
-        <<data::size(size)-bytes, unquote(buffer)::bits>> = unquote(buffer)
-        unquote(value) = decode_value(data, unquote(type))
-        unquote(block)
-      end
-    end
-  end
 
   @spec encode_request(Frame.t(kind), term, keyword) :: Frame.t(kind) when kind: var
   def encode_request(frame, params, options \\ [])
