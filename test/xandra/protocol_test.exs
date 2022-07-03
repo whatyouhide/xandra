@@ -12,11 +12,11 @@ defmodule Xandra.ProtocolTest do
     end
   end
 
-  describe "decode_string/1" do
+  describe "decode_from_proto_type/2 with [string]" do
     test "decodes a string and rebinds variables" do
       encoded = <<3::16, "foo"::binary, "rest"::binary>>
 
-      decode_string(contents <- encoded)
+      decode_from_proto_type(contents <- encoded, "[string]")
 
       assert contents == "foo"
       assert encoded == "rest"
@@ -26,7 +26,7 @@ defmodule Xandra.ProtocolTest do
       encoded = <<3::16, "a"::binary>>
 
       assert_raise MatchError, fn ->
-        decode_string(_ <- encoded)
+        decode_from_proto_type(_ <- encoded, "[string]")
         _ = encoded
       end
     end
@@ -37,7 +37,7 @@ defmodule Xandra.ProtocolTest do
       assert_raise ArgumentError, message, fn ->
         Code.eval_quoted(
           quote do
-            decode_string(_ <- :not_a_var)
+            decode_from_proto_type(_ <- :not_a_var, "[string]")
           end
         )
       end
@@ -47,23 +47,28 @@ defmodule Xandra.ProtocolTest do
       assert_raise ArgumentError, message, fn ->
         Code.eval_quoted(
           quote do
-            decode_string(_ <- hello())
+            decode_from_proto_type(_ <- hello(), "[string]")
           end
         )
       end
     end
   end
 
-  describe "decode_string_list/1" do
+  describe "decode_from_proto_type/2 with [string list]" do
     property "works for zero strings" do
       check all cruft <- bitstring(), max_runs: 5 do
-        assert decode_string_list(<<0::16, cruft::bits>>) == {[], cruft}
+        buffer = <<0::16, cruft::bits>>
+        decode_from_proto_type(list <- buffer, "[string list]")
+        assert buffer == cruft
+        assert list == []
       end
     end
 
     test "decodes strings" do
-      assert decode_string_list(<<2::16, 3::16, "foo"::binary, 2::16, "ab"::binary, 1::1>>) ==
-               {["foo", "ab"], <<1::1>>}
+      buffer = <<2::16, 3::16, "foo"::binary, 2::16, "ab"::binary, 1::1>>
+      decode_from_proto_type(list <- buffer, "[string list]")
+      assert buffer == <<1::1>>
+      assert list == ["foo", "ab"]
     end
   end
 end

@@ -3,7 +3,7 @@ defmodule Xandra.Protocol.V4 do
 
   use Bitwise
 
-  import Xandra.Protocol, only: [decode_string: 1, decode_uuid: 1, decode_value: 3]
+  import Xandra.Protocol, only: [decode_from_proto_type: 2, decode_from_proto_type: 3]
 
   alias Xandra.{
     Batch,
@@ -523,7 +523,7 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp decode_error_message(_reason, buffer) do
-    decode_string(message <- buffer)
+    decode_from_proto_type(message <- buffer, "[string]")
     _ = buffer
     message
   end
@@ -546,21 +546,22 @@ defmodule Xandra.Protocol.V4 do
   end
 
   def decode_response(%Frame{kind: :supported, body: body}, nil, _options) do
-    {value, <<>>} = decode_string_multimap(body)
+    decode_from_proto_type(value <- body, "[string multimap]")
+    <<>> = body
     value
   end
 
   def decode_response(%Frame{kind: :event, body: body}, nil, _options) do
-    decode_string(event <- body)
+    decode_from_proto_type(event <- body, "[string]")
 
     case event do
       "STATUS_CHANGE" ->
-        decode_string(effect <- body)
+        decode_from_proto_type(effect <- body, "[string]")
         {address, port, <<>>} = decode_inet(body)
         %StatusChange{effect: effect, address: address, port: port}
 
       "TOPOLOGY_CHANGE" ->
-        decode_string(effect <- body)
+        decode_from_proto_type(effect <- body, "[string]")
         {address, port, <<>>} = decode_inet(body)
         %TopologyChange{effect: effect, address: address, port: port}
     end
@@ -608,7 +609,7 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp decode_tracing_id(body, _tracing? = true) do
-    decode_uuid(tracing_id <- body)
+    decode_from_proto_type(tracing_id <- body, "[uuid]")
     {body, tracing_id}
   end
 
@@ -617,7 +618,8 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp decode_custom_payload(body, true) do
-    decode_bytes_map(body)
+    decode_from_proto_type(custom_payload <- body, "[bytes map]")
+    {custom_payload, body}
   end
 
   # Void
@@ -659,7 +661,7 @@ defmodule Xandra.Protocol.V4 do
          custom_payload,
          _options
        ) do
-    decode_string(keyspace <- buffer)
+    decode_from_proto_type(keyspace <- buffer, "[string]")
     <<>> = buffer
 
     %Xandra.SetKeyspace{
@@ -678,7 +680,7 @@ defmodule Xandra.Protocol.V4 do
          options
        ) do
     atom_keys? = Keyword.fetch!(options, :atom_keys?)
-    decode_string(id <- buffer)
+    decode_from_proto_type(id <- buffer, "[string]")
     {%{columns: bound_columns}, buffer} = decode_metadata_prepared(buffer, %Page{}, atom_keys?)
     {%{columns: result_columns}, <<>>} = decode_metadata(buffer, %Page{}, atom_keys?)
 
@@ -700,8 +702,8 @@ defmodule Xandra.Protocol.V4 do
          custom_payload,
          _options
        ) do
-    decode_string(effect <- buffer)
-    decode_string(target <- buffer)
+    decode_from_proto_type(effect <- buffer, "[string]")
+    decode_from_proto_type(target <- buffer, "[string]")
     options = decode_change_options(buffer, target)
 
     %Xandra.SchemaChange{
@@ -754,22 +756,22 @@ defmodule Xandra.Protocol.V4 do
   defp rewrite_type(type, _options), do: type
 
   defp decode_change_options(<<buffer::bits>>, "KEYSPACE") do
-    decode_string(keyspace <- buffer)
+    decode_from_proto_type(keyspace <- buffer, "[string]")
     <<>> = buffer
     %{keyspace: keyspace}
   end
 
   defp decode_change_options(<<buffer::bits>>, target) when target in ["TABLE", "TYPE"] do
-    decode_string(keyspace <- buffer)
-    decode_string(subject <- buffer)
+    decode_from_proto_type(keyspace <- buffer, "[string]")
+    decode_from_proto_type(subject <- buffer, "[string]")
     <<>> = buffer
     %{keyspace: keyspace, subject: subject}
   end
 
   defp decode_change_options(<<buffer::bits>>, target) when target in ["FUNCTION", "AGGREGATE"] do
-    decode_string(keyspace <- buffer)
-    decode_string(subject <- buffer)
-    {values, buffer} = Proto.decode_string_list(buffer)
+    decode_from_proto_type(keyspace <- buffer, "[string]")
+    decode_from_proto_type(subject <- buffer, "[string]")
+    decode_from_proto_type(values <- buffer, "[string list]")
     <<>> = buffer
     %{keyspace: keyspace, subject: subject, arguments: values}
   end
@@ -786,8 +788,8 @@ defmodule Xandra.Protocol.V4 do
 
     cond do
       global_table_spec == 1 ->
-        decode_string(keyspace <- buffer)
-        decode_string(table <- buffer)
+        decode_from_proto_type(keyspace <- buffer, "[string]")
+        decode_from_proto_type(table <- buffer, "[string]")
 
         {columns, buffer} =
           decode_columns(buffer, column_count, {keyspace, table}, atom_keys?, [])
@@ -814,8 +816,8 @@ defmodule Xandra.Protocol.V4 do
         {page, buffer}
 
       global_table_spec == 1 ->
-        decode_string(keyspace <- buffer)
-        decode_string(table <- buffer)
+        decode_from_proto_type(keyspace <- buffer, "[string]")
+        decode_from_proto_type(table <- buffer, "[string]")
 
         {columns, buffer} =
           decode_columns(buffer, column_count, {keyspace, table}, atom_keys?, [])
@@ -861,11 +863,13 @@ defmodule Xandra.Protocol.V4 do
   defp decode_page_content(<<buffer::bits>>, row_count, columns, [{_, _, _, type} | rest], [
          values | acc
        ]) do
-    decode_value(value <- buffer, type) do
-      values = [value | values]
+    decode_from_proto_type(value <- buffer, "[value]") do
+      values = [decode_value(value, type) | values]
       decode_page_content(buffer, row_count, columns, rest, [values | acc])
     end
   end
+
+  defp decode_value(nil, _type), do: nil
 
   defp decode_value(<<value>>, :boolean), do: value != 0
   defp decode_value(<<value::signed>>, :tinyint), do: value
@@ -989,7 +993,8 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp decode_value_udt(<<buffer::bits>>, [{field_name, [field_type]} | rest], acc) do
-    decode_value(value <- buffer, field_type) do
+    decode_from_proto_type(value <- buffer, "[value]") do
+      value = decode_value(value, field_type)
       decode_value_udt(buffer, rest, [{field_name, value} | acc])
     end
   end
@@ -999,7 +1004,8 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp decode_value_list(<<buffer::bits>>, count, type, acc) do
-    decode_value(item <- buffer, type) do
+    decode_from_proto_type(item <- buffer, "[value]") do
+      item = decode_value(item, type)
       decode_value_list(buffer, count - 1, type, [item | acc])
     end
   end
@@ -1009,19 +1015,22 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp decode_value_map_key(<<buffer::bits>>, count, key_type, value_type, acc) do
-    decode_value(key <- buffer, key_type) do
+    decode_from_proto_type(key <- buffer, "[value]") do
+      key = decode_value(key, key_type)
       decode_value_map_value(buffer, count, key_type, value_type, [key | acc])
     end
   end
 
   defp decode_value_map_value(<<buffer::bits>>, count, key_type, value_type, [key | acc]) do
-    decode_value(value <- buffer, value_type) do
+    decode_from_proto_type(value <- buffer, "[value]") do
+      value = decode_value(value, value_type)
       decode_value_map_key(buffer, count - 1, key_type, value_type, [{key, value} | acc])
     end
   end
 
   defp decode_value_tuple(<<buffer::bits>>, [type | types], acc) do
-    decode_value(item <- buffer, type) do
+    decode_from_proto_type(item <- buffer, "[value]") do
+      item = decode_value(item, type)
       decode_value_tuple(buffer, types, [item | acc])
     end
   end
@@ -1035,9 +1044,9 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp decode_columns(<<buffer::bits>>, column_count, nil, atom_keys?, acc) do
-    decode_string(keyspace <- buffer)
-    decode_string(table <- buffer)
-    decode_string(name <- buffer)
+    decode_from_proto_type(keyspace <- buffer, "[string]")
+    decode_from_proto_type(table <- buffer, "[string]")
+    decode_from_proto_type(name <- buffer, "[string]")
     name = if atom_keys?, do: String.to_atom(name), else: name
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
@@ -1046,7 +1055,7 @@ defmodule Xandra.Protocol.V4 do
 
   defp decode_columns(<<buffer::bits>>, column_count, table_spec, atom_keys?, acc) do
     {keyspace, table} = table_spec
-    decode_string(name <- buffer)
+    decode_from_proto_type(name <- buffer, "[string]")
     name = if atom_keys?, do: String.to_atom(name), else: name
     {type, buffer} = decode_type(buffer)
     entry = {keyspace, table, name, type}
@@ -1146,8 +1155,8 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp decode_type(<<0x0030::16, buffer::bits>>) do
-    decode_string(_keyspace <- buffer)
-    decode_string(_name <- buffer)
+    decode_from_proto_type(_keyspace <- buffer, "[string]")
+    decode_from_proto_type(_name <- buffer, "[string]")
     <<count::16, buffer::bits>> = buffer
     decode_type_udt(buffer, count, [])
   end
@@ -1161,7 +1170,7 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp decode_type_udt(<<buffer::bits>>, count, acc) do
-    decode_string(field_name <- buffer)
+    decode_from_proto_type(field_name <- buffer, "[string]")
     {field_type, buffer} = decode_type(buffer)
     decode_type_udt(buffer, count - 1, [{field_name, [field_type]} | acc])
   end
@@ -1173,36 +1182,5 @@ defmodule Xandra.Protocol.V4 do
   defp decode_type_tuple(<<buffer::bits>>, count, acc) do
     {type, buffer} = decode_type(buffer)
     decode_type_tuple(buffer, count - 1, [type | acc])
-  end
-
-  defp decode_string_multimap(<<count::16, buffer::bits>>) do
-    decode_string_multimap(buffer, count, [])
-  end
-
-  defp decode_string_multimap(<<buffer::bits>>, 0, acc) do
-    {Map.new(acc), buffer}
-  end
-
-  defp decode_string_multimap(<<buffer::bits>>, count, acc) do
-    decode_string(key <- buffer)
-    {value, buffer} = Proto.decode_string_list(buffer)
-    decode_string_multimap(buffer, count - 1, [{key, value} | acc])
-  end
-
-  # A [short] n, followed by n pair <k><v> where <k> is a [string] and <v> is a [bytes].
-  defp decode_bytes_map(<<count::16, buffer::bits>>) do
-    decode_bytes_map(buffer, count, [])
-  end
-
-  defp decode_bytes_map(<<buffer::bits>>, 0, acc) do
-    {Map.new(acc), buffer}
-  end
-
-  defp decode_bytes_map(<<buffer::bits>>, count, acc) do
-    decode_string(key <- buffer)
-
-    decode_value(value <- buffer, :blob) do
-      decode_bytes_map(buffer, count - 1, [{key, value} | acc])
-    end
   end
 end

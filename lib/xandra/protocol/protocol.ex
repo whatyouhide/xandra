@@ -32,63 +32,196 @@ defmodule Xandra.Protocol do
   def supports_custom_payload?(Xandra.Protocol.V4), do: true
   def supports_custom_payload?(Xandra.Protocol.V5), do: true
 
-  # Decodes a "string" as per
-  # https://github.com/apache/cassandra/blob/dcf3d58c4b22b8b69e8505b170829172ea3c4f5c/doc/native_protocol_v5.spec#L361
-  # > "A [short] n, followed by n bytes representing an UTF-8 string."
-  defmacro decode_string({:<-, _, [value, buffer]}) do
+  # Main macro to decode from a type "specification" like the ones found in the
+  # docs for the C* native protocols. For example, [short] or [bytes map].
+  defmacro decode_from_proto_type({:<-, _meta, [value, buffer]}, proto_type) do
     assert_not_a_variable(buffer)
+    decode_from_type(value, buffer, proto_type)
+  end
+
+  # Variant of the decode_from_proto_type/2 that takes a block of code. This is done
+  # in case there is conditional binding of the buffer, so that the binary context
+  # is kept.
+  defmacro decode_from_proto_type({:<-, _meta, [value, buffer]}, proto_type, do: block) do
+    assert_not_a_variable(buffer)
+    decode_from_type(value, buffer, proto_type, block)
+  end
+
+  # A 4 bytes integer
+  defp decode_from_type(value, buffer, "[int]") do
+    quote do: <<unquote(value)::32-signed, unquote(buffer)::bits>> = unquote(buffer)
+  end
+
+  # A 8 bytes integer
+  defp decode_from_type(value, buffer, "[long]") do
+    quote do: <<unquote(value)::64, unquote(buffer)::bits>> = unquote(buffer)
+  end
+
+  # A 1 byte unsigned integer
+  defp decode_from_type(value, buffer, "[byte]") do
+    quote do: <<unquote(value)::8-unsigned, unquote(buffer)::bits>> = unquote(buffer)
+  end
+
+  # A 2 bytes unsigned integer
+  defp decode_from_type(value, buffer, "[short]") do
+    quote do: <<unquote(value)::16-unsigned, unquote(buffer)::bits>> = unquote(buffer)
+  end
+
+  # A [short] n, followed by n bytes representing an UTF-8 string.
+  defp decode_from_type(value, buffer, "[string]") do
+    size = Macro.var(:size, __MODULE__)
 
     quote do
-      <<size::16, unquote(value)::size(size)-bytes, unquote(buffer)::bits>> = unquote(buffer)
+      unquote(decode_from_type(size, buffer, "[short]"))
+      <<unquote(value)::bytes-size(unquote(size)), unquote(buffer)::bits>> = unquote(buffer)
     end
   end
 
-  defmacro decode_value({:<-, _, [value, buffer]}, type, do: block) do
-    assert_not_a_variable(buffer)
-
+  # An [int] n, followed by n bytes representing an UTF-8 string.
+  defp decode_from_type(value, buffer, "[long string]") do
     quote do
-      <<size::32-signed, unquote(buffer)::bits>> = unquote(buffer)
-
-      if size < 0 do
-        unquote(value) = nil
-        unquote(block)
-      else
-        <<data::size(size)-bytes, unquote(buffer)::bits>> = unquote(buffer)
-        unquote(value) = decode_value(data, unquote(type))
-        unquote(block)
-      end
+      unquote(decode_from_type(value, buffer, "[int]"))
+      <<unquote(value)::size(value), unquote(buffer)::bits>> = unquote(buffer)
     end
   end
 
-  # Decodes a "uuid".
-  defmacro decode_uuid({:<-, _, [value, buffer]}) do
-    assert_not_a_variable(buffer)
-
+  # A 16 bytes long uuid.
+  defp decode_from_type(value, buffer, "[uuid]") do
     quote do
       <<unquote(value)::16-bytes, unquote(buffer)::bits>> = unquote(buffer)
     end
   end
 
   # A [short] n, followed by n [string].
-  # https://github.com/apache/cassandra/blob/ce4ae43a310a809fb0c82a7f48001a0f8206e156/doc/native_protocol_v5.spec#L383
-  @spec decode_string_list(bitstring()) :: {[String.t()], bitstring()}
-  def decode_string_list(<<count::16, buffer::bits>>) do
-    decode_string_list(buffer, count, [])
+  defp decode_from_type(value, buffer, "[string list]") do
+    quote do
+      unquote(decode_from_type(value, buffer, "[short]"))
+
+      {unquote(value), unquote(buffer)} =
+        unquote(__MODULE__).decode_string_list(
+          unquote(buffer),
+          _count = unquote(value),
+          _acc = []
+        )
+    end
   end
 
-  defp decode_string_list(<<buffer::bits>>, 0, acc) do
+  # A [short] n, followed by n pair <k><v> where <k> is a [string] and <v> is a [bytes].
+  defp decode_from_type(value, buffer, "[bytes map]") do
+    count = Macro.var(:count, __MODULE__)
+
+    quote do
+      unquote(decode_from_type(count, buffer, "[short]"))
+
+      {unquote(value), unquote(buffer)} =
+        unquote(__MODULE__).decode_bytes_map_pairs(unquote(buffer), unquote(count), _acc = [])
+    end
+  end
+
+  # A [short] n, followed by n pair <k><v> where <k> is a [string] and <v> is a [string list].
+  defp decode_from_type(value, buffer, "[string multimap]") do
+    count = Macro.var(:count, __MODULE__)
+
+    quote do
+      unquote(decode_from_type(count, buffer, "[short]"))
+
+      {unquote(value), unquote(buffer)} =
+        unquote(__MODULE__).decode_string_multimap_pairs(
+          unquote(buffer),
+          unquote(count),
+          _acc = []
+        )
+    end
+  end
+
+  # A [int] n, followed by n bytes if n >= 0. If n < 0, no byte should follow and
+  # the value represented is `null`.
+  defp decode_from_type(value, buffer, "[bytes]", block) do
+    size = Macro.var(:size, __MODULE__)
+
+    quote do
+      unquote(decode_from_type(size, buffer, "[int]"))
+
+      if unquote(size) >= 0 do
+        <<unquote(value)::size(unquote(size))-bytes, unquote(buffer)::bits>> = unquote(buffer)
+        unquote(block)
+      else
+        unquote(value) = nil
+        unquote(block)
+      end
+    end
+  end
+
+  # A [int] n, followed by n bytes if n >= 0.
+  # If n == -1 no byte should follow and the value represented is `null`.
+  # If n == -2 no byte should follow and the value represented is
+  # `not set` not resulting in any change to the existing value.
+  # n < -2 is an invalid value and results in an error.
+  defp decode_from_type(value, buffer, "[value]", block) do
+    int = Macro.var(:int, __MODULE__)
+
+    quote do
+      unquote(decode_from_type(int, buffer, "[int]"))
+
+      if unquote(int) < 0 do
+        unquote(value) = nil
+        unquote(block)
+      else
+        <<unquote(value)::bytes-size(unquote(int)), unquote(buffer)::bits>> = unquote(buffer)
+        unquote(block)
+      end
+    end
+  end
+
+  # Helper to decode a list of pairs for a [bytes map].
+  @spec decode_bytes_map_pairs(bitstring(), non_neg_integer(), [{String.t(), binary()}]) ::
+          {%{optional(String.t()) => binary()}, bitstring()}
+  def decode_bytes_map_pairs(<<buffer::bits>>, 0, acc) do
+    {Map.new(acc), buffer}
+  end
+
+  def decode_bytes_map_pairs(<<buffer::bits>>, count, acc) do
+    decode_from_proto_type(key <- buffer, "[string]")
+
+    decode_from_proto_type(value <- buffer, "[bytes]") do
+      decode_bytes_map_pairs(buffer, count - 1, [{key, value} | acc])
+    end
+  end
+
+  # Helper to decode a list of pairs for a [string multimap].
+  @spec decode_bytes_map_pairs(bitstring(), non_neg_integer(), [{String.t(), [String.t()]}]) ::
+          {%{optional(String.t()) => [String.t()]}, bitstring()}
+  def decode_string_multimap_pairs(<<buffer::bits>>, 0, acc) do
+    {Map.new(acc), buffer}
+  end
+
+  def decode_string_multimap_pairs(<<buffer::bits>>, count, acc) do
+    decode_from_proto_type(key <- buffer, "[string]")
+    decode_from_proto_type(value <- buffer, "[string list]")
+    decode_string_multimap_pairs(buffer, count - 1, [{key, value} | acc])
+  end
+
+  @spec decode_string_list(bitstring(), non_neg_integer(), [String.t()]) ::
+          {[String.t()], bitstring()}
+  def decode_string_list(<<buffer::bits>>, 0, acc) do
     {Enum.reverse(acc), buffer}
   end
 
-  defp decode_string_list(<<buffer::bits>>, count, acc) do
-    decode_string(item <- buffer)
+  def decode_string_list(<<buffer::bits>>, count, acc) do
+    decode_from_proto_type(item <- buffer, "[string]")
     decode_string_list(buffer, count - 1, [item | acc])
   end
 
   # Only used in native protocol v4+.
   @spec decode_warnings(bitstring(), boolean()) :: {[String.t()], bitstring()}
-  def decode_warnings(body, _warning? = false), do: {[], body}
-  def decode_warnings(body, _warning? = true), do: decode_string_list(body)
+  def decode_warnings(body, _warning? = false) do
+    {[], body}
+  end
+
+  def decode_warnings(body, _warning? = true) do
+    decode_from_proto_type(warnings <- body, "[string list]")
+    {warnings, body}
+  end
 
   @spec date_from_unix_days(integer()) :: Calendar.date()
   def date_from_unix_days(days) when is_integer(days) do
