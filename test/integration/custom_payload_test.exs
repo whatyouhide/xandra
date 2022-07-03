@@ -1,6 +1,8 @@
 defmodule CustomPayloadTest do
   use XandraTest.IntegrationCase, async: true
 
+  @moduletag :cassandra_specific
+
   @example_custom_payload %{"some_key" => <<1, 2, 3>>}
 
   test "sending a custom payload when executing a simple query", %{conn: conn} do
