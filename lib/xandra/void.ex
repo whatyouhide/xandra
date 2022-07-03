@@ -10,9 +10,14 @@ defmodule Xandra.Void do
     * `:tracing_id` - the tracing ID (as a UUID binary) if tracing was enabled,
       or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
 
+    * TODO
+
   """
 
-  defstruct [:tracing_id]
+  defstruct [:tracing_id, :custom_payload]
 
-  @type t :: %__MODULE__{tracing_id: binary | nil}
+  @type t :: %__MODULE__{
+          tracing_id: binary | nil,
+          custom_payload: Xandra.custom_payload() | nil
+        }
 end

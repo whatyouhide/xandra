@@ -21,14 +21,17 @@ defmodule Xandra.SchemaChange do
     * `:tracing_id` - the tracing ID (as a UUID binary) if tracing was enabled,
       or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
 
+    * TODO
+
   """
 
-  defstruct [:effect, :target, :options, :tracing_id]
+  defstruct [:effect, :target, :options, :tracing_id, :custom_payload]
 
   @type t :: %__MODULE__{
           effect: String.t(),
           target: String.t(),
           options: map,
-          tracing_id: binary | nil
+          tracing_id: binary | nil,
+          custom_payload: Xandra.custom_payload() | nil
         }
 end

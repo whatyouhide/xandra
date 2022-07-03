@@ -33,7 +33,7 @@ defmodule Xandra.Page do
 
   """
 
-  defstruct [:content, :columns, :paging_state, :tracing_id]
+  defstruct [:content, :columns, :paging_state, :tracing_id, :custom_payload]
 
   @type paging_state :: binary | nil
 
@@ -41,7 +41,8 @@ defmodule Xandra.Page do
           content: list,
           columns: nonempty_list,
           paging_state: paging_state,
-          tracing_id: binary | nil
+          tracing_id: binary | nil,
+          custom_payload: Xandra.custom_payload() | nil
         }
 
   defimpl Enumerable do

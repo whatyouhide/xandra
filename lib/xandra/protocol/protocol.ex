@@ -25,6 +25,13 @@ defmodule Xandra.Protocol do
   def frame_protocol_format(Xandra.Protocol.V4), do: :v4_or_less
   def frame_protocol_format(Xandra.Protocol.V5), do: :v5_or_more
 
+  @spec supports_custom_payload?(module()) :: boolean()
+  def supports_custom_payload?(protocol_module)
+
+  def supports_custom_payload?(Xandra.Protocol.V3), do: false
+  def supports_custom_payload?(Xandra.Protocol.V4), do: true
+  def supports_custom_payload?(Xandra.Protocol.V5), do: true
+
   # Decodes a "string" as per
   # https://github.com/apache/cassandra/blob/dcf3d58c4b22b8b69e8505b170829172ea3c4f5c/doc/native_protocol_v5.spec#L361
   # > "A [short] n, followed by n bytes representing an UTF-8 string."

@@ -214,6 +214,7 @@ defmodule Xandra do
   @type error :: Error.t() | ConnectionError.t()
   @type result :: Xandra.Void.t() | Page.t() | Xandra.SetKeyspace.t() | Xandra.SchemaChange.t()
   @type conn :: DBConnection.conn()
+  @type custom_payload :: %{optional(String.t()) => binary()}
 
   @type xandra_start_option ::
           {:nodes, [String.t()]}
@@ -544,6 +545,12 @@ defmodule Xandra do
       given query and sets the `tracing_id` field in the returned prepared
       query. See the "Tracing" option in `execute/4`.
       """
+    ],
+    custom_payload: [
+      type: {:custom, Xandra.OptionsValidators, :validate_custom_payload, []},
+      doc: """
+      TODO
+      """
     ]
   ]
 
@@ -801,6 +808,12 @@ defmodule Xandra do
       Turn on tracing for the preparation of the
       given query and sets the `tracing_id` field in the returned prepared
       query. See the "Tracing" option in `execute/4`.
+      """
+    ],
+    custom_payload: [
+      type: {:custom, Xandra.OptionsValidators, :validate_custom_payload, []},
+      doc: """
+      TODO
       """
     ],
     date_format: [

@@ -137,7 +137,8 @@ defmodule Xandra.Frame do
     %__MODULE__{
       kind: kind,
       compressor: Keyword.get(options, :compressor),
-      tracing: Keyword.get(options, :tracing, false)
+      tracing: Keyword.get(options, :tracing, false),
+      custom_payload: is_map(options[:custom_payload])
     }
   end
 
@@ -158,10 +159,16 @@ defmodule Xandra.Frame do
       compressor: compressor,
       tracing: tracing?,
       use_beta: use_beta?,
+      custom_payload: custom_payload?,
       kind: kind,
       stream_id: stream_id,
       body: body
     } = frame
+
+    # We should only set the CUSTOM_PAYLOAD flag if the native protocol version we're
+    # using supports it.
+    custom_payload? =
+      custom_payload? and Xandra.Protocol.supports_custom_payload?(protocol_module)
 
     body = maybe_compress_body(compressor, body)
 
@@ -169,7 +176,8 @@ defmodule Xandra.Frame do
       [
         tracing? && :tracing,
         compressor && :compression,
-        use_beta? && :use_beta
+        use_beta? && :use_beta,
+        custom_payload? && :custom_payload
       ]
       |> Enum.filter(& &1)
       |> encode_flags()
