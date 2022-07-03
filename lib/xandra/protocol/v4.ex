@@ -3,7 +3,8 @@ defmodule Xandra.Protocol.V4 do
 
   use Bitwise
 
-  import Xandra.Protocol, only: [decode_from_proto_type: 2, decode_from_proto_type: 3]
+  import Xandra.Protocol,
+    only: [decode_from_proto_type: 2, decode_from_proto_type: 3, encode_to_type: 2]
 
   alias Xandra.{
     Batch,
@@ -30,7 +31,7 @@ defmodule Xandra.Protocol.V4 do
 
   def encode_request(%Frame{kind: :startup} = frame, requested_options, _options)
       when is_map(requested_options) do
-    %{frame | body: encode_string_map(requested_options)}
+    %Frame{frame | body: encode_to_type(requested_options, "[string map]")}
   end
 
   def encode_request(%Frame{kind: :auth_response} = frame, _requested_options, options) do
@@ -51,7 +52,7 @@ defmodule Xandra.Protocol.V4 do
   end
 
   def encode_request(%Frame{kind: :register} = frame, events, _options) when is_list(events) do
-    %{frame | body: encode_string_list(events)}
+    %Frame{frame | body: encode_to_type(events, "[string list]")}
   end
 
   def encode_request(%Frame{kind: :query} = frame, %Simple{} = query, options) do
@@ -117,7 +118,7 @@ defmodule Xandra.Protocol.V4 do
       encode_custom_payload(custom_payload),
       encode_batch_type(type),
       encoded_queries,
-      encode_consistency_level(consistency),
+      encode_to_type(consistency, "[consistency]"),
       flags,
       encode_serial_consistency(serial_consistency),
       if(timestamp, do: <<timestamp::64>>, else: [])
@@ -142,40 +143,6 @@ defmodule Xandra.Protocol.V4 do
   defp encode_batch_type(:logged), do: 0
   defp encode_batch_type(:unlogged), do: 1
   defp encode_batch_type(:counter), do: 2
-
-  defp encode_string_list(list) do
-    parts = for string <- list, do: [<<byte_size(string)::16>>, string]
-    [<<length(list)::16>>] ++ parts
-  end
-
-  defp encode_string_map(map) do
-    parts =
-      for {key, value} <- map do
-        [<<byte_size(key)::16>>, key, <<byte_size(value)::16>>, value]
-      end
-
-    [<<map_size(map)::16>>] ++ parts
-  end
-
-  consistency_levels = %{
-    0x0000 => :any,
-    0x0001 => :one,
-    0x0002 => :two,
-    0x0003 => :three,
-    0x0004 => :quorum,
-    0x0005 => :all,
-    0x0006 => :local_quorum,
-    0x0007 => :each_quorum,
-    0x0008 => :serial,
-    0x0009 => :local_serial,
-    0x000A => :local_one
-  }
-
-  for {spec, level} <- consistency_levels do
-    defp encode_consistency_level(unquote(level)) do
-      <<unquote(spec)::16>>
-    end
-  end
 
   defp set_query_values_flag(mask, values) do
     cond do
@@ -209,7 +176,7 @@ defmodule Xandra.Protocol.V4 do
       end
 
     [
-      encode_consistency_level(consistency),
+      encode_to_type(consistency, "[consistency]"),
       flags,
       encoded_values,
       <<page_size::32>>,
@@ -232,7 +199,7 @@ defmodule Xandra.Protocol.V4 do
   end
 
   defp encode_serial_consistency(consistency) when consistency in [:serial, :local_serial] do
-    encode_consistency_level(consistency)
+    encode_to_type(consistency, "[consistency]")
   end
 
   defp encode_serial_consistency(other) do
@@ -553,17 +520,14 @@ defmodule Xandra.Protocol.V4 do
 
   def decode_response(%Frame{kind: :event, body: body}, nil, _options) do
     decode_from_proto_type(event <- body, "[string]")
+    decode_from_proto_type(effect <- body, "[string]")
+    decode_from_proto_type(address_and_port <- body, "[inet]")
+    {address, port} = address_and_port
+    <<>> = body
 
     case event do
-      "STATUS_CHANGE" ->
-        decode_from_proto_type(effect <- body, "[string]")
-        {address, port, <<>>} = decode_inet(body)
-        %StatusChange{effect: effect, address: address, port: port}
-
-      "TOPOLOGY_CHANGE" ->
-        decode_from_proto_type(effect <- body, "[string]")
-        {address, port, <<>>} = decode_inet(body)
-        %TopologyChange{effect: effect, address: address, port: port}
+      "STATUS_CHANGE" -> %StatusChange{effect: effect, address: address, port: port}
+      "TOPOLOGY_CHANGE" -> %TopologyChange{effect: effect, address: address, port: port}
     end
   end
 
@@ -580,9 +544,9 @@ defmodule Xandra.Protocol.V4 do
         options
       )
       when kind in [Simple, Prepared, Batch] do
-    {body, tracing_id} = decode_tracing_id(body, tracing?)
+    {body, tracing_id} = Proto.decode_tracing_id(body, tracing?)
     {warnings, body} = Proto.decode_warnings(body, warning?)
-    {custom_payload, body} = decode_custom_payload(body, custom_payload?)
+    {custom_payload, body} = Proto.decode_custom_payload(body, custom_payload?)
 
     result =
       decode_result_response(
@@ -597,30 +561,6 @@ defmodule Xandra.Protocol.V4 do
   end
 
   # We decode to consume the warning from the body but we ignore the result
-
-  defp decode_inet(<<size, data::size(size)-bytes, buffer::bits>>) do
-    address = decode_value(data, :inet)
-    <<port::32, buffer::bits>> = buffer
-    {address, port, buffer}
-  end
-
-  defp decode_tracing_id(body, _tracing? = false) do
-    {body, _tracing_id = nil}
-  end
-
-  defp decode_tracing_id(body, _tracing? = true) do
-    decode_from_proto_type(tracing_id <- body, "[uuid]")
-    {body, tracing_id}
-  end
-
-  defp decode_custom_payload(body, false) do
-    {nil, body}
-  end
-
-  defp decode_custom_payload(body, true) do
-    decode_from_proto_type(custom_payload <- body, "[bytes map]")
-    {custom_payload, body}
-  end
 
   # Void
   defp decode_result_response(
@@ -641,7 +581,7 @@ defmodule Xandra.Protocol.V4 do
          custom_payload,
          options
        ) do
-    %Page{} = page = new_page(query)
+    %Page{} = page = Proto.new_page(query)
     {page, buffer} = decode_metadata(buffer, page, Keyword.fetch!(options, :atom_keys?))
     columns = rewrite_column_types(page.columns, options)
 
@@ -714,10 +654,6 @@ defmodule Xandra.Protocol.V4 do
       custom_payload: custom_payload
     }
   end
-
-  defp new_page(%Simple{}), do: %Page{}
-  defp new_page(%Batch{}), do: %Page{}
-  defp new_page(%Prepared{result_columns: result_columns}), do: %Page{columns: result_columns}
 
   defp rewrite_column_types(columns, options) do
     Enum.map(columns, fn {_, _, _, type} = column ->

@@ -134,6 +134,24 @@ defmodule Xandra.Protocol do
     end
   end
 
+  # An address (ip and port) to a node. It consists of one
+  # [byte] n, that represents the address size, followed by n
+  # [byte] representing the IP address (in practice n can only be
+  # either 4 (IPv4) or 16 (IPv6)), following by one [int]
+  # representing the port.
+  defp decode_from_type(value, buffer, "[inet]") do
+    size = Macro.var(:size, __MODULE__)
+    raw_ip = Macro.var(:raw_ip, __MODULE__)
+    port = Macro.var(:port, __MODULE__)
+
+    quote do
+      unquote(decode_from_type(size, buffer, "[byte]"))
+      <<unquote(raw_ip)::bytes-size(unquote(size)), unquote(buffer)::bits>> = unquote(buffer)
+      unquote(decode_from_type(port, buffer, "[int]"))
+      unquote(value) = {unquote(__MODULE__).decode_raw_inet(unquote(raw_ip)), unquote(port)}
+    end
+  end
+
   # A [int] n, followed by n bytes if n >= 0. If n < 0, no byte should follow and
   # the value represented is `null`.
   defp decode_from_type(value, buffer, "[bytes]", block) do
@@ -212,6 +230,17 @@ defmodule Xandra.Protocol do
     decode_string_list(buffer, count - 1, [item | acc])
   end
 
+  @spec decode_raw_inet(binary()) :: :inet.ip_address()
+  def decode_raw_inet(<<data::4-bytes>>) do
+    <<n1, n2, n3, n4>> = data
+    {n1, n2, n3, n4}
+  end
+
+  def decode_raw_inet(<<data::16-bytes>>) do
+    <<n1::16, n2::16, n3::16, n4::16, n5::16, n6::16, n7::16, n8::16>> = data
+    {n1, n2, n3, n4, n5, n6, n7, n8}
+  end
+
   # Only used in native protocol v4+.
   @spec decode_warnings(bitstring(), boolean()) :: {[String.t()], bitstring()}
   def decode_warnings(body, _warning? = false) do
@@ -221,6 +250,67 @@ defmodule Xandra.Protocol do
   def decode_warnings(body, _warning? = true) do
     decode_from_proto_type(warnings <- body, "[string list]")
     {warnings, body}
+  end
+
+  # Only used in native protocol v4+.
+  @spec decode_custom_payload(bitstring(), boolean()) ::
+          {nil | Xandra.custom_payload(), bitstring()}
+  def decode_custom_payload(body, _custom_payload? = false) do
+    {nil, body}
+  end
+
+  def decode_custom_payload(body, _custom_payload? = true) do
+    decode_from_proto_type(custom_payload <- body, "[bytes map]")
+    {custom_payload, body}
+  end
+
+  @spec decode_tracing_id(bitstring(), boolean()) :: {bitstring(), nil | String.t()}
+  def decode_tracing_id(body, _tracing? = false) do
+    {body, _tracing_id = nil}
+  end
+
+  def decode_tracing_id(body, _tracing? = true) do
+    decode_from_proto_type(tracing_id <- body, "[uuid]")
+    {body, tracing_id}
+  end
+
+  @spec encode_to_type(term(), String.t()) :: iodata()
+  def encode_to_type(value, type)
+
+  # A [short] n, followed by n [string].
+  def encode_to_type(list, "[string list]") when is_list(list) do
+    parts = for string <- list, do: [<<byte_size(string)::16>>, string]
+    [<<length(list)::16>>] ++ parts
+  end
+
+  # A [short] n, followed by n pair <k><v> where <k> and <v> are [string].
+  def encode_to_type(map, "[string map]") when is_map(map) do
+    parts =
+      for {key, value} <- map do
+        [<<byte_size(key)::16>>, key, <<byte_size(value)::16>>, value]
+      end
+
+    [<<map_size(map)::16>>] ++ parts
+  end
+
+  # A consistency level specification. This is a [short] representing a consistency level
+  # with the following correspondance:
+  consistency_levels = %{
+    0x0000 => :any,
+    0x0001 => :one,
+    0x0002 => :two,
+    0x0003 => :three,
+    0x0004 => :quorum,
+    0x0005 => :all,
+    0x0006 => :local_quorum,
+    0x0007 => :each_quorum,
+    0x0008 => :serial,
+    0x0009 => :local_serial,
+    0x000A => :local_one
+  }
+
+  for {spec, level} <- consistency_levels do
+    def encode_to_type(unquote(level), "[consistency]"), do: <<unquote(spec)::16>>
   end
 
   @spec date_from_unix_days(integer()) :: Calendar.date()
@@ -253,4 +343,9 @@ defmodule Xandra.Protocol do
       bitmask
     end
   end
+
+  @spec new_page(Xandra.Simple.t() | Xandra.Batch.t() | Xandra.Prepared.t()) :: Xandra.Page.t()
+  def new_page(%Xandra.Simple{}), do: %Xandra.Page{}
+  def new_page(%Xandra.Batch{}), do: %Xandra.Page{}
+  def new_page(%Xandra.Prepared{result_columns: cols}), do: %Xandra.Page{columns: cols}
 end
