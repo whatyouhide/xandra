@@ -21,7 +21,10 @@ defmodule Xandra.SchemaChange do
     * `:tracing_id` - the tracing ID (as a UUID binary) if tracing was enabled,
       or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
 
-    * TODO
+    * `:custom_payload` - the *custom payload* sent by the server, if present.
+      If the server doesn't send a custom payload, this field is `nil`. Otherwise,
+      it's of type `t:Xandra.custom_payload/0`. See the "Custom payloads" section
+      in the documentation for the `Xandra` module.
 
   """
 
