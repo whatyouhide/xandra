@@ -194,6 +194,24 @@ defmodule Xandra do
   Xandra connections log a few events like disconnections or connection failures.
   Logs contain the `:xandra_address` and `:xandra_port` metadata that you can
   choose to log if desired.
+
+  ## Custom payloads
+
+  The Cassandra native protocol supports exchanging **custom payloads** between
+  server and client. A custom payload is a map of string keys to binary values
+  (`t:custom_payload/0`).
+
+  To *send* custom payloads to the server, you can pass the `:custom_payload`
+  option to functions such as `prepare/3` and `execute/4`.
+
+  If the server sends a custom payload in a response (`t:result/0`), you'll find
+  it in the `:custom_payload` field of the corresponding struct (such as
+  `Xandra.Page`, `Xandra.Void`, and so on).
+
+  By default, Cassandra itself ignores custom payloads sent to the server. Other
+  implementations built on top of the Cassandra native protocol might use
+  custom payloads to provide implementation-specific functionality. One such
+  example is Azure [Cosmos DB](https://azure.microsoft.com/en-us/services/cosmos-db/).
   """
 
   alias __MODULE__.{
@@ -214,6 +232,14 @@ defmodule Xandra do
   @type error :: Error.t() | ConnectionError.t()
   @type result :: Xandra.Void.t() | Page.t() | Xandra.SetKeyspace.t() | Xandra.SchemaChange.t()
   @type conn :: DBConnection.conn()
+
+  @typedoc """
+  Custom payload that Xandra can exchange with the server.
+
+  See the ["Custom payloads"](#module-custom-payloads) section in the
+  module documentation.
+  """
+  @type custom_payload :: %{optional(String.t()) => binary()}
 
   @type xandra_start_option ::
           {:nodes, [String.t()]}
@@ -544,6 +570,15 @@ defmodule Xandra do
       given query and sets the `tracing_id` field in the returned prepared
       query. See the "Tracing" option in `execute/4`.
       """
+    ],
+    custom_payload: [
+      type: {:custom, Xandra.OptionsValidators, :validate_custom_payload, []},
+      doc: """
+      A custom payload to send to the Cassandra server alongside the request. Only
+      supported in `QUERY`, `PREPARE`, `EXECUTE`, and `BATCH` requests. The custom
+      payload must be of type `t:custom_payload/0`. See the
+      ["Custom payloads"](#module-custom-payloads) section in the module documentation.
+      """
     ]
   ]
 
@@ -801,6 +836,15 @@ defmodule Xandra do
       Turn on tracing for the preparation of the
       given query and sets the `tracing_id` field in the returned prepared
       query. See the "Tracing" option in `execute/4`.
+      """
+    ],
+    custom_payload: [
+      type: {:custom, Xandra.OptionsValidators, :validate_custom_payload, []},
+      doc: """
+      A custom payload to send to the Cassandra server alongside the request. Only
+      supported in `QUERY`, `PREPARE`, `EXECUTE`, and `BATCH` requests. The custom
+      payload must be of type `t:custom_payload/0`. See the
+      ["Custom payloads"](#module-custom-payloads) section in the module documentation.
       """
     ],
     date_format: [

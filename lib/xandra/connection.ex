@@ -154,7 +154,8 @@ defmodule Xandra.Connection do
       | default_consistency: state.default_consistency,
         protocol_module: state.protocol_module,
         keyspace: state.current_keyspace,
-        compressor: compressor
+        compressor: compressor,
+        request_custom_payload: options[:custom_payload]
     }
 
     force? = Keyword.fetch!(options, :force)
@@ -166,7 +167,9 @@ defmodule Xandra.Connection do
 
       :error ->
         frame_options =
-          options |> Keyword.take([:tracing]) |> Keyword.put(:compressor, compressor)
+          options
+          |> Keyword.take([:tracing, :custom_payload])
+          |> Keyword.put(:compressor, compressor)
 
         payload =
           Frame.new(:prepare, frame_options)
@@ -201,7 +204,8 @@ defmodule Xandra.Connection do
       simple
       | default_consistency: state.default_consistency,
         protocol_module: state.protocol_module,
-        compressor: get_right_compressor(state, options[:compressor])
+        compressor: get_right_compressor(state, options[:compressor]),
+        custom_payload: options[:custom_payload]
     }
 
     {:ok, simple, state}
@@ -212,7 +216,8 @@ defmodule Xandra.Connection do
       batch
       | default_consistency: state.default_consistency,
         protocol_module: state.protocol_module,
-        compressor: get_right_compressor(state, options[:compressor])
+        compressor: get_right_compressor(state, options[:compressor]),
+        custom_payload: options[:custom_payload]
     }
 
     {:ok, batch, state}

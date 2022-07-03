@@ -7,6 +7,11 @@ defmodule Xandra.Prepared do
     * `:tracing_id` - the tracing ID (as a UUID binary) if tracing was enabled,
       or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
 
+    * `:response_custom_payload` - the *custom payload* sent by the server, if present.
+      If the server doesn't send a custom payload, this field is `nil`. Otherwise,
+      it's of type `t:Xandra.custom_payload/0`. See the "Custom payloads" section
+      in the documentation for the `Xandra` module.
+
   All other fields are documented in `t:t/0` to avoid Dialyzer warnings,
   but are not meant to be used by users.
   """
@@ -21,6 +26,8 @@ defmodule Xandra.Prepared do
     :protocol_module,
     :compressor,
     :tracing_id,
+    :request_custom_payload,
+    :response_custom_payload,
     :keyspace,
     :result_metadata_id
   ]
@@ -35,6 +42,8 @@ defmodule Xandra.Prepared do
           protocol_module: module | nil,
           compressor: module | nil,
           tracing_id: binary | nil,
+          request_custom_payload: Xandra.custom_payload() | nil,
+          response_custom_payload: Xandra.custom_payload() | nil,
           keyspace: binary | nil,
           result_metadata_id: binary | nil
         }
@@ -67,7 +76,11 @@ defmodule Xandra.Prepared do
     end
 
     def encode(prepared, values, options) when is_list(values) do
-      Frame.new(:execute, tracing: options[:tracing], compressor: prepared.compressor)
+      Frame.new(:execute,
+        tracing: options[:tracing],
+        compressor: prepared.compressor,
+        custom_payload: prepared.request_custom_payload
+      )
       |> prepared.protocol_module.encode_request(%{prepared | values: values}, options)
       |> Frame.encode(prepared.protocol_module)
     end
