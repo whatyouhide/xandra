@@ -71,7 +71,7 @@ jobs:
 
   test:
     name: Test (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, C* ${{ matrix.cassandra_version }}, Native protocols ${{ matrix.cassandra_native_protocols }})
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -139,7 +139,7 @@ jobs:
 
   test_clustering:
     name: Test C* Clustering (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, C* ${{ matrix.cassandra_version }}, Native protocol ${{ matrix.cassandra_native_protocol }})
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
