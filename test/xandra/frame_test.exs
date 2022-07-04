@@ -9,7 +9,7 @@ defmodule Xandra.FrameTest do
 
   describe "max_supported_protocol/0" do
     test "returns a protocol version" do
-      assert Frame.max_supported_protocol() == :v4
+      assert Frame.max_supported_protocol() == :v5
     end
   end
 
