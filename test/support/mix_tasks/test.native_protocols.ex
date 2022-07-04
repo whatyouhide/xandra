@@ -33,7 +33,7 @@ defmodule Mix.Tasks.Test.NativeProtocols do
     {_result, exit_status} =
       if protocol_version == :auto do
         Mix.shell().info([:cyan, "Testing with negotiated native protocol version", :reset])
-        System.cmd("mix", test_args, stderr_to_stdout: false, into: IO.stream())
+        System.cmd("mix", test_args, stderr_to_stdout: false, into: IO.stream(:stdio, :line))
       else
         Mix.shell().info([
           :cyan,
@@ -45,7 +45,7 @@ defmodule Mix.Tasks.Test.NativeProtocols do
         System.cmd("mix", test_args,
           stderr_to_stdout: false,
           env: %{"CASSANDRA_NATIVE_PROTOCOL" => Atom.to_string(protocol_version)},
-          into: IO.stream()
+          into: IO.stream(:stdio, :line)
         )
       end
 
