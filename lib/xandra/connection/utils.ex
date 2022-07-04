@@ -35,7 +35,7 @@ defmodule Xandra.Connection.Utils do
     tentative_protocol_module = Frame.protocol_version_to_module(tentative_protocol_version)
 
     payload =
-      Frame.new(:options)
+      Frame.new(:options, _options = [])
       |> tentative_protocol_module.encode_request(nil)
       |> Frame.encode_v4(tentative_protocol_module)
 
@@ -114,7 +114,7 @@ defmodule Xandra.Connection.Utils do
     # We have to encode the STARTUP frame without compression as in this frame
     # we tell the server which compression algorithm we want to use.
     payload =
-      Frame.new(:startup)
+      Frame.new(:startup, _options = [])
       |> protocol_module.encode_request(requested_options)
       |> Frame.encode_v4(protocol_module)
 
@@ -164,7 +164,7 @@ defmodule Xandra.Connection.Utils do
          options
        ) do
     payload =
-      Frame.new(:auth_response)
+      Frame.new(:auth_response, _options = [])
       |> protocol_module.encode_request(requested_options, options)
       |> Frame.encode(protocol_module)
 

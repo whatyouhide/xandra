@@ -232,7 +232,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defp register_to_events(transport, socket, protocol_module) do
     payload =
-      Frame.new(:register)
+      Frame.new(:register, _options = [])
       |> protocol_module.encode_request(["STATUS_CHANGE", "TOPOLOGY_CHANGE"])
       |> Frame.encode(protocol_module)
 
@@ -280,7 +280,7 @@ defmodule Xandra.Cluster.ControlConnection do
     }
 
     payload =
-      Frame.new(:query)
+      Frame.new(:query, _options = [])
       |> protocol_module.encode_request(query)
       |> Frame.encode(protocol_module)
 
@@ -303,7 +303,7 @@ defmodule Xandra.Cluster.ControlConnection do
     }
 
     payload =
-      Frame.new(:query)
+      Frame.new(:query, _options = [])
       |> protocol_module.encode_request(query)
       |> Frame.encode(protocol_module)
 

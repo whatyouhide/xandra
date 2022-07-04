@@ -18,6 +18,8 @@ defmodule Xandra.Frame do
 
   alias Xandra.Protocol.CRC
 
+  # This list must be ordered: the first item is the "max supported protocol" that
+  # Xandra will attempt to use on new connections.
   @supported_protocols [
     v5: %{module: Xandra.Protocol.V5, request_version: 0x05, response_version: 0x85},
     v4: %{module: Xandra.Protocol.V4, request_version: 0x04, response_version: 0x84},
@@ -96,9 +98,8 @@ defmodule Xandra.Frame do
 
   ## Functions related to the native protocol version.
 
-  # TODO: replace with hd(@supported_protocol_versions) once we fully support native protocol v5.
-  @spec max_supported_protocol() :: :v4
-  def max_supported_protocol(), do: :v4
+  @spec max_supported_protocol() :: unquote(hd(@supported_protocol_versions))
+  def max_supported_protocol(), do: hd(@supported_protocol_versions)
 
   @spec supported_protocols() :: [supported_protocol, ...]
   def supported_protocols(), do: @supported_protocol_versions
@@ -133,7 +134,7 @@ defmodule Xandra.Frame do
   ## Frame functions.
 
   @spec new(kind, keyword) :: t(kind) when kind: var
-  def new(kind, options \\ []) do
+  def new(kind, options) when is_list(options) do
     %__MODULE__{
       kind: kind,
       compressor: Keyword.get(options, :compressor),
