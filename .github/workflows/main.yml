@@ -131,7 +131,7 @@ jobs:
           mix deps.compile
 
       - name: Run tests
-        run: mix test.native_protocols --only-protocols %{{ matrix.cassandra_native_protocols }} --trace
+        run: mix test.native_protocols --only-protocols ${{ matrix.cassandra_native_protocols }} --trace
 
       - name: Dump Docker logs on failure
         uses: jwalton/gh-docker-logs@v1
