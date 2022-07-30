@@ -70,7 +70,75 @@ jobs:
         run: mix dialyzer
 
   test:
-    name: Test (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, C* ${{ matrix.cassandra_version }}, Native protocol ${{ matrix.cassandra_native_protocol }})
+    name: Test (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, C* ${{ matrix.cassandra_version }}, Native protocols ${{ matrix.cassandra_native_protocols }})
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - otp: "24.2"
+            elixir: "1.13"
+            cassandra_version: "4"
+            cassandra_native_protocols: "v4,v5"
+            lint: true
+          - otp: "24.2"
+            elixir: "1.13"
+            cassandra_version: "3"
+            cassandra_native_protocols: "v3,v4"
+          - otp: "24.2"
+            elixir: "1.13"
+            cassandra_version: "2.2"
+            cassandra_native_protocols: "v3"
+          # Oldest supported Elixir/OTP matrix.
+          # Elixir 1.9 supports OTP 20, but telemetry doesn't, so we force
+          # OTP 21 here.
+          - otp: "21.3"
+            elixir: "1.9"
+            cassandra_version: "3"
+            cassandra_native_protocols: "v3"
+    env:
+      CASSANDRA_VERSION: ${{ matrix.cassandra_version }}
+      NIMBLELZ4_FORCE_BUILD: ${{ matrix.elixir == '1.9' && 'true' }}
+
+    steps:
+      - name: Clone the repository
+        uses: actions/checkout@v2
+
+      - name: Start Docker and wait for it to be up
+        run: |
+          docker-compose up --detach --build
+          ./test/docker/health-check-services.sh
+
+      - name: Install OTP and Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          elixir-version: ${{matrix.elixir}}
+
+      - name: Cache dependencies
+        id: cache-deps
+        uses: actions/cache@v2
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
+
+      - name: Install and compile dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        run: |
+          mix deps.get --only test
+          mix deps.compile
+
+      - name: Run tests
+        run: mix test.native_protocols --only-protocols ${{ matrix.cassandra_native_protocols }} --trace
+
+      - name: Dump Docker logs on failure
+        uses: jwalton/gh-docker-logs@v1
+        if: failure()
+
+  test_clustering:
+    name: Test C* Clustering (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, C* ${{ matrix.cassandra_version }}, Native protocol ${{ matrix.cassandra_native_protocol }})
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -138,9 +206,6 @@ jobs:
         run: |
           mix deps.get --only test
           mix deps.compile
-
-      - name: Run tests
-        run: mix test --trace
 
       - name: Run clustering end-to-end tests
         run: mix test.clustering
