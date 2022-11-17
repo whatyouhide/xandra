@@ -475,6 +475,7 @@ defmodule Xandra.Protocol.V4 do
     0x1200 => :read_timeout,
     0x1300 => :read_failure,
     0x1400 => :function_failure,
+    0x1500 => :write_failure,
     0x2000 => :invalid_syntax,
     0x2100 => :unauthorized,
     0x2200 => :invalid,
