@@ -761,11 +761,12 @@ defmodule Xandra do
            :local_serial,
            :local_one
          ]},
-      default: :one,
       doc: """
       Specifies the consistency level for the given
       query. See the Cassandra documentation for more information on consistency
-      levels. The value of this option can be one of:
+      levels. If not present, defaults to the value of the `:default_consistency` option
+      used when starting the connection (see `start_link/1`).
+      The value of this option can be one of:
         * `:one`
         * `:two`
         * `:three`
