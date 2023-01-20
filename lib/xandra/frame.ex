@@ -14,7 +14,7 @@ defmodule Xandra.Frame do
     atom_keys?: false
   ]
 
-  use Bitwise
+  import Bitwise
 
   alias Xandra.Protocol.CRC
 

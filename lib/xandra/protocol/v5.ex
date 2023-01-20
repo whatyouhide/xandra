@@ -1,7 +1,7 @@
 defmodule Xandra.Protocol.V5 do
   @moduledoc false
 
-  use Bitwise
+  import Bitwise
 
   import Xandra.Protocol,
     only: [decode_from_proto_type: 2, decode_from_proto_type: 3, encode_to_type: 2]
