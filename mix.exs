@@ -62,7 +62,7 @@ defmodule Xandra.Mixfile do
 
   defp package() do
     [
-      maintainers: ["Aleksei Magusev", "Andrea Leopardi"],
+      maintainers: ["Andrea Leopardi"],
       licenses: ["ISC"],
       links: %{"GitHub" => @repo_url}
     ]
