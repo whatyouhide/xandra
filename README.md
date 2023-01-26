@@ -5,25 +5,23 @@
 [![CI](https://github.com/lexhide/xandra/actions/workflows/main.yml/badge.svg)](https://github.com/lexhide/xandra/actions/workflows/main.yml)
 [![Hex.pm](https://img.shields.io/hexpm/v/xandra.svg)](https://hex.pm/packages/xandra)
 
-> Fast, simple, and robust Cassandra driver for Elixir.
+> Fast and robust Cassandra driver for Elixir.
 
 ![Cover image](http://i.imgur.com/qtbgj00.jpg)
 
 Xandra is a [Cassandra][cassandra] driver built natively in Elixir and focused on speed, simplicity, and robustness.
-This driver works exclusively with the Cassandra Query Language v3 (CQL3) and the native protocol versions 3 and 4.
+This driver works exclusively with the Cassandra Query Language v3 (CQL3) and native protocol *v3*, *v4*, and *v5*.
 
 ## Features
 
-This library is in its early stages when it comes to features, but we're already [successfully using it in production at Forza Football][production-use]. Currently, the supported features are:
-
-  * connection pooling with reconnections in case of connection loss
-  * prepared queries (with local cache of prepared queries on a per-connection basis) and batch queries
-  * page streaming
-  * compression
-  * clustering (random and priority load balancing for now) with support for autodiscovery of nodes in the cluster (same datacenter only for now)
-  * customizable retry strategies for failed queries
-  * user-defined types
-  * authentication
+  * Connection pooling with automatic reconnections
+  * Prepared queries (with local cache of prepared queries on a per-connection basis) and batch queries
+  * Page streaming
+  * LZ4 compression
+  * Clustering (random and priority load balancing for now) with support for autodiscovery of nodes in the cluster (same datacenter only for now)
+  * Customizable retry strategies for failed queries
+  * User-defined types
+  * Authentication
   * SSL encryption
 
 See [the documentation][documentation] for detailed explanation of how the supported features work.
@@ -33,8 +31,10 @@ See [the documentation][documentation] for detailed explanation of how the suppo
 Add the `:xandra` dependency to your `mix.exs` file:
 
 ```elixir
-def deps() do
-  [{:xandra, "~> 0.11"}]
+defp deps do
+  [
+    {:xandra, "~> 0.14"}
+  ]
 end
 ```
 
@@ -81,34 +81,7 @@ page_stream
 
 ## Scylla support
 
-Xandra supports [Scylla][scylladb] (version `2.x`) without the need to do anything in particular.
-
-## Contributing
-
-To run tests, you will need [Docker][docker] installed on your machine. This repository uses [`docker-compose`][docker-compose] to run multiple Cassandra instances in parallel on different ports to test different features (such as authentication or SSL encryption). To run normal tests, do this from the root of the project:
-
-```bash
-docker-compose up -d
-mix test
-```
-
-The `-d` flags runs the instances as daemons in the background. Give it a minute between starting the services and running `mix test` since Cassandra takes a while to start. To stop the services, run `docker-compose stop`.
-
-To run tests for Scylla, you'll need a different set of services and a different test task:
-
-```bash
-docker-compose --file docker-compose.scylladb.yml up -d
-mix test.scylladb
-```
-
-Use `docker-compose --file docker-compose.scylladb.yml stop` to stop Scylla when done.
-
-By default, tests run for native protocol v3 except for a few specific tests that run
-on native protocol v4. If you want to test the whole suite on native protocol v4, use:
-
-```bash
-CASSANDRA_NATIVE_PROTOCOL=v4 mix test
-```
+Xandra supports [Scylla][scylladb] (version `2.x` to `4.x`) without the need to do anything in particular.
 
 ## License
 
@@ -116,7 +89,4 @@ Xandra is released under the ISC license, see the [LICENSE](LICENSE) file.
 
 [documentation]: https://hexdocs.pm/xandra
 [cassandra]: http://cassandra.apache.org
-[production-use]: http://tech.forzafootball.com/blog/the-pursuit-of-instant-pushes
-[docker]: https://www.docker.com
-[docker-compose]: https://docs.docker.com/compose/
 [scylladb]: https://www.scylladb.com/
