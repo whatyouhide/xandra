@@ -208,7 +208,7 @@ defmodule DataTypesTest do
     values = [
       {"int", 2},
       {"date", ~D[2017-09-11]},
-      {"time", ~T[20:13:50.000004]},
+      {"time", ~T[20:13:50]},
       {"timestamp", datetime}
     ]
 
@@ -217,7 +217,7 @@ defmodule DataTypesTest do
     assert [row] = Enum.to_list(page)
     assert Map.fetch!(row, "id") == 2
     assert Map.fetch!(row, "date") == ~D[2017-09-11]
-    assert Map.fetch!(row, "time") == ~T[20:13:50.000004]
+    assert Map.fetch!(row, "time") == ~T[20:13:50]
     assert Map.fetch!(row, "timestamp") == datetime
 
     values = [

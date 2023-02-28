@@ -19,7 +19,7 @@ defmodule Xandra.TestClustering.DockerHelpers do
   end
 
   def docker_compose(args) do
-    System.cmd("docker-compose", ["-f", docker_compose_file() | args], stderr_to_stdout: true)
+    System.cmd("docker", ["compose", "-f", docker_compose_file() | args], stderr_to_stdout: true)
   end
 
   def docker_compose!(args) do

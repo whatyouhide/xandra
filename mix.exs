@@ -77,15 +77,15 @@ defmodule Xandra.Mixfile do
 
   defp deps() do
     [
-      {:db_connection, "~> 2.0"},
-      {:decimal, "~> 1.7", optional: true},
-      {:nimble_options, "~> 0.4.0"},
+      {:db_connection, "~> 2.4"},
+      {:decimal, "~> 2.0", optional: true},
+      {:nimble_options, "~> 0.5.2"},
       {:telemetry, "~> 0.4.3 or ~> 1.0"},
 
       # Dev and test dependencies
-      {:ex_doc, "~> 0.28", only: :dev},
-      {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
-      {:excoveralls, "~> 0.14.4", only: :test},
+      {:ex_doc, "~> 0.29", only: :dev},
+      {:dialyxir, "~> 1.2", only: [:dev, :test], runtime: false},
+      {:excoveralls, "~> 0.15.3", only: :test},
       {:stream_data, "~> 0.5.0", only: [:dev, :test]}
     ] ++
       if Version.match?(System.version(), "~> 1.11") do
