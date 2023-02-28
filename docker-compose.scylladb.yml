@@ -6,7 +6,7 @@ services:
       context: ./test/docker
       dockerfile: scylladb.dockerfile
       args:
-        SCYLLA_VERSION: ${SCYLLA_VERSION:-2.3.1}
+        SCYLLA_VERSION: ${SCYLLA_VERSION:-5.1.5}
     ports:
       - "9042:9042"
     command:
@@ -27,7 +27,7 @@ services:
       context: ./test/docker
       dockerfile: scylladb.dockerfile
       args:
-        SCYLLA_VERSION: ${SCYLLA_VERSION:-2.3.1}
+        SCYLLA_VERSION: ${SCYLLA_VERSION:-5.1.5}
         AUTHENTICATION: "true"
     ports:
       - "9043:9042"
