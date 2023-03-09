@@ -16,10 +16,7 @@ defmodule Xandra.Cluster.ControlConnection do
   # weak "type checking" (some people might get angry at this).
   @opts_schema NimbleOptions.new!(
                  cluster: [type: :pid, required: true],
-                 node_ref: [
-                   type: {:custom, __MODULE__, :__validate_reference__, []},
-                   required: true
-                 ],
+                 node_ref: [type: :reference, required: true],
                  address: [type: :any, required: true],
                  port: [type: {:in, 0..65355}, required: true],
                  connection_options: [type: :keyword_list, required: true],
@@ -358,16 +355,4 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defp address_to_human_readable_source(%__MODULE__{address: address, port: port}),
     do: "#{address}:#{port}"
-
-  ## NimbleOptions validation
-
-  # TODO: replace with :reference NimbleOptions built-in once a version of NimbleOptions
-  # that supports that will be released.
-  def __validate_reference__(value) do
-    if is_reference(value) do
-      {:ok, value}
-    else
-      {:error, "expected reference, got: #{inspect(value)}"}
-    end
-  end
 end

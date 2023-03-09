@@ -244,8 +244,7 @@ defmodule Xandra.Cluster do
     {cluster_opts, pool_opts} = Keyword.split(options, @start_link_opts_schema_keys)
     cluster_opts = NimbleOptions.validate!(cluster_opts, @start_link_opts_schema)
 
-    # TODO: Replace with Keyword.pop!/2 once we depend on Elixir 1.10+.
-    {nodes, cluster_opts} = Keyword.pop(cluster_opts, :nodes)
+    {nodes, cluster_opts} = Keyword.pop!(cluster_opts, :nodes)
 
     if cluster_opts[:autodiscovery] && cluster_opts[:load_balancing] == :priority do
       raise ArgumentError,

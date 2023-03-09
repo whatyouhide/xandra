@@ -11,7 +11,7 @@ defmodule Xandra.Mixfile do
     [
       app: :xandra,
       version: @version,
-      elixir: "~> 1.9",
+      elixir: "~> 1.10",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
@@ -79,7 +79,7 @@ defmodule Xandra.Mixfile do
     [
       {:db_connection, "~> 2.0"},
       {:decimal, "~> 1.7", optional: true},
-      {:nimble_options, "~> 0.4.0"},
+      {:nimble_options, "~> 0.5.0 or ~> 1.0"},
       {:telemetry, "~> 0.4.3 or ~> 1.0"},
 
       # Dev and test dependencies
