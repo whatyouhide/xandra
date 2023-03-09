@@ -260,13 +260,7 @@ defmodule Xandra.Cluster do
       control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module)
     }
 
-    genserver_opts =
-      case Keyword.fetch(cluster_opts, :name) do
-        {:ok, name} -> [name: name]
-        :error -> []
-      end
-
-    GenServer.start_link(__MODULE__, {state, nodes}, genserver_opts)
+    GenServer.start_link(__MODULE__, {state, nodes}, Keyword.take(cluster_opts, [:name]))
   end
 
   # Used internally by Xandra.Cluster.ControlConnection.

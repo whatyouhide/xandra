@@ -40,15 +40,11 @@ defmodule Xandra.ClusterTest do
 
   describe "start_link/1" do
     test "validates the :nodes option" do
-      message =
-        ~s(list element at position 0 in :nodes failed validation: invalid node: "foo:bar")
+      message = ~r/invalid list in :nodes option: invalid value for list element/
 
       assert_raise NimbleOptions.ValidationError, message, fn ->
         Xandra.Cluster.start_link(nodes: ["foo:bar"])
       end
-
-      message =
-        ~s(list element at position 0 in :nodes failed validation: invalid node: "example.com:9042x")
 
       assert_raise NimbleOptions.ValidationError, message, fn ->
         Xandra.Cluster.start_link(nodes: ["example.com:9042x"])
@@ -56,7 +52,7 @@ defmodule Xandra.ClusterTest do
     end
 
     test "validates the :autodiscovery option" do
-      message = ~r/expected :autodiscovery to be a boolean/
+      message = ~r/invalid value for :autodiscovery/
 
       assert_raise NimbleOptions.ValidationError, message, fn ->
         Xandra.Cluster.start_link(nodes: ["example.com:9042"], autodiscovery: "not a boolean")
@@ -64,7 +60,7 @@ defmodule Xandra.ClusterTest do
     end
 
     test "validates the :autodiscovered_nodes_port option" do
-      message = ~r/expected :autodiscovered_nodes_port to be in 0\.\.65535/
+      message = ~r/invalid value for :autodiscovered_nodes_port option/
 
       assert_raise NimbleOptions.ValidationError, message, fn ->
         Xandra.Cluster.start_link(nodes: ["example.com:9042"], autodiscovered_nodes_port: 99_999)
@@ -72,7 +68,8 @@ defmodule Xandra.ClusterTest do
     end
 
     test "validates the :load_balancing option" do
-      message = ~r/expected :load_balancing to be in \[:priority, :random\]/
+      message =
+        ~r/invalid value for :load_balancing option: expected one of \[:priority, :random\]/
 
       assert_raise NimbleOptions.ValidationError, message, fn ->
         Xandra.Cluster.start_link(nodes: ["example.com:9042"], load_balancing: :inverse)
