@@ -128,7 +128,7 @@ defmodule Xandra.TestClustering.IntegrationTest do
       end)
 
     control_conn_peernames =
-      wait_for_passing(30_000, fn ->
+      TestHelper.wait_for_passing(30_000, fn ->
         for {peername, ref} <- cluster_state.node_refs do
           assert is_reference(ref)
           assert {ip, port} = peername
