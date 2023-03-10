@@ -329,11 +329,18 @@ defmodule Xandra.Cluster.ControlConnection do
   defp inet_mod(:ssl), do: :ssl
 
   defp peername_to_string({host_or_ip, port}) do
-    if :inet.is_ip_address(host_or_ip) do
+    if ip_address?(host_or_ip) do
       "#{:inet.ntoa(host_or_ip)}:#{port}"
     else
       "#{host_or_ip}:#{port}"
     end
+  end
+
+  # TODO: remove the conditional once we depend on OTP 25+.
+  if function_exported?(:inet, :is_ip_address, 1) do
+    defp ip_address?(term), do: :inet.is_ip_address(term)
+  else
+    defp ip_address?(term), do: is_tuple(term)
   end
 
   defp recv_frame(transport, socket, protocol_format) do
