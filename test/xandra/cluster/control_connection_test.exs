@@ -10,50 +10,60 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     mirror_ref = make_ref()
     mirror = spawn_link(fn -> mirror(parent, mirror_ref) end)
 
-    node_ref = make_ref()
-
     opts = [
       cluster: mirror,
-      node_ref: node_ref,
-      address: 'localhost',
-      port: 9042,
+      contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
-      autodiscovery: true
+      autodiscovered_nodes_port: 9042
     ]
 
     assert {:ok, _ctrl_conn} = start_supervised({ControlConnection, opts})
-
-    assert_receive {^mirror_ref, {:"$gen_cast", {:activate, _ref, {{127, 0, 0, 1}, 9042}}}}, 2000
-    assert_receive {^mirror_ref, {:"$gen_cast", {:discovered_peers, [], "127.0.0.1:9042"}}}, 2000
+    assert_receive {^mirror_ref, {:discovered_peers, peers}}
+    assert peers == [{{127, 0, 0, 1}, 9042}]
   end
 
-  test "reconnecting after a disconnection" do
+  test "reconnecting after the node closes its socket" do
     parent = self()
     mirror_ref = make_ref()
     mirror = spawn_link(fn -> mirror(parent, mirror_ref) end)
 
-    node_ref = make_ref()
+    opts = [
+      cluster: mirror,
+      contact_points: ["127.0.0.1"],
+      connection_options: [protocol_version: @protocol_version],
+      autodiscovered_nodes_port: 9042
+    ]
+
+    ctrl_conn = start_link_supervised!({ControlConnection, opts})
+
+    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert {{:connected, connected_node}, _data} = :sys.get_state(ctrl_conn)
+
+    send(ctrl_conn, {:tcp_closed, connected_node.socket})
+    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert({{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn))
+  end
+
+  test "reconnecting after the node's socket errors out" do
+    parent = self()
+    mirror_ref = make_ref()
+    mirror = spawn_link(fn -> mirror(parent, mirror_ref) end)
 
     opts = [
       cluster: mirror,
-      node_ref: node_ref,
-      address: 'localhost',
-      port: 9042,
+      contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
-      autodiscovery: false
+      autodiscovered_nodes_port: 9042
     ]
 
-    assert {:ok, ctrl_conn} = start_supervised({ControlConnection, opts})
+    ctrl_conn = start_link_supervised!({ControlConnection, opts})
 
-    assert_receive {^mirror_ref, {:"$gen_cast", {:activate, _ref, {{127, 0, 0, 1}, 9042}}}}, 2000
+    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert {{:connected, connected_node}, _data} = :sys.get_state(ctrl_conn)
 
-    assert {:connected, data} = :sys.get_state(ctrl_conn)
-    send(ctrl_conn, {:tcp_closed, data.socket})
-
-    assert_receive {^mirror_ref,
-                    {:"$gen_cast",
-                     {:update, {:control_connection_established, {{127, 0, 0, 1}, 9042}}}}},
-                   2000
+    send(ctrl_conn, {:tcp_error, connected_node.socket, :econnreset})
+    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert({{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn))
   end
 
   defp mirror(parent, ref) do
@@ -62,5 +72,14 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     end
 
     mirror(parent, ref)
+  end
+
+  # TODO: remove once we have ExUnit.Callbacks.start_link_supervised!/1 (Elixir 1.14+).
+  if not function_exported?(ExUnit.Callbacks, :start_link_supervised!, 1) do
+    defp start_link_supervised!(child_spec) do
+      pid = start_supervised!(child_spec)
+      true = Process.link(pid)
+      pid
+    end
   end
 end
