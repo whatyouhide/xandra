@@ -3,6 +3,7 @@ defmodule Xandra.ClusterTest do
 
   import ExUnit.CaptureLog
 
+  alias Xandra.TestHelper
   alias Xandra.Cluster.{StatusChange, TopologyChange}
 
   defmodule PoolMock do
@@ -89,7 +90,7 @@ defmodule Xandra.ClusterTest do
         nodes: ["node1.example.com", "node2.example.com"]
       ]
 
-      cluster = start_link_supervised!({Xandra.Cluster, opts})
+      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
       assert_receive {^test_ref, ControlConnectionMock, :init_called, args}
       assert args.contact_points == [{'node1.example.com', 9042}, {'node2.example.com', 9042}]
@@ -105,7 +106,7 @@ defmodule Xandra.ClusterTest do
         nodes: ["node1.example.com"]
       ]
 
-      cluster = start_link_supervised!({Xandra.Cluster, opts})
+      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
       assert_receive {^test_ref, ControlConnectionMock, :init_called, control_conn_args}
       assert control_conn_args[:contact_points] == [{'node1.example.com', 9042}]
@@ -121,7 +122,7 @@ defmodule Xandra.ClusterTest do
         nodes: ["node1.example.com", "node2.example.com"]
       ]
 
-      cluster = start_link_supervised!({Xandra.Cluster, opts})
+      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
       assert_receive {^test_ref, ControlConnectionMock, :init_called, args}
       assert args.contact_points == [{'node1.example.com', 9042}, {'node2.example.com', 9042}]
@@ -146,7 +147,7 @@ defmodule Xandra.ClusterTest do
       nodes: ["node1"]
     ]
 
-    cluster = start_link_supervised!({Xandra.Cluster, opts})
+    cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
     assert_receive {^test_ref, ControlConnectionMock, :init_called, _args}
 
@@ -171,7 +172,7 @@ defmodule Xandra.ClusterTest do
     send(cluster, {:cluster_event, %StatusChange{effect: "UP", address: address}})
 
     new_pool =
-      wait_for_passing(500, fn ->
+      TestHelper.wait_for_passing(500, fn ->
         assert [{^peername, pid, :worker, _}] = Supervisor.which_children(pool_sup)
         assert is_pid(pid)
         pid
@@ -190,7 +191,7 @@ defmodule Xandra.ClusterTest do
       nodes: ["node1"]
     ]
 
-    cluster = start_link_supervised!({Xandra.Cluster, opts})
+    cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
     assert_receive {^test_ref, ControlConnectionMock, :init_called, _args}
 
@@ -201,7 +202,7 @@ defmodule Xandra.ClusterTest do
 
     send(cluster, {:cluster_event, %TopologyChange{effect: "NEW_NODE", address: new_address}})
 
-    wait_for_passing(500, fn ->
+    TestHelper.wait_for_passing(500, fn ->
       assert_pool_started(test_ref, {new_address, port})
     end)
 
@@ -215,7 +216,7 @@ defmodule Xandra.ClusterTest do
     send(cluster, {:cluster_event, %TopologyChange{effect: "REMOVED_NODE", address: address}})
     assert_receive {:DOWN, ^pool_monitor_ref, _, _, _}
 
-    wait_for_passing(500, fn ->
+    TestHelper.wait_for_passing(500, fn ->
       assert [_] = Supervisor.which_children(:sys.get_state(cluster).pool_supervisor)
     end)
   end
@@ -227,7 +228,7 @@ defmodule Xandra.ClusterTest do
       nodes: ["node1"]
     ]
 
-    cluster = start_link_supervised!({Xandra.Cluster, opts})
+    cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
     # TopologyChange MOVED_NODE
 
@@ -262,7 +263,7 @@ defmodule Xandra.ClusterTest do
     ]
 
     # Start the cluster.
-    cluster = start_link_supervised!({Xandra.Cluster, opts})
+    cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
     # First, the control connection is started and both pools as well.
     assert_receive {^test_ref, ControlConnectionMock, :init_called, _args}
@@ -284,7 +285,7 @@ defmodule Xandra.ClusterTest do
         nodes: ["node1"]
       ]
 
-      cluster = start_link_supervised!({Xandra.Cluster, opts})
+      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
       assert GenServer.call(cluster, :checkout) == {:error, :empty}
     end
@@ -297,7 +298,7 @@ defmodule Xandra.ClusterTest do
         load_balancing: :random
       ]
 
-      cluster = start_link_supervised!({Xandra.Cluster, opts})
+      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
       assert_receive {^test_ref, ControlConnectionMock, :init_called, _args}
 
@@ -306,7 +307,7 @@ defmodule Xandra.ClusterTest do
       assert_pool_started(test_ref, "192.0.0.2:9042")
 
       pool_pids =
-        wait_for_passing(500, fn ->
+        TestHelper.wait_for_passing(500, fn ->
           pools = :sys.get_state(cluster).pools
           assert map_size(pools) == 2
           for {_address, pid} <- pools, do: pid
@@ -333,7 +334,7 @@ defmodule Xandra.ClusterTest do
         load_balancing: :priority
       ]
 
-      cluster = start_link_supervised!({Xandra.Cluster, opts})
+      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
       assert_receive {^test_ref, ControlConnectionMock, :init_called, _args}
 
@@ -342,7 +343,7 @@ defmodule Xandra.ClusterTest do
       assert_pool_started(test_ref, "192.0.0.2:9042")
 
       %{{{192, 0, 0, 1}, 9042} => pid1, {{192, 0, 0, 2}, 9042} => pid2} =
-        wait_for_passing(500, fn ->
+        TestHelper.wait_for_passing(500, fn ->
           pools = :sys.get_state(cluster).pools
           assert map_size(pools) == 2
           pools
@@ -369,26 +370,5 @@ defmodule Xandra.ClusterTest do
       end
 
     assert_receive {^test_ref, PoolMock, :init_called, %{nodes: [^node]}}
-  end
-
-  defp wait_for_passing(time_left, fun) when time_left < 0 do
-    fun.()
-  end
-
-  defp wait_for_passing(time_left, fun) do
-    fun.()
-  catch
-    _, _ ->
-      Process.sleep(100)
-      wait_for_passing(time_left - 100, fun)
-  end
-
-  # TODO: remove once we have ExUnit.Callbacks.start_link_supervised!/1 (Elixir 1.14+).
-  if not function_exported?(ExUnit.Callbacks, :start_link_supervised!, 1) do
-    defp start_link_supervised!(child_spec) do
-      pid = start_supervised!(child_spec)
-      true = Process.link(pid)
-      pid
-    end
   end
 end

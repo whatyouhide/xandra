@@ -9,6 +9,8 @@ end)
 defmodule Xandra.TestClustering.IntegrationTest do
   use ExUnit.Case
 
+  alias Xandra.TestHelper
+
   import Xandra.TestClustering.DockerHelpers
 
   @protocol_version (case System.get_env("CASSANDRA_NATIVE_PROTOCOL", "") do
@@ -51,20 +53,20 @@ defmodule Xandra.TestClustering.IntegrationTest do
         protocol_version: @protocol_version
       )
 
-    wait_for_passing(60_000, fn ->
+    TestHelper.wait_for_passing(60_000, fn ->
       assert %Xandra.Cluster{} = cluster_state = :sys.get_state(cluster)
       assert length(cluster_state.node_refs) == conn_count_in_cluster
     end)
 
     # Wait for all pools to be started.
-    wait_for_passing(60_000, fn ->
+    TestHelper.wait_for_passing(60_000, fn ->
       assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster
     end)
 
     docker_compose!(["stop", "node2"])
 
     # Wait for the pool for the stopped node to be stopped.
-    wait_for_passing(60_000, fn ->
+    TestHelper.wait_for_passing(60_000, fn ->
       assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster - 1
     end)
   end
@@ -79,27 +81,27 @@ defmodule Xandra.TestClustering.IntegrationTest do
         protocol_version: @protocol_version
       )
 
-    wait_for_passing(60_000, fn ->
+    TestHelper.wait_for_passing(60_000, fn ->
       assert %Xandra.Cluster{} = cluster_state = :sys.get_state(cluster)
       assert length(cluster_state.node_refs) == conn_count_in_cluster
     end)
 
     # Wait for all pools to be started.
-    wait_for_passing(60_000, fn ->
+    TestHelper.wait_for_passing(60_000, fn ->
       assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster
     end)
 
     docker_compose!(["stop", "node2"])
 
     # Wait for the pool for the stopped node to be stopped.
-    wait_for_passing(60_000, fn ->
+    TestHelper.wait_for_passing(60_000, fn ->
       assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster - 1
     end)
 
     docker_compose!(["up", "-d", "node2"])
 
     # Wait for the pool to the restarted node to be up.
-    wait_for_passing(60_000, fn ->
+    TestHelper.wait_for_passing(60_000, fn ->
       assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster
     end)
   end
@@ -115,7 +117,7 @@ defmodule Xandra.TestClustering.IntegrationTest do
       )
 
     cluster_state =
-      wait_for_passing(60_000, fn ->
+      TestHelper.wait_for_passing(60_000, fn ->
         assert %Xandra.Cluster{} = cluster_state = :sys.get_state(cluster)
 
         assert length(cluster_state.node_refs) == conn_count_in_cluster,
@@ -142,7 +144,7 @@ defmodule Xandra.TestClustering.IntegrationTest do
     assert Enum.sort(Map.keys(cluster_state.pools)) == Enum.sort(control_conn_peernames)
 
     pool_children =
-      wait_for_passing(60_000, fn ->
+      TestHelper.wait_for_passing(60_000, fn ->
         children = Supervisor.which_children(cluster_state.control_conn_supervisor)
         assert length(children) == conn_count_in_cluster
         children
@@ -156,17 +158,5 @@ defmodule Xandra.TestClustering.IntegrationTest do
     end
 
     Xandra.Cluster.execute!(cluster, "SELECT * FROM system_schema.keyspaces")
-  end
-
-  defp wait_for_passing(time_left, fun) when time_left < 0 do
-    fun.()
-  end
-
-  defp wait_for_passing(time_left, fun) do
-    fun.()
-  catch
-    _, _ ->
-      Process.sleep(100)
-      wait_for_passing(time_left - 100, fun)
   end
 end

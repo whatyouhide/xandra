@@ -3,6 +3,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
   import ExUnit.CaptureLog
 
+  alias Xandra.TestHelper
   alias Xandra.Cluster.ControlConnection
 
   @protocol_version XandraTest.IntegrationCase.protocol_version()
@@ -22,7 +23,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042
     ]
 
-    start_link_supervised!({ControlConnection, opts})
+    TestHelper.start_link_supervised!({ControlConnection, opts})
     assert_receive {^mirror_ref, {:discovered_peers, peers}}
     assert peers == [{{127, 0, 0, 1}, 9042}]
   end
@@ -37,7 +38,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     log =
       capture_log(fn ->
-        start_link_supervised!({ControlConnection, opts})
+        TestHelper.start_link_supervised!({ControlConnection, opts})
         assert_receive {^mirror_ref, {:discovered_peers, peers}}
         assert peers == [{{127, 0, 0, 1}, 9042}]
       end)
@@ -55,7 +56,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     log =
       capture_log(fn ->
-        ctrl_conn = start_link_supervised!({ControlConnection, opts})
+        ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
         refute_receive {^mirror_ref, _}, 500
         assert {:disconnected, _data} = :sys.get_state(ctrl_conn)
       end)
@@ -72,7 +73,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042
     ]
 
-    ctrl_conn = start_link_supervised!({ControlConnection, opts})
+    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
     assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
     assert {{:connected, connected_node}, _data} = :sys.get_state(ctrl_conn)
@@ -91,7 +92,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042
     ]
 
-    ctrl_conn = start_link_supervised!({ControlConnection, opts})
+    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
     assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
     assert {{:connected, connected_node}, _data} = :sys.get_state(ctrl_conn)
@@ -110,7 +111,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042
     ]
 
-    ctrl_conn = start_link_supervised!({ControlConnection, opts})
+    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
     assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
     assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
@@ -124,14 +125,5 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     end
 
     mirror(parent, ref)
-  end
-
-  # TODO: remove once we have ExUnit.Callbacks.start_link_supervised!/1 (Elixir 1.14+).
-  if not function_exported?(ExUnit.Callbacks, :start_link_supervised!, 1) do
-    defp start_link_supervised!(child_spec) do
-      pid = start_supervised!(child_spec)
-      true = Process.link(pid)
-      pid
-    end
   end
 end
