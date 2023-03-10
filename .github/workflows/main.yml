@@ -90,10 +90,8 @@ jobs:
             cassandra_version: "2.2"
             cassandra_native_protocols: "v3"
           # Oldest supported Elixir/OTP matrix.
-          # Elixir 1.9 supports OTP 20, but telemetry doesn't, so we force
-          # OTP 21 here.
           - otp: "21.3"
-            elixir: "1.9"
+            elixir: "1.10"
             cassandra_version: "3"
             cassandra_native_protocols: "v3"
     env:
