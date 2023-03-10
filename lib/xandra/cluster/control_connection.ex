@@ -66,9 +66,13 @@ defmodule Xandra.Cluster.ControlConnection do
     contact_points =
       options
       |> Keyword.fetch!(:contact_points)
-      |> Enum.map(fn contact_point ->
-        {:ok, node} = Xandra.OptionsValidators.validate_node(contact_point)
-        node
+      |> Enum.map(fn
+        {host, port} ->
+          {host, port}
+
+        contact_point ->
+          {:ok, node} = Xandra.OptionsValidators.validate_node(contact_point)
+          node
       end)
 
     data = %__MODULE__{

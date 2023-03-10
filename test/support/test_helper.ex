@@ -13,5 +13,16 @@ defmodule Xandra.TestHelper do
       else
         flunk("exceeded maximum number of attempts")
       end
+  else
+    {:error, %Xandra.ConnectionError{reason: {:cluster, :not_connected}}} ->
+      if tries > 0 do
+        Process.sleep(50)
+        await_connected(cluster, options, fun, tries - 1)
+      else
+        flunk("exceeded maximum number of attempts")
+      end
+
+    other ->
+      other
   end
 end
