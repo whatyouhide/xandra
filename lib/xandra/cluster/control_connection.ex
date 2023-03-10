@@ -3,7 +3,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   @behaviour :gen_statem
 
-  alias Xandra.{Frame, Simple, Cluster, Connection.Utils}
+  alias Xandra.{Frame, Simple, Connection.Utils}
 
   require Logger
 
@@ -196,6 +196,8 @@ defmodule Xandra.Cluster.ControlConnection do
           )
       end
     end)
+
+    :error
   catch
     :throw, return -> return
   end
@@ -237,23 +239,6 @@ defmodule Xandra.Cluster.ControlConnection do
         {:error, reason}
     end
   end
-
-  # # A control connection that never came online just came online.
-  # defp report_active(
-  #        %__MODULE__{new: true, cluster: cluster, node_ref: node_ref, socket: socket} = data
-  #      ) do
-  #   case inet_mod(data.transport).peername(socket) do
-  #     {:ok, {_ip, _port} = peername} ->
-  #       :ok = Cluster.activate(cluster, node_ref, peername)
-  #       data = %__MODULE__{data | new: false, peername: peername}
-  #       {:ok, data}
-  #   end
-  # end
-
-  # defp report_active(%__MODULE__{new: false, cluster: cluster, peername: peername} = data) do
-  #   Xandra.Cluster.update(cluster, {:control_connection_established, peername})
-  #   {:ok, data}
-  # end
 
   defp startup_connection(%__MODULE__{} = data, %ConnectedNode{} = node, supported_options) do
     %{"CQL_VERSION" => [cql_version | _]} = supported_options
@@ -311,7 +296,7 @@ defmodule Xandra.Cluster.ControlConnection do
       {frame, rest} ->
         {change_event, _warnings} = connected_node.protocol_module.decode_response(frame)
         Logger.debug("Received event: #{inspect(change_event)}")
-        :ok = Cluster.update(cluster, change_event)
+        send(cluster, {:cluster_event, change_event})
         consume_new_data(%__MODULE__{data | buffer: rest}, connected_node)
 
       :error ->
