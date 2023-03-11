@@ -89,6 +89,7 @@ defmodule Xandra.Mixfile do
       {:stream_data, "~> 0.5.0", only: [:dev, :test]}
     ] ++
       if Version.match?(System.version(), "~> 1.11") do
+        # TODO: remove this conditional once we require Elixir 1.11+
         [{:nimble_lz4, "~> 0.1.2", only: [:dev, :test]}]
       else
         []

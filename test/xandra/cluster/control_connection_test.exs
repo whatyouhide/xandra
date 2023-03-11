@@ -1,59 +1,122 @@
 defmodule Xandra.Cluster.ControlConnectionTest do
   use ExUnit.Case
 
+  import ExUnit.CaptureLog
+
+  alias Xandra.TestHelper
   alias Xandra.Cluster.ControlConnection
 
   @protocol_version XandraTest.IntegrationCase.protocol_version()
 
-  test "reporting data upon successful connection" do
+  setup do
     parent = self()
     mirror_ref = make_ref()
     mirror = spawn_link(fn -> mirror(parent, mirror_ref) end)
-
-    node_ref = make_ref()
-
-    opts = [
-      cluster: mirror,
-      node_ref: node_ref,
-      address: 'localhost',
-      port: 9042,
-      connection_options: [protocol_version: @protocol_version],
-      autodiscovery: true
-    ]
-
-    assert {:ok, _ctrl_conn} = start_supervised({ControlConnection, opts})
-
-    assert_receive {^mirror_ref, {:"$gen_cast", {:activate, _ref, {{127, 0, 0, 1}, 9042}}}}, 2000
-    assert_receive {^mirror_ref, {:"$gen_cast", {:discovered_peers, [], "127.0.0.1:9042"}}}, 2000
+    %{mirror_ref: mirror_ref, mirror: mirror}
   end
 
-  test "reconnecting after a disconnection" do
-    parent = self()
-    mirror_ref = make_ref()
-    mirror = spawn_link(fn -> mirror(parent, mirror_ref) end)
-
-    node_ref = make_ref()
-
+  test "reporting data upon successful connection", %{mirror_ref: mirror_ref, mirror: mirror} do
     opts = [
       cluster: mirror,
-      node_ref: node_ref,
-      address: 'localhost',
-      port: 9042,
+      contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
-      autodiscovery: false
+      autodiscovered_nodes_port: 9042
     ]
 
-    assert {:ok, ctrl_conn} = start_supervised({ControlConnection, opts})
+    TestHelper.start_link_supervised!({ControlConnection, opts})
+    assert_receive {^mirror_ref, {:discovered_peers, peers}}
+    assert peers == [{{127, 0, 0, 1}, 9042}]
+  end
 
-    assert_receive {^mirror_ref, {:"$gen_cast", {:activate, _ref, {{127, 0, 0, 1}, 9042}}}}, 2000
+  test "trying all the nodes in the contact points", %{mirror_ref: mirror_ref, mirror: mirror} do
+    opts = [
+      cluster: mirror,
+      contact_points: ["bad-domain", "127.0.0.1"],
+      connection_options: [protocol_version: @protocol_version],
+      autodiscovered_nodes_port: 9042
+    ]
 
-    assert {:connected, data} = :sys.get_state(ctrl_conn)
-    send(ctrl_conn, {:tcp_closed, data.socket})
+    log =
+      capture_log(fn ->
+        TestHelper.start_link_supervised!({ControlConnection, opts})
+        assert_receive {^mirror_ref, {:discovered_peers, peers}}
+        assert peers == [{{127, 0, 0, 1}, 9042}]
+      end)
 
-    assert_receive {^mirror_ref,
-                    {:"$gen_cast",
-                     {:update, {:control_connection_established, {{127, 0, 0, 1}, 9042}}}}},
-                   2000
+    assert log =~ "Error connecting to bad-domain:9042: non-existing domain"
+  end
+
+  test "when all contact points are unavailable", %{mirror_ref: mirror_ref, mirror: mirror} do
+    opts = [
+      cluster: mirror,
+      contact_points: ["bad-domain", "other-bad-domain"],
+      connection_options: [protocol_version: @protocol_version],
+      autodiscovered_nodes_port: 9042
+    ]
+
+    log =
+      capture_log(fn ->
+        ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+        refute_receive {^mirror_ref, _}, 500
+        assert {:disconnected, _data} = :sys.get_state(ctrl_conn)
+      end)
+
+    assert log =~ "Error connecting to bad-domain:9042: non-existing domain"
+    assert log =~ "Error connecting to other-bad-domain:9042: non-existing domain"
+  end
+
+  test "reconnecting after the node closes its socket", %{mirror_ref: mirror_ref, mirror: mirror} do
+    opts = [
+      cluster: mirror,
+      contact_points: ["127.0.0.1"],
+      connection_options: [protocol_version: @protocol_version],
+      autodiscovered_nodes_port: 9042
+    ]
+
+    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+
+    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert {{:connected, connected_node}, _data} = :sys.get_state(ctrl_conn)
+
+    send(ctrl_conn, {:tcp_closed, connected_node.socket})
+    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert({{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn))
+  end
+
+  test "reconnecting after the node's socket errors out",
+       %{mirror_ref: mirror_ref, mirror: mirror} do
+    opts = [
+      cluster: mirror,
+      contact_points: ["127.0.0.1"],
+      connection_options: [protocol_version: @protocol_version],
+      autodiscovered_nodes_port: 9042
+    ]
+
+    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+
+    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert {{:connected, connected_node}, _data} = :sys.get_state(ctrl_conn)
+
+    send(ctrl_conn, {:tcp_error, connected_node.socket, :econnreset})
+    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert({{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn))
+  end
+
+  @tag :skip
+  test "forwards cluster events to the cluster", %{mirror_ref: mirror_ref, mirror: mirror} do
+    opts = [
+      cluster: mirror,
+      contact_points: ["127.0.0.1"],
+      connection_options: [protocol_version: @protocol_version],
+      autodiscovered_nodes_port: 9042
+    ]
+
+    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+
+    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
+
+    flunk("TODO: simulate an event being sent to the control connection")
   end
 
   defp mirror(parent, ref) do
