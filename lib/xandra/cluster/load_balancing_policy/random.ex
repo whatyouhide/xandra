@@ -15,7 +15,7 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.Random do
 
   @impl true
   def host_added(hosts, new_host) do
-    [{new_host, :up}] ++ hosts
+    Enum.uniq_by([{new_host, :up}] ++ hosts, &{&1.address, &1.port})
   end
 
   @impl true

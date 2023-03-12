@@ -4,7 +4,14 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   import ExUnit.CaptureLog
 
   alias Xandra.TestHelper
-  alias Xandra.Cluster.{ControlConnection, Host, StatusChange, TopologyChange}
+
+  alias Xandra.Cluster.{
+    ControlConnection,
+    Host,
+    LoadBalancingPolicy,
+    StatusChange,
+    TopologyChange
+  }
 
   @protocol_version XandraTest.IntegrationCase.protocol_version()
 
@@ -21,7 +28,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
-      load_balancing_module: Xandra.Cluster.LoadBalancingPolicy.RoundRobin
+      load_balancing_module: LoadBalancingPolicy.Random
     ]
 
     TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -35,7 +42,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["bad-domain", "127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
-      load_balancing_module: Xandra.Cluster.LoadBalancingPolicy.RoundRobin
+      load_balancing_module: LoadBalancingPolicy.Random
     ]
 
     log =
@@ -54,7 +61,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["bad-domain", "other-bad-domain"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
-      load_balancing_module: Xandra.Cluster.LoadBalancingPolicy.RoundRobin
+      load_balancing_module: LoadBalancingPolicy.Random
     ]
 
     log =
@@ -74,7 +81,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
-      load_balancing_module: Xandra.Cluster.LoadBalancingPolicy.RoundRobin
+      load_balancing_module: LoadBalancingPolicy.Random
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -94,7 +101,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
-      load_balancing_module: Xandra.Cluster.LoadBalancingPolicy.RoundRobin
+      load_balancing_module: LoadBalancingPolicy.Random
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -113,7 +120,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
-      load_balancing_module: Xandra.Cluster.LoadBalancingPolicy.RoundRobin
+      load_balancing_module: LoadBalancingPolicy.Random
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -167,7 +174,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
-      load_balancing_module: Xandra.Cluster.LoadBalancingPolicy.RoundRobin
+      load_balancing_module: LoadBalancingPolicy.Random
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -189,7 +196,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
-      load_balancing_module: Xandra.Cluster.LoadBalancingPolicy.RoundRobin
+      load_balancing_module: LoadBalancingPolicy.Random
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -216,7 +223,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
-      load_balancing_module: Xandra.Cluster.LoadBalancingPolicy.RoundRobin
+      load_balancing_module: LoadBalancingPolicy.Random
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})

@@ -21,7 +21,7 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.Priority do
 
   @impl true
   def host_added(hosts, new_host) do
-    hosts ++ [{new_host, :up}]
+    Enum.uniq_by(hosts ++ [{new_host, :up}], &{&1.address, &1.port})
   end
 
   @impl true

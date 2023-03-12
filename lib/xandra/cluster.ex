@@ -123,7 +123,7 @@ defmodule Xandra.Cluster do
     control_conn_mod: nil
   ]
 
-  start_link_opts_schema = [
+  @start_link_opts_schema [
     load_balancing: [
       type: {:in, [:priority, :random]},
       default: :random,
@@ -175,8 +175,7 @@ defmodule Xandra.Cluster do
     control_connection_module: [type: :atom, default: ControlConnection, doc: false]
   ]
 
-  @start_link_opts_schema NimbleOptions.new!(start_link_opts_schema)
-  @start_link_opts_schema_keys Keyword.keys(start_link_opts_schema)
+  @start_link_opts_schema_keys Keyword.keys(@start_link_opts_schema)
 
   @doc """
   Starts connections to a cluster.
@@ -475,7 +474,7 @@ defmodule Xandra.Cluster do
   # The control connection discovered peers. The control connection doesn't keep track of
   # which peers it already notified the cluster of.
   def handle_info({:discovered_peers, peers}, %__MODULE__{} = state) do
-    Logger.debug("Discovered peers: #{Enum.map_join(peers, ", ", &:inet.ntoa(&1.peer))}")
+    Logger.debug("Discovered peers: #{Enum.map_join(peers, ", ", &format_host/1)}")
 
     # Start a pool for each peer and add them to the load-balancing policy.
     state =

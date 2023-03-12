@@ -15,13 +15,13 @@ defmodule Xandra.Cluster.ControlConnection do
   # Internal NimbleOptions schema used to validate the options given to start_link/1.
   # This is only used for internal consistency and having an additional layer of
   # weak "type checking" (some people might get angry at this).
-  @opts_schema NimbleOptions.new!(
-                 cluster: [type: :pid, required: true],
-                 contact_points: [type: :any, required: true],
-                 connection_options: [type: :keyword_list, required: true],
-                 autodiscovered_nodes_port: [type: :non_neg_integer, required: true],
-                 load_balancing_module: [type: :atom, required: true]
-               )
+  @opts_schema [
+    cluster: [type: :pid, required: true],
+    contact_points: [type: :any, required: true],
+    connection_options: [type: :keyword_list, required: true],
+    autodiscovered_nodes_port: [type: :non_neg_integer, required: true],
+    load_balancing_module: [type: :atom, required: true]
+  ]
 
   defstruct [
     # The PID of the parent cluster.
