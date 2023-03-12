@@ -80,7 +80,12 @@ defmodule Xandra.Cluster do
 
   use GenServer
 
-  alias Xandra.Cluster.{ControlConnection, StatusChange, TopologyChange}
+  alias Xandra.Cluster.{
+    ControlConnection,
+    LoadBalancingPolicy,
+    Host
+  }
+
   alias Xandra.{Batch, ConnectionError, Prepared, RetryStrategy}
 
   require Logger
@@ -95,10 +100,7 @@ defmodule Xandra.Cluster do
     # Options for the underlying connection pools.
     :pool_options,
 
-    # Load balancing strategy.
-    :load_balancing,
-
-    # When autodiscovering nodes, you cannot get their port from C*.
+    # When auto-discovering nodes, you cannot get their port from C*.
     # Other drivers solve this by providing a static port that the driver
     # uses to connect to any autodiscovered node.
     :autodiscovered_nodes_port,
@@ -109,6 +111,10 @@ defmodule Xandra.Cluster do
     # The PID of the control connection.
     :control_connection,
 
+    # The load balancing policy info.
+    :load_balancing_module,
+    :load_balancing_state,
+
     # A map of peername to pool PID pairs.
     pools: %{},
 
@@ -117,7 +123,7 @@ defmodule Xandra.Cluster do
     control_conn_mod: nil
   ]
 
-  start_link_opts_schema = [
+  @start_link_opts_schema [
     load_balancing: [
       type: {:in, [:priority, :random]},
       default: :random,
@@ -169,8 +175,7 @@ defmodule Xandra.Cluster do
     control_connection_module: [type: :atom, default: ControlConnection, doc: false]
   ]
 
-  @start_link_opts_schema NimbleOptions.new!(start_link_opts_schema)
-  @start_link_opts_schema_keys Keyword.keys(start_link_opts_schema)
+  @start_link_opts_schema_keys Keyword.keys(@start_link_opts_schema)
 
   @doc """
   Starts connections to a cluster.
@@ -220,17 +225,11 @@ defmodule Xandra.Cluster do
     {cluster_opts, pool_opts} = Keyword.split(options, @start_link_opts_schema_keys)
     cluster_opts = NimbleOptions.validate!(cluster_opts, @start_link_opts_schema)
 
-    {nodes, cluster_opts} = Keyword.pop!(cluster_opts, :nodes)
-
-    state = %__MODULE__{
-      pool_options: pool_opts,
-      load_balancing: Keyword.fetch!(cluster_opts, :load_balancing),
-      autodiscovered_nodes_port: Keyword.fetch!(cluster_opts, :autodiscovered_nodes_port),
-      xandra_mod: Keyword.fetch!(cluster_opts, :xandra_module),
-      control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module)
-    }
-
-    GenServer.start_link(__MODULE__, {state, nodes}, Keyword.take(cluster_opts, [:name]))
+    GenServer.start_link(
+      __MODULE__,
+      {cluster_opts, pool_opts},
+      Keyword.take(cluster_opts, [:name])
+    )
   end
 
   @doc """
@@ -416,7 +415,25 @@ defmodule Xandra.Cluster do
                    is_inet_port(elem(peername, 1))
 
   @impl true
-  def init({%__MODULE__{} = state, nodes}) do
+  def init({cluster_opts, pool_opts}) do
+    {nodes, cluster_opts} = Keyword.pop!(cluster_opts, :nodes)
+
+    load_balancing_mod =
+      case Keyword.fetch!(cluster_opts, :load_balancing) do
+        :random -> LoadBalancingPolicy.Random
+        :priority -> raise "not implemented yet"
+        module when is_atom(module) -> module
+      end
+
+    state = %__MODULE__{
+      pool_options: pool_opts,
+      load_balancing_module: load_balancing_mod,
+      load_balancing_state: load_balancing_mod.init([]),
+      autodiscovered_nodes_port: Keyword.fetch!(cluster_opts, :autodiscovered_nodes_port),
+      xandra_mod: Keyword.fetch!(cluster_opts, :xandra_module),
+      control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module)
+    }
+
     # Start supervisor for the pools.
     {:ok, pool_sup} = Supervisor.start_link([], strategy: :one_for_one)
 
@@ -425,21 +442,29 @@ defmodule Xandra.Cluster do
         cluster: self(),
         contact_points: nodes,
         connection_options: state.pool_options,
-        autodiscovered_nodes_port: state.autodiscovered_nodes_port
+        autodiscovered_nodes_port: state.autodiscovered_nodes_port,
+        load_balancing_module: load_balancing_mod
       )
 
-    {:ok, %__MODULE__{state | pool_supervisor: pool_sup, control_connection: control_conn}}
+    state = %__MODULE__{state | pool_supervisor: pool_sup, control_connection: control_conn}
+    {:ok, state}
   end
 
   @impl true
   def handle_call(:checkout, _from, %__MODULE__{} = state) do
-    %__MODULE__{load_balancing: load_balancing, pools: pools} = state
+    case state do
+      %__MODULE__{pools: pools} when map_size(pools) == 0 ->
+        {:reply, {:error, :empty}, state}
 
-    if Enum.empty?(pools) do
-      {:reply, {:error, :empty}, state}
-    else
-      pool = select_pool(load_balancing, pools)
-      {:reply, {:ok, pool}, state}
+      %__MODULE__{} ->
+        {hosts_plan, state} =
+          get_and_update_in(state.load_balancing_state, fn lb_state ->
+            state.load_balancing_module.hosts_plan(lb_state)
+          end)
+
+        %Host{address: ip, port: port} = Enum.at(hosts_plan, 0)
+        pool = Map.fetch!(state.pools, {ip, port})
+        {:reply, {:ok, pool}, state}
     end
   end
 
@@ -449,31 +474,61 @@ defmodule Xandra.Cluster do
   # The control connection discovered peers. The control connection doesn't keep track of
   # which peers it already notified the cluster of.
   def handle_info({:discovered_peers, peers}, %__MODULE__{} = state) do
-    Logger.debug("Discoverer peers: #{inspect(peers)}")
+    Logger.debug("Discovered peers: #{Enum.map_join(peers, ", ", &format_host/1)}")
 
-    # Start a pool for each peer.
+    # Start a pool for each peer and add them to the load-balancing policy.
     state =
-      Enum.reduce(peers, state, fn peer, state ->
-        peer =
-          case peer do
-            peer when is_peername(peer) -> peer
-            ip when is_ip(ip) -> {ip, state.autodiscovered_nodes_port}
-            other -> raise("invalid peer #{inspect(other)}")
-          end
+      Enum.reduce(peers, state, fn %Host{} = host, state ->
+        state =
+          update_in(state.load_balancing_state, fn lb_state ->
+            state.load_balancing_module.host_added(lb_state, host)
+          end)
 
-        start_pool(state, peer)
+        start_pool(state, {host.address, host.port})
       end)
 
     {:noreply, state}
   end
 
-  def handle_info({:cluster_event, %StatusChange{} = status_change}, %__MODULE__{} = state) do
-    state = handle_status_change(state, status_change)
+  def handle_info({:host_up, %Host{} = host}, %__MODULE__{} = state) do
+    Logger.debug("Host marked as UP: #{format_host(host)}")
+
+    state = update_in(state.load_balancing_state, &state.load_balancing_module.host_up(&1, host))
+
+    state = start_pool(state, {host.address, host.port})
     {:noreply, state}
   end
 
-  def handle_info({:cluster_event, %TopologyChange{} = topology_change}, %__MODULE__{} = state) do
-    state = handle_topology_change(state, topology_change)
+  def handle_info({:host_down, %Host{} = host}, %__MODULE__{} = state) do
+    Logger.debug("Host marked as DOWN: #{format_host(host)}")
+    _ = Supervisor.terminate_child(state.pool_supervisor, {host.address, host.port})
+
+    state =
+      update_in(state.load_balancing_state, &state.load_balancing_module.host_down(&1, host))
+
+    state = update_in(state.pools, &Map.delete(&1, {host.address, host.port}))
+    {:noreply, state}
+  end
+
+  def handle_info({:host_added, %Host{} = host}, %__MODULE__{} = state) do
+    Logger.debug("Host added to the cluster: #{format_host(host)}")
+
+    state =
+      update_in(state.load_balancing_state, &state.load_balancing_module.host_added(&1, host))
+
+    state = start_pool(state, {host.address, host.port})
+    {:noreply, state}
+  end
+
+  def handle_info({:host_removed, %Host{} = host}, %__MODULE__{} = state) do
+    Logger.debug("Host removed from the cluster: #{format_host(host)}")
+    _ = Supervisor.terminate_child(state.pool_supervisor, {host.address, host.port})
+    _ = Supervisor.delete_child(state.pool_supervisor, {host.address, host.port})
+
+    state =
+      update_in(state.load_balancing_state, &state.load_balancing_module.host_removed(&1, host))
+
+    state = update_in(state.pools, &Map.delete(&1, {host.address, host.port}))
     {:noreply, state}
   end
 
@@ -510,59 +565,11 @@ defmodule Xandra.Cluster do
     end
   end
 
-  defp handle_status_change(state, %StatusChange{effect: "UP", address: address}) do
-    start_pool(state, {address, state.autodiscovered_nodes_port})
-  end
-
-  defp handle_status_change(state, %StatusChange{effect: "DOWN", address: address}) do
-    peername = {address, state.autodiscovered_nodes_port}
-    Logger.debug("StatusChange DOWN for node: #{peername_to_string(peername)}")
-
-    _ = Supervisor.terminate_child(state.pool_supervisor, peername)
-    update_in(state.pools, &Map.delete(&1, peername))
-  end
-
-  defp handle_topology_change(state, %TopologyChange{effect: "NEW_NODE", address: address}) do
-    peername = {address, state.autodiscovered_nodes_port}
-    Logger.debug("TopologyChange NEW_NODE for node: #{peername_to_string(peername)}")
-
-    # If we already know about this node, we ignore it. Otherwise, we start a pool for it.
-    if Map.has_key?(state.pools, peername) do
-      Logger.debug("Connection already established to node: #{peername_to_string(peername)}")
-      state
-    else
-      start_pool(state, peername)
-    end
-  end
-
-  defp handle_topology_change(state, %TopologyChange{effect: "REMOVED_NODE", address: address}) do
-    peername = {address, state.autodiscovered_nodes_port}
-    Logger.debug("TopologyChange REMOVED_NODE for node: #{peername_to_string(peername)}")
-
-    # Terminate the pool and remove it from the supervisor.
-    _ = Supervisor.terminate_child(state.pool_supervisor, peername)
-    _ = Supervisor.delete_child(state.pool_supervisor, peername)
-
-    update_in(state.pools, &Map.delete(&1, peername))
-  end
-
-  defp handle_topology_change(state, %TopologyChange{effect: "MOVED_NODE"} = event) do
-    Logger.warn("Ignored TOPOLOGY_CHANGE event: #{inspect(event)}")
-    state
-  end
-
-  defp select_pool(:random, pools) do
-    {_address, pool} = Enum.random(pools)
-    pool
-  end
-
-  defp select_pool(:priority, pools) do
-    # TODO: this shouldn't work this way and we should actually figure it out
-    {_address, pool} = Enum.at(pools, 0)
-    pool
-  end
-
   defp peername_to_string({ip, port} = peername) when is_peername(peername) do
     "#{:inet.ntoa(ip)}:#{port}"
+  end
+
+  defp format_host(%Host{address: address, port: port}) do
+    "#{:inet.ntoa(address)}:#{port}"
   end
 end
