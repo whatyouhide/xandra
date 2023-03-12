@@ -309,6 +309,7 @@ defmodule Xandra.ClusterTest do
                random_pids != Enum.sort(random_pids, :desc)
     end
 
+    @tag skip: "a proper :priority strategy has not been implemented yet"
     test "with load balancing :priority", %{test_ref: test_ref} do
       opts = [
         xandra_module: PoolMock,

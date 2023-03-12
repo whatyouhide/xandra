@@ -421,7 +421,7 @@ defmodule Xandra.Cluster do
     load_balancing_mod =
       case Keyword.fetch!(cluster_opts, :load_balancing) do
         :random -> LoadBalancingPolicy.Random
-        :priority -> LoadBalancingPolicy.Priority
+        :priority -> raise "not implemented yet"
         module when is_atom(module) -> module
       end
 

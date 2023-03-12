@@ -1,6 +1,9 @@
 defmodule Xandra.Cluster.LoadBalancingPolicy.Random do
   @moduledoc """
-  TODO
+  A simple `Xandra.Cluster.LoadBalancingPolicy` that picks hosts at random.
+
+  This load-balancing policy doesn't make any attempt to be smart: it doesn't take
+  data center or tokens into consideration, and considers all available nodes.
   """
   @moduledoc since: "0.15.0"
 

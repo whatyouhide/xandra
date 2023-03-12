@@ -23,15 +23,4 @@ defmodule ClusteringTest do
 
     assert Xandra.Cluster.execute!(TestCluster, statement, _params = [])
   end
-
-  test "priority load balancing", %{keyspace: keyspace, start_options: start_options} do
-    start_options = Keyword.merge(start_options, load_balancing: :priority)
-    {:ok, cluster} = Xandra.Cluster.start_link(start_options)
-
-    assert TestHelper.await_connected(
-             cluster,
-             _options = [],
-             &Xandra.execute!(&1, "USE #{keyspace}")
-           )
-  end
 end
