@@ -1,10 +1,8 @@
 defmodule Xandra.ClusterTest do
   use ExUnit.Case
 
-  import ExUnit.CaptureLog
-
   alias Xandra.TestHelper
-  alias Xandra.Cluster.{StatusChange, TopologyChange}
+  alias Xandra.Cluster.Host
 
   defmodule PoolMock do
     use GenServer
@@ -111,7 +109,7 @@ defmodule Xandra.ClusterTest do
       assert_receive {^test_ref, ControlConnectionMock, :init_called, control_conn_args}
       assert control_conn_args[:contact_points] == [{'node1.example.com', 9042}]
 
-      send(cluster, {:discovered_peers, [{address, port}]})
+      discovered_peers(cluster, [%Host{address: address, port: port}])
       assert_pool_started(test_ref, {address, port})
     end
 
@@ -127,10 +125,10 @@ defmodule Xandra.ClusterTest do
       assert_receive {^test_ref, ControlConnectionMock, :init_called, args}
       assert args.contact_points == [{'node1.example.com', 9042}, {'node2.example.com', 9042}]
 
-      send(
-        cluster,
-        {:discovered_peers, [{{199, 0, 0, 1}, 9042}, {{199, 0, 0, 10}, 9042}]}
-      )
+      discovered_peers(cluster, [
+        %Host{address: {199, 0, 0, 1}, port: 9042},
+        %Host{address: {199, 0, 0, 10}, port: 9042}
+      ])
 
       # Assert that the cluster starts a pool for each discovered peer.
       assert_pool_started(test_ref, "199.0.0.1:9042")
@@ -139,7 +137,7 @@ defmodule Xandra.ClusterTest do
   end
 
   test "handles status change events", %{test_ref: test_ref} do
-    peername = {address, _port} = {{199, 0, 0, 1}, 9042}
+    peername = {address, port} = {{199, 0, 0, 1}, 9042}
 
     opts = [
       xandra_module: PoolMock,
@@ -151,7 +149,7 @@ defmodule Xandra.ClusterTest do
 
     assert_receive {^test_ref, ControlConnectionMock, :init_called, _args}
 
-    send(cluster, {:discovered_peers, [peername]})
+    discovered_peers(cluster, [%Host{address: address, port: port}])
     assert_pool_started(test_ref, peername)
 
     %{pool_supervisor: pool_sup, pools: %{^peername => pool}} = :sys.get_state(cluster)
@@ -162,14 +160,14 @@ defmodule Xandra.ClusterTest do
     pool_monitor_ref = Process.monitor(pool)
 
     # StatusChange DOWN:
-    send(cluster, {:cluster_event, %StatusChange{effect: "DOWN", address: address}})
+    send(cluster, {:host_down, %Host{address: address, port: 9042}})
     assert_receive {:DOWN, ^pool_monitor_ref, _, _, _}
     assert [{^peername, :undefined, :worker, _}] = Supervisor.which_children(pool_sup)
 
     assert :sys.get_state(cluster).pools == %{}
 
     # StatusChange UP:
-    send(cluster, {:cluster_event, %StatusChange{effect: "UP", address: address}})
+    send(cluster, {:host_up, %Host{address: address, port: 9042}})
 
     new_pool =
       TestHelper.wait_for_passing(500, fn ->
@@ -195,12 +193,12 @@ defmodule Xandra.ClusterTest do
 
     assert_receive {^test_ref, ControlConnectionMock, :init_called, _args}
 
-    send(cluster, {:discovered_peers, [peername]})
+    discovered_peers(cluster, [%Host{address: address, port: port}])
     assert_pool_started(test_ref, peername)
 
     # TopologyChange NEW_NODE
 
-    send(cluster, {:cluster_event, %TopologyChange{effect: "NEW_NODE", address: new_address}})
+    send(cluster, {:host_added, %Host{address: new_address, port: port}})
 
     TestHelper.wait_for_passing(500, fn ->
       assert_pool_started(test_ref, {new_address, port})
@@ -213,35 +211,12 @@ defmodule Xandra.ClusterTest do
 
     pool_monitor_ref = Process.monitor(pool)
 
-    send(cluster, {:cluster_event, %TopologyChange{effect: "REMOVED_NODE", address: address}})
+    send(cluster, {:host_removed, %Host{address: address, port: port}})
     assert_receive {:DOWN, ^pool_monitor_ref, _, _, _}
 
     TestHelper.wait_for_passing(500, fn ->
       assert [_] = Supervisor.which_children(:sys.get_state(cluster).pool_supervisor)
     end)
-  end
-
-  test "ignores topology change MOVED_NODE events" do
-    opts = [
-      xandra_module: PoolMock,
-      control_connection_module: ControlConnectionMock,
-      nodes: ["node1"]
-    ]
-
-    cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
-
-    # TopologyChange MOVED_NODE
-
-    assert capture_log(fn ->
-             send(
-               cluster,
-               {:cluster_event, %TopologyChange{effect: "MOVED_NODE", address: {192, 0, 0, 1}}}
-             )
-
-             # We have to fall back to sleeping here because we cannot use wait_for_passing/2: we
-             # don't know when to stop capturing the log.
-             Process.sleep(100)
-           end) =~ "Ignored TOPOLOGY_CHANGE event"
   end
 
   test "handles the same peers being re-reported", %{test_ref: test_ref} do
@@ -267,12 +242,16 @@ defmodule Xandra.ClusterTest do
 
     # First, the control connection is started and both pools as well.
     assert_receive {^test_ref, ControlConnectionMock, :init_called, _args}
-    send(cluster, {:discovered_peers, [{seed1_ip, port}]})
+    discovered_peers(cluster, [%Host{address: seed1_ip, port: port}])
     assert_pool_started(test_ref, {seed1_ip, port})
     assert Map.has_key?(:sys.get_state(cluster).pools, {seed1_ip, port})
 
     # Now simulate the control connection re-reporting different peers for some reason.
-    send(cluster, {:discovered_peers, [{seed1_ip, port}, {seed2_ip, port}]})
+    discovered_peers(cluster, [
+      %Host{address: seed1_ip, port: port},
+      %Host{address: seed2_ip, port: port}
+    ])
+
     assert_pool_started(test_ref, {seed2_ip, port})
     assert Map.has_key?(:sys.get_state(cluster).pools, {seed2_ip, port})
   end
@@ -302,7 +281,11 @@ defmodule Xandra.ClusterTest do
 
       assert_receive {^test_ref, ControlConnectionMock, :init_called, _args}
 
-      send(cluster, {:discovered_peers, [{{192, 0, 0, 1}, 9042}, {{192, 0, 0, 2}, 9042}]})
+      discovered_peers(cluster, [
+        %Host{address: {192, 0, 0, 1}, port: 9042},
+        %Host{address: {192, 0, 0, 2}, port: 9042}
+      ])
+
       assert_pool_started(test_ref, "192.0.0.1:9042")
       assert_pool_started(test_ref, "192.0.0.2:9042")
 
@@ -338,7 +321,11 @@ defmodule Xandra.ClusterTest do
 
       assert_receive {^test_ref, ControlConnectionMock, :init_called, _args}
 
-      send(cluster, {:discovered_peers, [{{192, 0, 0, 1}, 9042}, {{192, 0, 0, 2}, 9042}]})
+      discovered_peers(cluster, [
+        %Host{address: {192, 0, 0, 1}, port: 9042},
+        %Host{address: {192, 0, 0, 2}, port: 9042}
+      ])
+
       assert_pool_started(test_ref, "192.0.0.1:9042")
       assert_pool_started(test_ref, "192.0.0.2:9042")
 
@@ -355,7 +342,7 @@ defmodule Xandra.ClusterTest do
       # selects the second one the next time.
 
       pool_monitor_ref = Process.monitor(pid1)
-      send(cluster, {:cluster_event, %StatusChange{effect: "DOWN", address: {192, 0, 0, 1}}})
+      send(cluster, {:host_down, %Host{address: {192, 0, 0, 1}, port: 9042}})
       assert_receive {:DOWN, ^pool_monitor_ref, _, _, _}
 
       assert GenServer.call(cluster, :checkout) == {:ok, pid2}
@@ -370,5 +357,9 @@ defmodule Xandra.ClusterTest do
       end
 
     assert_receive {^test_ref, PoolMock, :init_called, %{nodes: [^node]}}
+  end
+
+  defp discovered_peers(cluster, hosts) do
+    send(cluster, {:discovered_peers, hosts})
   end
 end
