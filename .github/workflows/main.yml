@@ -67,7 +67,7 @@ jobs:
         run: mix dialyzer --plt
 
       - name: Run Dialyzer
-        run: mix dialyzer
+        run: mix dialyzer --format github
 
   test:
     name: Test (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, C* ${{ matrix.cassandra_version }}, Native protocols ${{ matrix.cassandra_native_protocols }})
