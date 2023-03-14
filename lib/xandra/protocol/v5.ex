@@ -324,10 +324,8 @@ defmodule Xandra.Protocol.V5 do
   # Decimal stores the decimal as "sign * coef * 10^exp", but Cassandra stores it
   # as "coef * 10^(-1 * exp).
   defp encode_value(:decimal, decimal) do
-    decimal_mod = Decimal
-
-    if decimal_mod.decimal?(decimal) do
-      %^decimal_mod{coef: coef, exp: exp, sign: sign} = decimal
+    if is_decimal(decimal) do
+      %Decimal{coef: coef, exp: exp, sign: sign} = decimal
       encode_value(:decimal, {_value = sign * coef, _scale = -exp})
     else
       raise ArgumentError,
@@ -888,10 +886,8 @@ defmodule Xandra.Protocol.V5 do
         {value, scale}
 
       :decimal ->
-        # Avoid compilation warnings by using a dynamic module name.
-        decimal_mod = Decimal
         sign = if(value >= 0, do: 1, else: -1)
-        decimal_mod.new(sign, _coefficient = abs(value), _exponent = -scale)
+        Decimal.new(sign, _coefficient = abs(value), _exponent = -scale)
     end
   end
 
@@ -1126,5 +1122,13 @@ defmodule Xandra.Protocol.V5 do
   defp decode_type_tuple(<<buffer::bits>>, count, acc) do
     {type, buffer} = decode_type(buffer)
     decode_type_tuple(buffer, count - 1, [type | acc])
+  end
+
+  # Remove once we depend on Decimal 1.9+
+  if macro_exported?(Decimal, :is_decimal, 1) do
+    require Decimal
+    defp is_decimal(term), do: Decimal.is_decimal(term)
+  else
+    defp is_decimal(term), do: Decimal.decimal?(term)
   end
 end
