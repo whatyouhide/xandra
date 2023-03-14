@@ -257,7 +257,7 @@ defmodule Xandra do
 
   # Raw NimbleOptions schema before parsing. Broken out to work around
   # `mix format`.
-  start_link_opts_schema = [
+  @start_link_opts_schema [
     address: [
       type: {:custom, Xandra.OptionsValidators, :validate_ip, []},
       doc: false
@@ -377,8 +377,7 @@ defmodule Xandra do
     ]
   ]
 
-  @start_link_opts_schema NimbleOptions.new!(start_link_opts_schema)
-  @start_link_opts_keys Keyword.keys(start_link_opts_schema)
+  @start_link_opts_keys Keyword.keys(@start_link_opts_schema)
 
   @doc false
   def start_link_opts_schema do
@@ -544,7 +543,7 @@ defmodule Xandra do
     %PageStream{conn: conn, query: prepared, params: params, options: options}
   end
 
-  prepare_opts_schema = [
+  @prepare_opts_schema [
     compressor: [
       type: {:custom, Xandra.OptionsValidators, :validate_module, ["compressor"]},
       doc: """
@@ -582,8 +581,7 @@ defmodule Xandra do
     ]
   ]
 
-  @prepare_opts_schema NimbleOptions.new!(prepare_opts_schema)
-  @prepare_opts_keys Keyword.keys(prepare_opts_schema)
+  @prepare_opts_keys Keyword.keys(@prepare_opts_schema)
 
   @doc """
   Prepares the given query.
@@ -744,7 +742,7 @@ defmodule Xandra do
     execute_with_retrying(conn, batch, nil, options)
   end
 
-  execute_opts_schema = [
+  @execute_opts_schema [
     consistency: [
       type:
         {:in,
@@ -905,8 +903,7 @@ defmodule Xandra do
     ]
   ]
 
-  @execute_opts_schema NimbleOptions.new!(execute_opts_schema)
-  @execute_opts_keys Keyword.keys(execute_opts_schema)
+  @execute_opts_keys Keyword.keys(@execute_opts_schema)
 
   @doc """
   Executes the given simple query or prepared query with the given parameters.

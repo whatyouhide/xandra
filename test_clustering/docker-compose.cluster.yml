@@ -5,16 +5,25 @@ services:
     build:
       context: "."
       dockerfile: cassandra_node.dockerfile
+    hostname: seed
     environment:
       - CASSANDRA_CLUSTER_NAME=xandra-cluster
       - CASSANDRA_DC=xandradc
       - HEAP_NEWSIZE=1M
       - MAX_HEAP_SIZE=200M
+      - START_RPC=false
+      - NUM_TOKENS=3
+      - RACK=RAC1
+    ulimits:
+      memlock: -1
+      nproc: 32768
+      nofile: 100000
 
   node1:
     build:
       context: "."
       dockerfile: cassandra_node.dockerfile
+    hostname: node1
     environment:
       - CASSANDRA_SEEDS=seed
       - CASSANDRA_CLUSTER_NAME=xandra-cluster
@@ -28,6 +37,7 @@ services:
     build:
       context: "."
       dockerfile: cassandra_node.dockerfile
+    hostname: node2
     environment:
       - CASSANDRA_SEEDS=seed
       - CASSANDRA_CLUSTER_NAME=xandra-cluster
@@ -41,6 +51,7 @@ services:
     build:
       context: "."
       dockerfile: cassandra_node.dockerfile
+    hostname: node3
     environment:
       - CASSANDRA_SEEDS=seed
       - CASSANDRA_CLUSTER_NAME=xandra-cluster

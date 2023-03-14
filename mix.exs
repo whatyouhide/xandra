@@ -11,7 +11,7 @@ defmodule Xandra.Mixfile do
     [
       app: :xandra,
       version: @version,
-      elixir: "~> 1.9",
+      elixir: "~> 1.10",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
@@ -79,7 +79,10 @@ defmodule Xandra.Mixfile do
     [
       {:db_connection, "~> 2.4"},
       {:decimal, "~> 2.0", optional: true},
-      {:nimble_options, "~> 0.5.2"},
+      {:nimble_options, "~> 0.5.0 or ~> 1.0"},
+      {:db_connection, "~> 2.0"},
+      {:decimal, "~> 1.7", optional: true},
+      {:nimble_options, "~> 0.5.0 or ~> 1.0"},
       {:telemetry, "~> 0.4.3 or ~> 1.0"},
 
       # Dev and test dependencies
@@ -89,6 +92,7 @@ defmodule Xandra.Mixfile do
       {:stream_data, "~> 0.5.0", only: [:dev, :test]}
     ] ++
       if Version.match?(System.version(), "~> 1.11") do
+        # TODO: remove this conditional once we require Elixir 1.11+
         [{:nimble_lz4, "~> 0.1.2", only: [:dev, :test]}]
       else
         []

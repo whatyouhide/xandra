@@ -59,6 +59,8 @@ defmodule Xandra.TestClustering.DockerHelpers do
         container_id
       ])
 
+    IO.inspect(output)
+
     assert exit_status == 0, "'docker inspect' failed with exit status #{exit_status}: #{output}"
 
     ip = String.trim(output)
