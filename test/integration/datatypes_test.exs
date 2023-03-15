@@ -168,6 +168,16 @@ defmodule DataTypesTest do
   end
 
   test "calendar types", %{conn: conn} do
+    if System.version() =~ ~r/1\.14\.[0-2]/ do
+      flunk("""
+      This test is broken on Elixir 1.14.0, 1.14.1, and 1.14.2 because of this issue:
+
+        https://github.com/elixir-lang/elixir/issues/12303
+
+      If you want to test on Elixir 1.14, use Elixir 1.14.3 or later.
+      """)
+    end
+
     statement = """
     CREATE TABLE festivities
     (id int PRIMARY KEY,
