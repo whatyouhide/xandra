@@ -1136,6 +1136,20 @@ defmodule Xandra do
     DBConnection.run(conn, fun, options)
   end
 
+  @doc """
+  Synchronously stops the given connection with the given reason.
+
+  Waits `timeout` milliseconds for the connection to stop before aborting and exiting.
+  """
+  @doc since: "0.15.0"
+  @spec stop(conn, term, timeout) :: :ok
+  def stop(conn, reason \\ :normal, timeout \\ :infinity)
+      when timeout == :infinity or (is_integer(timeout) and timeout >= 0) do
+    GenServer.stop(conn, reason, timeout)
+  end
+
+  ## Helpers
+
   defp reprepare_queries(conn, [%Simple{} | rest], options) do
     reprepare_queries(conn, rest, options)
   end

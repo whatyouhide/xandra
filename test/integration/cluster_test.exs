@@ -350,6 +350,22 @@ defmodule Xandra.ClusterTest do
     end
   end
 
+  describe "stop/1" do
+    test "stops the cluster", %{test_ref: test_ref} do
+      opts = [
+        xandra_module: PoolMock,
+        control_connection_module: ControlConnectionMock,
+        nodes: ["node1"]
+      ]
+
+      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+      assert_receive {^test_ref, ControlConnectionMock, :init_called, _args}
+
+      assert Xandra.Cluster.stop(cluster) == :ok
+      refute Process.alive?(cluster)
+    end
+  end
+
   defp assert_pool_started(test_ref, node) do
     node =
       case node do

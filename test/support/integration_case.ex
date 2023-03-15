@@ -74,7 +74,7 @@ defmodule XandraTest.IntegrationCase do
     # Cannot use start_supervised! here because this is called from on_exit.
     {:ok, conn} = Xandra.start_link(start_options)
     Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}")
-    :ok = GenServer.stop(conn)
+    :ok = Xandra.stop(conn)
   end
 
   @spec protocol_version() :: :v3 | :v4 | :v5

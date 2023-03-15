@@ -390,6 +390,18 @@ defmodule Xandra.Cluster do
     with_conn(cluster, &Xandra.run(&1, options, fun))
   end
 
+  @doc """
+  Synchronously stops the given cluster with the given reason.
+
+  Waits `timeout` milliseconds for the cluster to stop before aborting and exiting.
+  """
+  @doc since: "0.15.0"
+  @spec stop(cluster, term, timeout) :: :ok
+  def stop(cluster, reason \\ :normal, timeout \\ :infinity)
+      when timeout == :infinity or (is_integer(timeout) and timeout >= 0) do
+    GenServer.stop(cluster, reason, timeout)
+  end
+
   defp with_conn_and_retrying(cluster, options, fun) do
     RetryStrategy.run_with_retrying(options, fn -> with_conn(cluster, fun) end)
   end
