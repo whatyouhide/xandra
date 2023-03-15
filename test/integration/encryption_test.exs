@@ -14,7 +14,7 @@ defmodule EncryptionTest do
   @moduletag :skip_for_native_protocol_v5
 
   test "encrypted connections", %{keyspace: keyspace, start_options: start_options} do
-    {:ok, conn} = Xandra.start_link(start_options)
+    assert {:ok, conn} = start_supervised({Xandra, start_options})
     assert Xandra.execute!(conn, "USE #{keyspace}")
   end
 end

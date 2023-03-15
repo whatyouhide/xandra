@@ -12,13 +12,8 @@ defmodule AuthenticationTest do
 
   @moduletag :authentication
 
-  test "challenge is passed", %{keyspace: keyspace, start_options: start_options} do
-    {:ok, cluster} = Xandra.Cluster.start_link(start_options)
-
-    assert TestHelper.await_connected(
-             cluster,
-             _options = [],
-             &Xandra.execute!(&1, "USE #{keyspace}")
-           )
+  test "challenge is passed to cluster connections", %{start_options: start_options} do
+    cluster = TestHelper.start_link_supervised!({Xandra.Cluster, start_options})
+    TestHelper.await_cluster_connected(cluster)
   end
 end

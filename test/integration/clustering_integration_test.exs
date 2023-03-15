@@ -17,8 +17,7 @@ defmodule ClusteringTest do
       )
 
     cluster = TestHelper.start_link_supervised!({Xandra.Cluster, start_options})
-
-    assert TestHelper.await_connected(cluster, _options = [], &Xandra.execute!(&1, statement))
+    TestHelper.await_cluster_connected(cluster)
 
     assert Xandra.Cluster.execute!(TestCluster, statement, _params = [])
   end

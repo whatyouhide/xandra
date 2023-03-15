@@ -56,7 +56,7 @@ defmodule XandraTest.IntegrationCase do
     "xandra_test_" <> suffix
   end
 
-  @spec setup_keyspace(Xandra.connection(), String.t()) :: :ok
+  @spec setup_keyspace(Xandra.conn(), String.t()) :: :ok
   def setup_keyspace(conn, keyspace) do
     Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}")
 

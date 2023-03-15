@@ -1,29 +1,22 @@
 defmodule Xandra.TestHelper do
   import ExUnit.Assertions
 
-  @spec await_connected(pid, keyword, (Xandra.conn() -> result), pos_integer) :: result
-        when result: var
-  def await_connected(cluster, options, fun, tries \\ 4) do
-    Xandra.Cluster.run(cluster, options, fun)
+  @spec await_cluster_connected(pid, pos_integer) :: :ok
+  def await_cluster_connected(cluster, tries \\ 10) when is_pid(cluster) do
+    fun = &Xandra.execute!(&1, "SELECT * FROM system.local")
+
+    case Xandra.Cluster.run(cluster, _options = [], fun) do
+      {:error, %Xandra.ConnectionError{} = error} -> raise error
+      _other -> :ok
+    end
   rescue
     Xandra.ConnectionError ->
       if tries > 0 do
         Process.sleep(50)
-        await_connected(cluster, options, fun, tries - 1)
+        await_cluster_connected(cluster, tries - 1)
       else
         flunk("exceeded maximum number of attempts")
       end
-  else
-    {:error, %Xandra.ConnectionError{reason: {:cluster, :not_connected}}} ->
-      if tries > 0 do
-        Process.sleep(50)
-        await_connected(cluster, options, fun, tries - 1)
-      else
-        flunk("exceeded maximum number of attempts")
-      end
-
-    other ->
-      other
   end
 
   # TODO: remove once we have ExUnit.Callbacks.start_link_supervised!/1 (Elixir 1.14+).

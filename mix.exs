@@ -24,7 +24,7 @@ defmodule Xandra.Mixfile do
       # Dialyzer
       dialyzer: [
         flags: [:no_contracts, :no_improper_lists],
-        plt_add_apps: [:ssl, :crypto, :mix, :ex_unit]
+        plt_add_apps: [:ssl, :crypto, :mix, :ex_unit, :decimal]
       ],
 
       # Testing
