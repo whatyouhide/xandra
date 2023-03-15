@@ -17,8 +17,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        otp: ["24.2"]
-        elixir: ["1.13"]
+        otp: ["25.3"]
+        elixir: ["1.14"]
     steps:
       - name: Clone the repository
         uses: actions/checkout@v2
@@ -46,7 +46,7 @@ jobs:
         run: mix format --check-formatted
 
       - name: Check no unused dependencies
-        run: mix deps.get && mix deps.unlock --check-unused
+        run: mix do deps.get, deps.unlock --check-unused
         if: ${{ steps.cache-deps.outputs.cache-hit != 'true' }}
 
       - name: Compile with --warnings-as-errors
@@ -76,17 +76,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - otp: "24.2"
-            elixir: "1.13"
+          - otp: "25.3"
+            elixir: "1.14"
             cassandra_version: "4"
             cassandra_native_protocols: "v4,v5"
             lint: true
-          - otp: "24.2"
-            elixir: "1.13"
+          - otp: "25.3"
+            elixir: "1.14"
             cassandra_version: "3"
             cassandra_native_protocols: "v3,v4"
-          - otp: "24.2"
-            elixir: "1.13"
+          - otp: "25.3"
+            elixir: "1.14"
             cassandra_version: "2.2"
             cassandra_native_protocols: "v3"
           # Oldest supported Elixir/OTP matrix.
