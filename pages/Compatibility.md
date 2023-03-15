@@ -20,3 +20,6 @@ All compatibility below refers to the latest version of Xandra.
 ## ScyllaDB Versions
 
   * `2.3`
+  * `3.x`
+  * `4.x`
+  * `5.x`

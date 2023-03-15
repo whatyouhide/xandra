@@ -81,7 +81,7 @@ page_stream
 
 ## Scylla support
 
-Xandra supports [Scylla][scylladb] (version `2.x` to `4.x`) without the need to do anything in particular.
+Xandra supports [Scylla][scylladb] (version `2.x` to `5.x`) without the need to do anything in particular.
 
 ## License
 
