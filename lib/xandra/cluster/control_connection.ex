@@ -228,7 +228,7 @@ defmodule Xandra.Cluster.ControlConnection do
           throw(return)
 
         {:error, reason} ->
-          Logger.warning(
+          log_warn(
             "Error connecting to #{peername_to_string({host.address, host.port})}: #{:inet.format_error(reason)}"
           )
       end
@@ -521,5 +521,12 @@ defmodule Xandra.Cluster.ControlConnection do
         {:ok, {host, port}} = Xandra.OptionsValidators.validate_node(contact_point)
         %Host{address: host, port: port}
     end)
+  end
+
+  # TODO: use Logger.warning/2 directly when we depend on Elixir 1.11+.
+  if macro_exported?(Logger, :warning, 2) do
+    defp log_warn(message, metadata \\ []), do: Logger.log(:warning, message, metadata)
+  else
+    defp log_warn(message, metadata \\ []), do: Logger.log(:warn, message, metadata)
   end
 end
