@@ -325,7 +325,7 @@ defmodule Xandra.Protocol do
 
   @spec time_from_nanoseconds(integer()) :: Calendar.time()
   def time_from_nanoseconds(nanoseconds) when is_integer(nanoseconds) do
-    Time.add(~T[00:00:00], nanoseconds, :nanosecond)
+    Time.add(~T[00:00:00.000000], nanoseconds, :nanosecond)
   end
 
   @spec time_to_nanoseconds(Calendar.time()) :: integer()
