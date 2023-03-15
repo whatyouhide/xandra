@@ -9,7 +9,9 @@ defmodule Mix.Tasks.Test.NativeProtocols do
   def run(args) do
     {opts_and_test_opts, test_args} = OptionParser.parse!(args, switches: @switches)
     {opts, test_opts} = Keyword.split(opts_and_test_opts, Keyword.keys(@switches))
-    test_args = ["test"] ++ test_args ++ OptionParser.to_argv(test_opts)
+
+    prefix = if "--no-color" in args, do: ["test"], else: ["test", "--color"]
+    test_args = prefix ++ test_args ++ OptionParser.to_argv(test_opts)
 
     protocol_versions =
       case Keyword.fetch(opts, :only_protocols) do
