@@ -13,11 +13,10 @@ defmodule ClusteringTest do
       Keyword.merge(start_options,
         load_balancing: :random,
         name: TestCluster,
-        nodes: ["127.0.0.1", "127.0.0.1", "127.0.0.2"]
+        nodes: ["127.0.0.1"]
       )
 
-    cluster = start_supervised!({Xandra.Cluster, start_options})
-    true = Process.link(cluster)
+    cluster = TestHelper.start_link_supervised!({Xandra.Cluster, start_options})
 
     assert TestHelper.await_connected(cluster, _options = [], &Xandra.execute!(&1, statement))
 

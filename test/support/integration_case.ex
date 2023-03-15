@@ -7,15 +7,15 @@ defmodule XandraTest.IntegrationCase do
             case_template: __MODULE__
           ] do
       setup_all do
-        keyspace = XandraTest.IntegrationCase.gen_keyspace(__MODULE__)
+        keyspace = unquote(case_template).gen_keyspace(__MODULE__)
 
         start_options =
           Keyword.merge(
-            XandraTest.IntegrationCase.default_start_options(),
+            unquote(case_template).default_start_options(),
             unquote(start_options)
           )
 
-        {:ok, conn} = Xandra.start_link(start_options)
+        conn = Xandra.TestHelper.start_link_supervised!({Xandra, start_options})
 
         unquote(case_template).setup_keyspace(conn, keyspace)
 
@@ -34,6 +34,7 @@ defmodule XandraTest.IntegrationCase do
     %{conn: conn}
   end
 
+  @spec default_start_options() :: keyword()
   def default_start_options do
     options = [show_sensitive_data_on_connection_error: true]
 
@@ -45,6 +46,7 @@ defmodule XandraTest.IntegrationCase do
     end
   end
 
+  @spec gen_keyspace(module()) :: String.t()
   def gen_keyspace(module) when is_atom(module) do
     suffix =
       inspect(module)
@@ -54,6 +56,7 @@ defmodule XandraTest.IntegrationCase do
     "xandra_test_" <> suffix
   end
 
+  @spec setup_keyspace(Xandra.connection(), String.t()) :: :ok
   def setup_keyspace(conn, keyspace) do
     Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}")
 
@@ -63,14 +66,18 @@ defmodule XandraTest.IntegrationCase do
     """
 
     Xandra.execute!(conn, statement)
+    :ok
   end
 
+  @spec drop_keyspace(String.t(), keyword()) :: :ok
   def drop_keyspace(keyspace, start_options) do
+    # Cannot use start_supervised! here because this is called from on_exit.
     {:ok, conn} = Xandra.start_link(start_options)
     Xandra.execute!(conn, "DROP KEYSPACE IF EXISTS #{keyspace}")
     :ok = GenServer.stop(conn)
   end
 
+  @spec protocol_version() :: :v3 | :v4 | :v5
   def protocol_version do
     default_start_options()[:protocol_version]
   end
