@@ -56,10 +56,3 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.Random do
     {Enum.shuffle(up_hosts), hosts}
   end
 end
-
-def decode_message(<<0x01, rest::binary>>) do
-  <<username_len::16, username::size(username_len)-binary, contents_len::16,
-    contents::size(contents_len)-binary>> = rest
-
-  %DM{username: username, contents: contents}
-end
