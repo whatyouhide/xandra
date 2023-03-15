@@ -12,7 +12,7 @@ defmodule Xandra.TestHelper do
   rescue
     Xandra.ConnectionError ->
       if tries > 0 do
-        Process.sleep(50)
+        Process.sleep(100)
         await_cluster_connected(cluster, tries - 1)
       else
         flunk("exceeded maximum number of attempts")
