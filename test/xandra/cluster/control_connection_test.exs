@@ -13,6 +13,31 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     TopologyChange
   }
 
+  # A load-balancing policy that just always returns the hosts in the order they were
+  # initially given. Great for deterministic tests!
+  # TODO: Replace this with any round-robin policy once we have one.
+  defmodule ListLBP do
+    @behaviour Xandra.Cluster.LoadBalancingPolicy
+
+    @impl true
+    def init(hosts), do: hosts
+
+    @impl true
+    def host_added(hosts, host), do: hosts ++ [host]
+
+    @impl true
+    def host_removed(hosts, host), do: Enum.reject(hosts, &(&1 == host))
+
+    @impl true
+    def host_up(hosts, _host), do: hosts
+
+    @impl true
+    def host_down(hosts, _host), do: hosts
+
+    @impl true
+    def hosts_plan(hosts), do: {hosts, hosts}
+  end
+
   @protocol_version XandraTest.IntegrationCase.protocol_version()
 
   setup do
@@ -42,7 +67,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["bad-domain", "127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
-      load_balancing_module: LoadBalancingPolicy.Random
+      load_balancing_module: ListLBP
     ]
 
     log =
@@ -61,7 +86,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["bad-domain", "other-bad-domain"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
-      load_balancing_module: LoadBalancingPolicy.Random
+      load_balancing_module: ListLBP
     ]
 
     log =
