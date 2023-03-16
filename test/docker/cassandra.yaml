@@ -649,9 +649,6 @@ native_transport_port_ssl: 9142
 # The default is -1, which means unlimited.
 # native_transport_max_concurrent_connections_per_ip: -1
 
-# Whether to start the thrift rpc server.
-start_rpc: false
-
 # The address or interface to bind the Thrift RPC service and native transport
 # server to.
 #
@@ -688,28 +685,6 @@ rpc_port: 9160
 # enable or disable keepalive on rpc/native connections
 rpc_keepalive: true
 
-# Cassandra provides two out-of-the-box options for the RPC Server:
-#
-# sync
-#   One thread per thrift connection. For a very large number of clients, memory
-#   will be your limiting factor. On a 64 bit JVM, 180KB is the minimum stack size
-#   per thread, and that will correspond to your use of virtual memory (but physical memory
-#   may be limited depending on use of stack space).
-#
-# hsha
-#   Stands for "half synchronous, half asynchronous." All thrift clients are handled
-#   asynchronously using a small number of threads that does not vary with the amount
-#   of thrift clients (and thus scales well to many clients). The rpc requests are still
-#   synchronous (one thread per active request). If hsha is selected then it is essential
-#   that rpc_max_threads is changed from the default value of unlimited.
-#
-# The default is sync because on Windows hsha is about 30% slower.  On Linux,
-# sync/hsha performance is about the same, with hsha of course using less memory.
-#
-# Alternatively,  can provide your own RPC server by providing the fully-qualified class name
-# of an o.a.c.t.TServerFactory that can create an instance of it.
-rpc_server_type: sync
-
 # Uncomment rpc_min|max_thread to set request pool size limits.
 #
 # Regardless of your choice of RPC server (see above), the number of maximum requests in the
@@ -742,9 +717,6 @@ rpc_server_type: sync
 # Note that when setting this, the buffer size is limited by net.core.wmem_max
 # and when not setting it it is defined by net.ipv4.tcp_wmem
 # internode_recv_buff_size_in_bytes:
-
-# Frame size for thrift (maximum message length).
-thrift_framed_transport_size_in_mb: 15
 
 # Set to true to have Cassandra create a hard link to each sstable
 # flushed or streamed locally in a backups/ subdirectory of the
@@ -953,19 +925,6 @@ dynamic_snitch_reset_interval_in_ms: 600000
 # 0.2 means Cassandra would continue to prefer the static snitch values
 # until the pinned host was 20% worse than the fastest.
 dynamic_snitch_badness_threshold: 0.1
-
-# request_scheduler -- Set this to a class that implements
-# RequestScheduler, which will schedule incoming client requests
-# according to the specific policy. This is useful for multi-tenancy
-# with a single Cassandra cluster.
-# NOTE: This is specifically for requests from the client and does
-# not affect inter node communication.
-# org.apache.cassandra.scheduler.NoScheduler - No scheduling takes place
-# org.apache.cassandra.scheduler.RoundRobinScheduler - Round robin of
-# client requests to a node with a separate queue for each
-# request_scheduler_id. The scheduler is further customized by
-# request_scheduler_options as described below.
-request_scheduler: org.apache.cassandra.scheduler.NoScheduler
 
 # Scheduler Options vary based on the type of scheduler
 #
