@@ -1,6 +1,6 @@
 defmodule EncryptionTest do
   start_options = [
-    nodes: ["127.0.0.1:9044"],
+    nodes: ["127.0.0.1:9142"],
     encryption: true
   ]
 
