@@ -4,8 +4,8 @@ First of all, **thank you**!
 
 To run tests, you will need [Docker] installed on your machine. This repository
 uses [docker-compose] to run multiple Cassandra instances in parallel on
-different ports to test different features (such as authentication or SSL
-encryption). To run normal tests, do this from the root of the project:
+different ports to test different features (such as authenticationn). To run
+normal tests, do this from the root of the project:
 
 ```bash
 docker-compose up --daemon

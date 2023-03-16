@@ -1,5 +1,8 @@
 #!/bin/bash -e
 
+# This script was adapted from this blog post:
+# https://ralph.blog.imixs.com/2022/10/22/setup-a-public-cassandra-cluster-with-docker/
+
 PASSWORD=cassandra
 CLUSTER_NAME=test_cluster
 ORGANISATION="O=Imixs, L=MUC, ST=BAY, C=DE"
@@ -48,7 +51,6 @@ keytool -importcert \
   -storepass "$PASSWORD" \
   -keypass "$PASSWORD" \
   -noprompt
-
 
 echo "==> Creating a pks12 keystore file"
 keytool -importkeystore \
