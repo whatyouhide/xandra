@@ -7,6 +7,8 @@ defmodule EncryptionTest do
 
   use XandraTest.IntegrationCase, start_options: start_options
 
+  @moduletag :encryption
+
   test "encrypted connections", %{keyspace: keyspace, start_options: start_options} do
     assert {:ok, conn} = start_supervised({Xandra, start_options})
     assert Xandra.execute!(conn, "USE #{keyspace}")

@@ -92,7 +92,6 @@ jobs:
             cassandra_native_protocols: "v3"
     env:
       CASSANDRA_VERSION: ${{ matrix.cassandra_version }}
-      NIMBLELZ4_FORCE_BUILD: ${{ matrix.elixir == '1.9' && 'true' }}
 
     steps:
       - name: Clone the repository
