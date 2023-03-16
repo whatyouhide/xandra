@@ -17,4 +17,4 @@ excluded =
     [:compression] ++ excluded
   end
 
-ExUnit.start(exclude: excluded ++ [:encryption], assert_receive_timeout: 1_000)
+ExUnit.start(exclude: excluded, assert_receive_timeout: 1_000)

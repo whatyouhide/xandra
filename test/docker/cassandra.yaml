@@ -7,7 +7,7 @@
 
 # The name of the cluster. This is mainly used to prevent machines in
 # one logical cluster from joining another.
-cluster_name: 'Test Cluster'
+cluster_name: 'test_cluster'
 
 # This defines the number of tokens randomly assigned to this node on the ring
 # The more tokens, relative to other nodes, the larger the proportion of data
@@ -264,15 +264,6 @@ commit_failure_policy: stop
 #
 # Default value ("auto") is 1/256th of the heap or 10MB, whichever is greater
 prepared_statements_cache_size_mb:
-
-# Maximum size of the Thrift prepared statement cache
-#
-# If you do not use Thrift at all, it is safe to leave this value at "auto".
-#
-# See description of 'prepared_statements_cache_size_mb' above for more information.
-#
-# Default value ("auto") is 1/256th of the heap or 10MB, whichever is greater
-thrift_prepared_statements_cache_size_mb:
 
 # Maximum size of the key cache in memory.
 #
@@ -638,7 +629,7 @@ native_transport_port: 9042
 # for native_transport_port. Setting native_transport_port_ssl to a different value
 # from native_transport_port will use encryption for native_transport_port_ssl while
 # keeping native_transport_port unencrypted.
-# native_transport_port_ssl: 9142
+native_transport_port_ssl: 9142
 # The maximum threads for handling requests when the native transport is used.
 # This is similar to rpc_max_threads though the default differs slightly (and
 # there is no native_transport_min_threads, idle threads will always be stopped
@@ -657,9 +648,6 @@ native_transport_port: 9042
 # The maximum number of concurrent client connections per source ip.
 # The default is -1, which means unlimited.
 # native_transport_max_concurrent_connections_per_ip: -1
-
-# Whether to start the thrift rpc server.
-start_rpc: false
 
 # The address or interface to bind the Thrift RPC service and native transport
 # server to.
@@ -685,39 +673,11 @@ rpc_address: localhost
 # ipv4. If there is only one address it will be selected regardless of ipv4/ipv6.
 # rpc_interface_prefer_ipv6: false
 
-# port for Thrift to listen for clients on
-rpc_port: 9160
-
 # RPC address to broadcast to drivers and other Cassandra nodes. This cannot
 # be set to 0.0.0.0. If left blank, this will be set to the value of
 # rpc_address. If rpc_address is set to 0.0.0.0, broadcast_rpc_address must
 # be set.
 # broadcast_rpc_address: 1.2.3.4
-
-# enable or disable keepalive on rpc/native connections
-rpc_keepalive: true
-
-# Cassandra provides two out-of-the-box options for the RPC Server:
-#
-# sync
-#   One thread per thrift connection. For a very large number of clients, memory
-#   will be your limiting factor. On a 64 bit JVM, 180KB is the minimum stack size
-#   per thread, and that will correspond to your use of virtual memory (but physical memory
-#   may be limited depending on use of stack space).
-#
-# hsha
-#   Stands for "half synchronous, half asynchronous." All thrift clients are handled
-#   asynchronously using a small number of threads that does not vary with the amount
-#   of thrift clients (and thus scales well to many clients). The rpc requests are still
-#   synchronous (one thread per active request). If hsha is selected then it is essential
-#   that rpc_max_threads is changed from the default value of unlimited.
-#
-# The default is sync because on Windows hsha is about 30% slower.  On Linux,
-# sync/hsha performance is about the same, with hsha of course using less memory.
-#
-# Alternatively,  can provide your own RPC server by providing the fully-qualified class name
-# of an o.a.c.t.TServerFactory that can create an instance of it.
-rpc_server_type: sync
 
 # Uncomment rpc_min|max_thread to set request pool size limits.
 #
@@ -751,9 +711,6 @@ rpc_server_type: sync
 # Note that when setting this, the buffer size is limited by net.core.wmem_max
 # and when not setting it it is defined by net.ipv4.tcp_wmem
 # internode_recv_buff_size_in_bytes:
-
-# Frame size for thrift (maximum message length).
-thrift_framed_transport_size_in_mb: 15
 
 # Set to true to have Cassandra create a hard link to each sstable
 # flushed or streamed locally in a backups/ subdirectory of the
@@ -963,19 +920,6 @@ dynamic_snitch_reset_interval_in_ms: 600000
 # until the pinned host was 20% worse than the fastest.
 dynamic_snitch_badness_threshold: 0.1
 
-# request_scheduler -- Set this to a class that implements
-# RequestScheduler, which will schedule incoming client requests
-# according to the specific policy. This is useful for multi-tenancy
-# with a single Cassandra cluster.
-# NOTE: This is specifically for requests from the client and does
-# not affect inter node communication.
-# org.apache.cassandra.scheduler.NoScheduler - No scheduling takes place
-# org.apache.cassandra.scheduler.RoundRobinScheduler - Round robin of
-# client requests to a node with a separate queue for each
-# request_scheduler_id. The scheduler is further customized by
-# request_scheduler_options as described below.
-request_scheduler: org.apache.cassandra.scheduler.NoScheduler
-
 # Scheduler Options vary based on the type of scheduler
 #
 # NoScheduler
@@ -1046,7 +990,7 @@ server_encryption_options:
 client_encryption_options:
     enabled: true
     # If enabled and optional is set to true encrypted and unencrypted connections are handled.
-    optional: false
+    optional: true
     keystore: /conf/.keystore
     keystore_password: cassandra
     require_client_auth: false
@@ -1091,7 +1035,7 @@ tracetype_repair_ttl: 604800
 # INFO level
 # UDFs (user defined functions) are disabled by default.
 # As of Cassandra 3.0 there is a sandbox in place that should prevent execution of evil code.
-enable_user_defined_functions: false
+enable_user_defined_functions: true
 
 # Enables scripted UDFs (JavaScript UDFs).
 # Java UDFs are always enabled, if enable_user_defined_functions is true.

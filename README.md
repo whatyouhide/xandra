@@ -9,22 +9,25 @@
 
 ![Cover image](http://i.imgur.com/qtbgj00.jpg)
 
-Xandra is a [Cassandra][cassandra] driver built natively in Elixir and focused on speed, simplicity, and robustness.
-This driver works exclusively with the Cassandra Query Language v3 (CQL3) and native protocol *v3*, *v4*, and *v5*.
+Xandra is a [Cassandra][cassandra] driver built natively in Elixir and focused
+on speed, simplicity, and robustness. This driver works exclusively with the
+Cassandra Query Language v3 (CQL3) and native protocol *v3*, *v4*, and *v5*.
 
 ## Features
 
-  * Connection pooling with automatic reconnections
-  * Prepared queries (with local cache of prepared queries on a per-connection basis) and batch queries
-  * Page streaming
-  * LZ4 compression
-  * Clustering (random and priority load balancing for now) with support for autodiscovery of nodes in the cluster (same datacenter only for now)
-  * Customizable retry strategies for failed queries
-  * User-defined types
-  * Authentication
-  * SSL encryption
+  * 🎱 Connection pooling with automatic reconnections
+  * 🌯 Prepared queries (with local cache of prepared queries on a
+    per-connection basis) and batch queries
+  * 📃 Page streaming
+  * 🗜️ LZ4 compression
+  * 👩‍👩‍👧‍👧 Clustering with support for autodiscovery of nodes in the cluster
+  * 🔁 Customizable retry strategies for failed queries
+  * 👩‍💻 User-defined types
+  * 🔑 Authentication
+  * 🔐 SSL encryption
 
-See [the documentation][documentation] for detailed explanation of how the supported features work.
+See [the documentation][documentation] for detailed explanation of how the
+supported features work.
 
 ## Installation
 
@@ -50,9 +53,8 @@ Connections or pool of connections can be started with `Xandra.start_link/1`:
 {:ok, conn} = Xandra.start_link(nodes: ["127.0.0.1:9042"])
 ```
 
-This connection can be used to perform all operations against the Cassandra server.
-
-Executing simple queries looks like this:
+This connection can be used to perform all operations against the Cassandra
+server. Executing simple queries looks like this:
 
 ```elixir
 statement = "INSERT INTO users (name, postcode) VALUES ('Priam', 67100)"

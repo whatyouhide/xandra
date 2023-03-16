@@ -100,7 +100,8 @@ defmodule Xandra.Connection do
         end
 
       {:error, reason} ->
-        {:error, ConnectionError.new("TCP connect", reason)}
+        message = if transport == :ssl, do: "TLS/SSL connect", else: "TCP connect"
+        {:error, ConnectionError.new(message, reason)}
     end
   end
 

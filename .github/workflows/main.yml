@@ -85,10 +85,6 @@ jobs:
             elixir: "1.14"
             cassandra_version: "3"
             cassandra_native_protocols: "v3,v4"
-          - otp: "25.3"
-            elixir: "1.14"
-            cassandra_version: "2.2"
-            cassandra_native_protocols: "v3"
           # Oldest supported Elixir/OTP matrix.
           - otp: "21.3"
             elixir: "1.10"
@@ -96,7 +92,6 @@ jobs:
             cassandra_native_protocols: "v3"
     env:
       CASSANDRA_VERSION: ${{ matrix.cassandra_version }}
-      NIMBLELZ4_FORCE_BUILD: ${{ matrix.elixir == '1.9' && 'true' }}
 
     steps:
       - name: Clone the repository
@@ -128,8 +123,9 @@ jobs:
           mix deps.get --only test
           mix deps.compile
 
+      # TODO: eventually figure out why we can't run encryption tests on CI.
       - name: Run tests
-        run: mix test.native_protocols --only-protocols ${{ matrix.cassandra_native_protocols }} --trace
+        run: mix test.native_protocols --only-protocols ${{ matrix.cassandra_native_protocols }} --trace --exclude encryption
 
       - name: Dump Docker logs on failure
         uses: jwalton/gh-docker-logs@v1
@@ -159,10 +155,6 @@ jobs:
             elixir: "1.13"
             cassandra_version: "3"
             cassandra_native_protocol: "v4"
-          - otp: "24.2"
-            elixir: "1.13"
-            cassandra_version: "2.2"
-            cassandra_native_protocol: "v3"
           # Oldest supported Elixir/OTP matrix.
           - otp: "21.3"
             elixir: "1.10"
