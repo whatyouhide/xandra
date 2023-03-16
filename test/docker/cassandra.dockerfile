@@ -9,4 +9,5 @@ RUN if [ "$AUTHENTICATION" = true ]; then \
     fi
 
 COPY ./cassandra.yaml /etc/cassandra/cassandra.yaml
-COPY ./.keystore /conf/.keystore
+COPY ./certs/cassandra.keystore /conf/.keystore
+COPY ./certs/cassandra.truststore /conf/.truststore
