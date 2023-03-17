@@ -23,4 +23,15 @@ defmodule XandraTest do
       assert DBConnection.transaction(conn, fn _ -> :ok end)
     end
   end
+
+  @tag :capture_log
+  test "rescues DBConnection errors" do
+    conn =
+      start_supervised!(
+        {Xandra,
+         nodes: ["nonexistent-domain"], queue_target: 10, queue_interval: 10, pool_size: 0}
+      )
+
+    assert {:error, %DBConnection.ConnectionError{}} = Xandra.execute(conn, "USE some_keyspace")
+  end
 end
