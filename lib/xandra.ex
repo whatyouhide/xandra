@@ -636,6 +636,10 @@ defmodule Xandra do
     {prepare_opts, db_conn_opts} = Keyword.split(options, @prepare_opts_keys)
     options = NimbleOptions.validate!(prepare_opts, @prepare_opts_schema) ++ db_conn_opts
     DBConnection.prepare(conn, %Prepared{statement: statement}, options)
+  rescue
+    DBConnection.ConnectionError ->
+      error = ConnectionError.new("preparing query", :closed)
+      {:error, error}
   end
 
   @doc """
@@ -1121,6 +1125,13 @@ defmodule Xandra do
 
   The return value of this function is the return value of `fun`.
 
+  > #### Checkout failures {: .warning}
+  >
+  > If we cannot check out a connection from the pool, this function raises a
+  > `DBConnection.ConnectionError` exception. This could also happen in some
+  > other cases, so if you want to handle this case, you should rescue
+  > `DBConnection.ConnectionError` exceptions when using `run/3`.
+
   ## Examples
 
   Preparing a query and executing it on the same connection:
@@ -1207,6 +1218,10 @@ defmodule Xandra do
           {:error, reason}
       end
     end)
+  rescue
+    DBConnection.ConnectionError ->
+      error = ConnectionError.new("execute batch query", :closed)
+      {:error, error}
   end
 
   defp execute_without_retrying(conn, %Simple{} = query, params, options) do
@@ -1220,6 +1235,10 @@ defmodule Xandra do
       {:error, reason} ->
         {:error, reason}
     end
+  rescue
+    DBConnection.ConnectionError ->
+      error = ConnectionError.new("execute simple query", :closed)
+      {:error, error}
   end
 
   defp execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
@@ -1254,5 +1273,9 @@ defmodule Xandra do
           {:error, reason}
       end
     end)
+  rescue
+    DBConnection.ConnectionError ->
+      error = ConnectionError.new("execute prepared query", :closed)
+      {:error, error}
   end
 end
