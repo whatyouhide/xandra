@@ -4,7 +4,7 @@ defmodule Xandra.Cluster.ControlConnection do
   @behaviour :gen_statem
 
   alias Xandra.{Frame, Simple, Connection.Utils}
-  alias Xandra.Cluster.{Host, StatusChange, TopologyChange}
+  alias Xandra.Cluster.{Host, LoadBalancingPolicy, StatusChange, TopologyChange}
 
   require Logger
 
@@ -23,6 +23,13 @@ defmodule Xandra.Cluster.ControlConnection do
     load_balancing_module: [type: :atom, required: true]
   ]
 
+  # TODO: make this configurable via a Xandra.Cluster option.
+  if Mix.env() == :test do
+    @refresh_topology_interval 1_000
+  else
+    @refresh_topology_interval 60_000
+  end
+
   defstruct [
     # The PID of the parent cluster.
     :cluster,
@@ -40,9 +47,8 @@ defmodule Xandra.Cluster.ControlConnection do
     # The same as in the cluster.
     :autodiscovered_nodes_port,
 
-    # The load balancing module and state.
-    :lb_module,
-    :lb_state,
+    # The load balancing policy, as a {mod, state} tuple.
+    :lbp,
 
     # A map of {ip, port} => %{host: %Host{}, status: atom}.
     peers: %{},
@@ -79,12 +85,13 @@ defmodule Xandra.Cluster.ControlConnection do
       |> Keyword.fetch!(:contact_points)
       |> contact_points_to_hosts()
 
+    lb_module = Keyword.fetch!(options, :load_balancing_module)
+
     data = %__MODULE__{
       cluster: Keyword.fetch!(options, :cluster),
       contact_points: contact_points,
       autodiscovered_nodes_port: Keyword.fetch!(options, :autodiscovered_nodes_port),
-      lb_module: Keyword.fetch!(options, :load_balancing_module),
-      lb_state: Keyword.fetch!(options, :load_balancing_module).init(contact_points),
+      lbp: {lb_module, lb_module.init([])},
       options: connection_options,
       transport: transport,
       transport_options: Keyword.merge(transport_options, @forced_transport_options)
@@ -107,12 +114,27 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   @impl :gen_statem
-  def callback_mode, do: :handle_event_function
+  def callback_mode, do: [:handle_event_function, :state_enter]
 
   # Disconnected state
 
   @impl true
   def handle_event(type, content, state, data)
+
+  def handle_event(:enter, state, state, _data) do
+    :keep_state_and_data
+  end
+
+  # If we connect successfully, we set up a timer to periodically refresh the topology.
+  def handle_event(:enter, _old = :disconnected, _new = {:connected, _node}, _data) do
+    {:keep_state_and_data, {{:timeout, :refresh_topology}, @refresh_topology_interval, nil}}
+  end
+
+  # If we disconnect, we cancel the timer for the periodic refresh.
+  def handle_event(:enter, _old = {:connected, _node}, _new = :disconnected, _data) do
+    # TODO: replace with {{:timeout, :refresh_topology}, :cancel} when we depend on OTP 22.1+.
+    {:keep_state_and_data, {{:timeout, :refresh_topology}, :infinity, nil}}
+  end
 
   # Connecting is the hardest thing control connections do. The gist is this:
   #
@@ -123,21 +145,8 @@ defmodule Xandra.Cluster.ControlConnection do
   #   5. We move to the state {:connected, node}
   def handle_event(:internal, :connect, :disconnected, %__MODULE__{} = data) do
     case connect_to_first_available_node(data) do
-      {:ok, connected_node, local_peer, peers} ->
-        peers = [local_peer | peers]
-        send(data.cluster, {:discovered_peers, peers})
-
-        data =
-          Enum.reduce(peers, data, fn %Host{} = host, data ->
-            update_in(data.lb_state, &data.lb_module.host_added(&1, host))
-          end)
-
-        data =
-          put_in(
-            data.peers,
-            Map.new(peers, &{{&1.address, &1.port}, %{host: &1, status: :up}})
-          )
-
+      {:ok, connected_node, peers} ->
+        data = refresh_topology(data, peers)
         {:next_state, {:connected, connected_node}, data}
 
       :error ->
@@ -155,6 +164,25 @@ defmodule Xandra.Cluster.ControlConnection do
   # Trigger the reconnect event once the timer expires.
   def handle_event({:timeout, :reconnect}, _content, :disconnected, _data) do
     {:keep_state_and_data, {:next_event, :internal, :connect}}
+  end
+
+  def handle_event(
+        {:timeout, :refresh_topology},
+        nil,
+        {:connected, %ConnectedNode{socket: socket} = node},
+        %__MODULE__{} = data
+      ) do
+    with :ok <- inet_mod(data.transport).setopts(socket, active: false),
+         :ok <- assert_no_transport_message(socket),
+         {:ok, peers} <- fetch_cluster_topology(data, node),
+         :ok <- inet_mod(data.transport).setopts(socket, active: :once) do
+      data = refresh_topology(data, peers)
+      {:keep_state, data, {{:timeout, :refresh_topology}, @refresh_topology_interval, nil}}
+    else
+      {:error, _reason} ->
+        _ = data.transport.close(socket)
+        {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
+    end
   end
 
   # Connected state
@@ -196,6 +224,7 @@ defmodule Xandra.Cluster.ControlConnection do
         %__MODULE__{} = data
       )
       when kind in [:tcp, :ssl] do
+    :ok = inet_mod(data.transport).setopts(socket, active: :once)
     data = update_in(data.buffer, &(&1 <> bytes))
     data = consume_new_data(data, connected_node)
     {:keep_state, data}
@@ -214,29 +243,41 @@ defmodule Xandra.Cluster.ControlConnection do
     {:keep_state, data}
   end
 
+  # This is a hack. We need to figure out a better way to simulate discovering
+  # different peers.
+  # TODO: make me a good piece of code please!
+  def handle_event(
+        :info,
+        {:__test_refreshed_topology__, peers},
+        {:connected, _node},
+        %__MODULE__{} = data
+      ) do
+    {:keep_state, refresh_topology(data, peers)}
+  end
+
   ## Helper functions
 
   defp connect_to_first_available_node(%__MODULE__{} = data) do
-    {nodes_to_try, data} = get_and_update_in(data.lb_state, &data.lb_module.hosts_plan(&1))
+    {nodes_to_try, data} = nodes_to_try(data)
+    connect_to_first_available_node(nodes_to_try, data)
+  end
 
-    Enum.each(nodes_to_try, fn %Host{} = host ->
-      case connect_to_node({host.address, host.port}, data) do
-        {:ok, %ConnectedNode{ip: ip, port: port, protocol_module: proto_mod}, _local_peer, _peers} =
-            return ->
-          Logger.metadata(peer: peername_to_string({ip, port}))
-          Logger.debug("Established control connection to node (protocol #{inspect(proto_mod)})")
-          throw(return)
-
-        {:error, reason} ->
-          log_warn(
-            "Error connecting to #{peername_to_string({host.address, host.port})}: #{:inet.format_error(reason)}"
-          )
-      end
-    end)
-
+  defp connect_to_first_available_node([], _data) do
+    Logger.error("No nodes available to connect to")
     :error
-  catch
-    :throw, return -> return
+  end
+
+  defp connect_to_first_available_node([%Host{} = host | nodes], data) do
+    case connect_to_node({host.address, host.port}, data) do
+      {:ok, %ConnectedNode{protocol_module: proto_mod}, _peers} = return ->
+        Logger.debug("Established control connection to node (protocol #{inspect(proto_mod)})")
+        return
+
+      {:error, reason} ->
+        peer = peername_to_string({host.address, host.port})
+        log_warn("Error connecting: #{:inet.format_error(reason)}", peer: peer)
+        connect_to_first_available_node(nodes, data)
+    end
   end
 
   defp connect_to_node({address, port} = node, data) do
@@ -261,10 +302,10 @@ defmodule Xandra.Cluster.ControlConnection do
                port: port
              },
              :ok <- startup_connection(data, connected_node, supported_opts),
-             {:ok, local_peer, peers} <- discover_peers(data, connected_node),
+             {:ok, peers} <- fetch_cluster_topology(data, connected_node),
              :ok <- register_to_events(data, connected_node),
-             :ok <- inet_mod(transport).setopts(socket, active: true) do
-          {:ok, connected_node, local_peer, peers}
+             :ok <- inet_mod(transport).setopts(socket, active: :once) do
+          {:ok, connected_node, peers}
         else
           {:error, {:use_this_protocol_instead, _failed_protocol_version, proto_vsn}} ->
             Logger.debug("Cassandra said to use protocol #{inspect(proto_vsn)}, reconnecting")
@@ -279,6 +320,42 @@ defmodule Xandra.Cluster.ControlConnection do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp refresh_topology(%__MODULE__{} = data, peers) do
+    # "Reset" the load-balancing policy.
+    data = update_in(data.lbp, fn {lb_module, _} -> {lb_module, lb_module.init(peers)} end)
+
+    # Diff the current world with the new list of peers, and send the
+    # appropriate events to the cluster.
+    {new_peers, hosts_to_remove} =
+      Enum.reduce(peers, {data.peers, _hosts_to_remove = data.peers}, fn %Host{} = host,
+                                                                         {old_peers,
+                                                                          hosts_to_remove} ->
+        hosts_to_remove = Map.delete(hosts_to_remove, {host.address, host.port})
+
+        updated_peers =
+          case Map.fetch(old_peers, {host.address, host.port}) do
+            {:ok, %{status: :up}} ->
+              old_peers
+
+            {:ok, %{status: :down}} ->
+              send(data.cluster, {:host_up, host})
+              Map.replace!(old_peers, {host.address, host.port}, %{host: host, status: :up})
+
+            :error ->
+              send(data.cluster, {:host_added, host})
+              Map.put(old_peers, {host.address, host.port}, %{host: host, status: :up})
+          end
+
+        {updated_peers, hosts_to_remove}
+      end)
+
+    Enum.each(hosts_to_remove, fn {{_address, _port}, %{host: %Host{} = host}} ->
+      send(data.cluster, {:host_removed, host})
+    end)
+
+    %__MODULE__{data | peers: new_peers}
   end
 
   defp startup_connection(%__MODULE__{} = data, %ConnectedNode{} = node, supported_options) do
@@ -312,10 +389,9 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   # Discover the peers in the same data center as the node we're connected to.
-  defp discover_peers(%__MODULE__{} = data, %ConnectedNode{} = node) do
+  defp fetch_cluster_topology(%__MODULE__{} = data, %ConnectedNode{} = node) do
     # https://docs.datastax.com/en/cql-oss/3.3/cql/cql_using/useQuerySystemTableCluster.html
     # Columns:
-    # peer | data_center | host_id | preferred_ip | rack | release_version | rpc_address | schema_version | tokens
     select_peers_query =
       "SELECT peer, data_center, host_id, rack, release_version, schema_version, tokens FROM system.peers"
 
@@ -339,7 +415,7 @@ defmodule Xandra.Cluster.ControlConnection do
             peer.data_center == local_peer.data_center,
             do: peer
 
-      {:ok, local_peer, peers}
+      {:ok, [local_peer | peers]}
     end
   end
 
@@ -358,7 +434,7 @@ defmodule Xandra.Cluster.ControlConnection do
       # We already know this peer but we think it's down, so let's mark it as up
       # and notify the cluster.
       %{^peer => %{status: :down, host: host}} ->
-        data = update_in(data.lb_state, &data.lb_module.host_up(&1, host))
+        data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :up))
         send(data.cluster, {:host_up, host})
         put_in(data.peers[peer].status, :up)
     end
@@ -379,7 +455,7 @@ defmodule Xandra.Cluster.ControlConnection do
       # We already know this peer but we think it's down, so let's mark it as up
       # and notify the cluster.
       %{^peer => %{status: :up, host: host}} ->
-        data = update_in(data.lb_state, &data.lb_module.host_down(&1, host))
+        data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :down))
         send(data.cluster, {:host_down, host})
         put_in(data.peers[peer].status, :down)
     end
@@ -401,9 +477,9 @@ defmodule Xandra.Cluster.ControlConnection do
          host when not is_nil(host) <- Enum.find(peers, fn peer -> peer["peer"] == address end) do
       new_host = queried_peer_to_host(host)
       new_host = %Host{new_host | port: data.autodiscovered_nodes_port}
-      data = update_in(data.lb_state, &data.lb_module.host_added(&1, new_host))
+      data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :added))
       send(data.cluster, {:host_added, new_host})
-      put_in(data.cluster[{new_host.address, new_host.port}], host)
+      put_in(data.peers[{new_host.address, new_host.port}], %{status: :up, host: host})
     else
       _ -> data
     end
@@ -418,7 +494,7 @@ defmodule Xandra.Cluster.ControlConnection do
        }) do
     case get_and_update_in(data.peers, &Map.pop(&1, {address, port})) do
       {%{host: host}, data} ->
-        data = update_in(data.lb_state, &data.lb_module.host_removed(&1, host))
+        data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :removed))
         send(data.cluster, {:host_removed, host})
         data
 
@@ -525,8 +601,33 @@ defmodule Xandra.Cluster.ControlConnection do
 
   # TODO: use Logger.warning/2 directly when we depend on Elixir 1.11+.
   if macro_exported?(Logger, :warning, 2) do
-    defp log_warn(message, metadata \\ []), do: Logger.log(:warning, message, metadata)
+    defp log_warn(message, metadata), do: Logger.log(:warning, message, metadata)
   else
-    defp log_warn(message, metadata \\ []), do: Logger.log(:warn, message, metadata)
+    defp log_warn(message, metadata), do: Logger.log(:warn, message, metadata)
+  end
+
+  # If we have no hosts from the load-balancing policy, we fall back to the contact
+  # points (in order). Otherwise, we ignore the contact points and go with the hosts
+  # from the load-balancing policy.
+  defp nodes_to_try(%__MODULE__{} = data) do
+    {hosts, data} = get_and_update_in(data.lbp, &LoadBalancingPolicy.hosts_plan/1)
+
+    if Enum.empty?(hosts) do
+      {data.contact_points, data}
+    else
+      {hosts, data}
+    end
+  end
+
+  # Returns {:error, reason} if the socket was closes or if there was any data
+  # coming from the socket. Otherwise, returns :ok.
+  defp assert_no_transport_message(socket) do
+    receive do
+      {kind, ^socket, _data} when kind in [:tcp, :ssl] -> {:error, :data}
+      {kind, ^socket, reason} when kind in [:tcp_error, :ssl_error] -> {:error, reason}
+      {kind, ^socket} when kind in [:tcp_closed, :ssl_closed] -> {:error, :closed}
+    after
+      0 -> :ok
+    end
   end
 end

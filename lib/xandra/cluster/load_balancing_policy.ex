@@ -64,5 +64,21 @@ defmodule Xandra.Cluster.LoadBalancingPolicy do
     @callback hosts_plan(state()) :: {Enumerable.t(), state()}
   end
 
-  @callback hosts_plan(state()) :: {Enumerable.t(Host.t()), state()}
+  ## Private helpers
+
+  @doc false
+  def hosts_plan({mod, state}) do
+    {hosts, state} = mod.hosts_plan(state)
+    {hosts, {mod, state}}
+  end
+
+  @doc false
+  def update_host({mod, state}, host, event) do
+    case event do
+      :up -> {mod, mod.host_up(state, host)}
+      :down -> {mod, mod.host_down(state, host)}
+      :added -> {mod, mod.host_added(state, host)}
+      :removed -> {mod, mod.host_removed(state, host)}
+    end
+  end
 end

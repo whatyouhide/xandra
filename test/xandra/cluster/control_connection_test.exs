@@ -57,7 +57,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     ]
 
     TestHelper.start_link_supervised!({ControlConnection, opts})
-    assert_receive {^mirror_ref, {:discovered_peers, [local_peer]}}
+    assert_receive {^mirror_ref, {:host_added, local_peer}}
     assert %Host{address: {127, 0, 0, 1}, data_center: "datacenter1", rack: "rack1"} = local_peer
   end
 
@@ -73,11 +73,12 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     log =
       capture_log(fn ->
         TestHelper.start_link_supervised!({ControlConnection, opts})
-        assert_receive {^mirror_ref, {:discovered_peers, [local_peer]}}
+        assert_receive {^mirror_ref, {:host_added, local_peer}}
         assert %Host{address: {127, 0, 0, 1}} = local_peer
       end)
 
-    assert log =~ "Error connecting to bad-domain:9042: non-existing domain"
+    assert log =~ "Error connecting: non-existing domain"
+    assert log =~ "peer=bad-domain:9042"
   end
 
   test "when all contact points are unavailable", %{mirror_ref: mirror_ref, mirror: mirror} do
@@ -96,8 +97,9 @@ defmodule Xandra.Cluster.ControlConnectionTest do
         assert {:disconnected, _data} = :sys.get_state(ctrl_conn)
       end)
 
-    assert log =~ "Error connecting to bad-domain:9042: non-existing domain"
-    assert log =~ "Error connecting to other-bad-domain:9042: non-existing domain"
+    assert log =~ "Error connecting: non-existing domain"
+    assert log =~ "peer=bad-domain:9042"
+    assert log =~ "peer=other-bad-domain:9042"
   end
 
   test "reconnecting after the node closes its socket", %{mirror_ref: mirror_ref, mirror: mirror} do
@@ -111,12 +113,14 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
-    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert_receive {^mirror_ref, {:host_added, _peer}}
     assert {{:connected, connected_node}, _data} = :sys.get_state(ctrl_conn)
 
     send(ctrl_conn, {:tcp_closed, connected_node.socket})
-    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
-    assert({{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn))
+
+    TestHelper.wait_for_passing(500, fn ->
+      assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
+    end)
   end
 
   test "reconnecting after the node's socket errors out",
@@ -131,12 +135,14 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
-    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert_receive {^mirror_ref, {:host_added, _peer}}
     assert {{:connected, connected_node}, _data} = :sys.get_state(ctrl_conn)
 
     send(ctrl_conn, {:tcp_error, connected_node.socket, :econnreset})
-    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
-    assert({{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn))
+
+    TestHelper.wait_for_passing(500, fn ->
+      assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
+    end)
   end
 
   test "deals with StatusChange for known nodes", %{mirror_ref: mirror_ref, mirror: mirror} do
@@ -150,7 +156,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
-    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert_receive {^mirror_ref, {:host_added, _peer}}
     assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
 
     # No-op: sending a UP event for a node that is already up.
@@ -204,7 +210,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
-    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert_receive {^mirror_ref, {:host_added, _peer}}
     assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
 
     send(
@@ -226,7 +232,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
-    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert_receive {^mirror_ref, {:host_added, _peer}}
     assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
 
     send(
@@ -253,7 +259,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
-    assert_receive {^mirror_ref, {:discovered_peers, [_peer]}}
+    assert_receive {^mirror_ref, {:host_added, _peer}}
     assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
 
     log =
@@ -267,6 +273,41 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       end)
 
     assert log =~ "Ignored TOPOLOGY_CHANGE event"
+  end
+
+  test "sends the right events when refreshing the cluster topology",
+       %{mirror_ref: mirror_ref, mirror: mirror} do
+    opts = [
+      cluster: mirror,
+      contact_points: ["127.0.0.1"],
+      connection_options: [protocol_version: @protocol_version],
+      autodiscovered_nodes_port: 9042,
+      load_balancing_module: LoadBalancingPolicy.Random
+    ]
+
+    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+    assert_receive {^mirror_ref, {:host_added, %Host{}}}
+
+    new_peers = [
+      %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"},
+      %Host{address: {192, 168, 1, 2}, port: 9042, data_center: "datacenter2"}
+    ]
+
+    send(ctrl_conn, {:__test_refreshed_topology__, new_peers})
+
+    assert_receive {^mirror_ref, {:host_removed, %Host{address: {127, 0, 0, 1}}}}
+    assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 1}}}}
+    assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 2}}}}
+
+    new_peers = [
+      %Host{address: {192, 168, 1, 2}, port: 9042, data_center: "datacenter2"},
+      %Host{address: {192, 168, 1, 3}, port: 9042, data_center: "datacenter3"}
+    ]
+
+    send(ctrl_conn, {:__test_refreshed_topology__, new_peers})
+
+    assert_receive {^mirror_ref, {:host_removed, %Host{address: {192, 168, 1, 1}}}}
+    assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 3}}}}
   end
 
   defp mirror(parent, ref) do

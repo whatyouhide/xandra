@@ -483,25 +483,6 @@ defmodule Xandra.Cluster do
   @impl true
   def handle_info(msg, state)
 
-  # The control connection discovered peers. The control connection doesn't keep track of
-  # which peers it already notified the cluster of.
-  def handle_info({:discovered_peers, peers}, %__MODULE__{} = state) do
-    Logger.debug("Discovered peers: #{Enum.map_join(peers, ", ", &format_host/1)}")
-
-    # Start a pool for each peer and add them to the load-balancing policy.
-    state =
-      Enum.reduce(peers, state, fn %Host{} = host, state ->
-        state =
-          update_in(state.load_balancing_state, fn lb_state ->
-            state.load_balancing_module.host_added(lb_state, host)
-          end)
-
-        start_pool(state, {host.address, host.port})
-      end)
-
-    {:noreply, state}
-  end
-
   def handle_info({:host_up, %Host{} = host}, %__MODULE__{} = state) do
     Logger.debug("Host marked as UP: #{format_host(host)}")
 
@@ -513,12 +494,11 @@ defmodule Xandra.Cluster do
 
   def handle_info({:host_down, %Host{} = host}, %__MODULE__{} = state) do
     Logger.debug("Host marked as DOWN: #{format_host(host)}")
-    _ = Supervisor.terminate_child(state.pool_supervisor, {host.address, host.port})
 
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_down(&1, host))
 
-    state = update_in(state.pools, &Map.delete(&1, {host.address, host.port}))
+    state = stop_pool(state, host)
     {:noreply, state}
   end
 
@@ -575,6 +555,11 @@ defmodule Xandra.Cluster do
       {:error, {:already_started, _pool}} ->
         state
     end
+  end
+
+  defp stop_pool(state, %Host{} = host) do
+    _ = Supervisor.terminate_child(state.pool_supervisor, {host.address, host.port})
+    update_in(state.pools, &Map.delete(&1, {host.address, host.port}))
   end
 
   defp peername_to_string({ip, port} = peername) when is_peername(peername) do

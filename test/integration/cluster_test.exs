@@ -377,6 +377,8 @@ defmodule Xandra.ClusterTest do
   end
 
   defp discovered_peers(cluster, hosts) do
-    send(cluster, {:discovered_peers, hosts})
+    Enum.each(hosts, fn host ->
+      send(cluster, {:host_added, host})
+    end)
   end
 end
