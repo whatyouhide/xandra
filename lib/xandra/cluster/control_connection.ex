@@ -321,11 +321,6 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp refresh_topology(%__MODULE__{} = data, peers) do
-    Logger.debug(
-      "Refreshing cluster topology with peers: " <>
-        Enum.map_join(peers, ", ", &Host.format_address/1)
-    )
-
     # "Reset" the load-balancing policy.
     # TODO: only do this if the list of peers has changed.
     data = update_in(data.lbp, fn {lb_module, _} -> {lb_module, lb_module.init(peers)} end)
