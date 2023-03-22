@@ -24,10 +24,10 @@ defmodule Xandra.Cluster.ControlConnection do
   ]
 
   # TODO: make this configurable via a Xandra.Cluster option.
-  if Mix.env() == :test do
-    @refresh_topology_interval 1_000
-  else
+  if Mix.env() == :prod do
     @refresh_topology_interval 60_000
+  else
+    @refresh_topology_interval 10_000
   end
 
   defstruct [
@@ -322,7 +322,15 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
+  defp format_host(%Host{address: address, port: port}) do
+    "#{:inet.ntoa(address)}:#{port}"
+  end
+
   defp refresh_topology(%__MODULE__{} = data, peers) do
+    Logger.debug(
+      "Refreshing cluster topology with peers: " <> Enum.map_join(peers, ", ", &format_host/1)
+    )
+
     # "Reset" the load-balancing policy.
     data = update_in(data.lbp, fn {lb_module, _} -> {lb_module, lb_module.init(peers)} end)
 
@@ -351,9 +359,12 @@ defmodule Xandra.Cluster.ControlConnection do
         {updated_peers, hosts_to_remove}
       end)
 
-    Enum.each(hosts_to_remove, fn {{_address, _port}, %{host: %Host{} = host}} ->
-      send(data.cluster, {:host_removed, host})
-    end)
+    new_peers =
+      Enum.reduce(hosts_to_remove, new_peers, fn {{address, port}, %{host: %Host{} = host}},
+                                                 new_peers ->
+        send(data.cluster, {:host_removed, host})
+        Map.delete(new_peers, {address, port})
+      end)
 
     %__MODULE__{data | peers: new_peers}
   end
@@ -391,9 +402,7 @@ defmodule Xandra.Cluster.ControlConnection do
   # Discover the peers in the same data center as the node we're connected to.
   defp fetch_cluster_topology(%__MODULE__{} = data, %ConnectedNode{} = node) do
     # https://docs.datastax.com/en/cql-oss/3.3/cql/cql_using/useQuerySystemTableCluster.html
-    # Columns:
-    select_peers_query =
-      "SELECT peer, data_center, host_id, rack, release_version, schema_version, tokens FROM system.peers"
+    select_peers_query = "SELECT * FROM system.peers"
 
     select_local_query =
       "SELECT data_center, host_id, rack, release_version, schema_version, tokens FROM system.local"
@@ -412,7 +421,6 @@ defmodule Xandra.Cluster.ControlConnection do
             peer = queried_peer_to_host(peer_attrs),
             peer = %Host{peer | port: data.autodiscovered_nodes_port},
             not is_nil(peer.host_id),
-            peer.data_center == local_peer.data_center,
             do: peer
 
       {:ok, [local_peer | peers]}
@@ -573,6 +581,7 @@ defmodule Xandra.Cluster.ControlConnection do
     with :ok <- data.transport.send(node.socket, payload),
          {:ok, %Frame{} = frame} <- recv_frame(data.transport, node.socket, protocol_format) do
       {%Xandra.Page{} = page, _warnings} = node.protocol_module.decode_response(frame, query)
+      Logger.debug("#{statement} -> #{inspect(Enum.to_list(page))}")
       {:ok, Enum.to_list(page)}
     end
   end
@@ -584,7 +593,21 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp queried_peer_to_host(%{} = peer_attrs) do
-    peer_attrs = Enum.map(peer_attrs, fn {key, val} -> {String.to_existing_atom(key), val} end)
+    columns = [
+      "address",
+      "data_center",
+      "host_id",
+      "rack",
+      "release_version",
+      "schema_version",
+      "tokens"
+    ]
+
+    peer_attrs =
+      peer_attrs
+      |> Map.take(columns)
+      |> Enum.map(fn {key, val} -> {String.to_existing_atom(key), val} end)
+
     struct!(Host, peer_attrs)
   end
 

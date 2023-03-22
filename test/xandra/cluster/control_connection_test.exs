@@ -286,7 +286,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
-    assert_receive {^mirror_ref, {:host_added, %Host{}}}
+    assert_receive {^mirror_ref, {:host_added, %Host{address: {127, 0, 0, 1}}}}
 
     new_peers = [
       %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"},
@@ -308,6 +308,18 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     assert_receive {^mirror_ref, {:host_removed, %Host{address: {192, 168, 1, 1}}}}
     assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 3}}}}
+
+    # Send the same list of peers and verify that we don't get any events.
+    new_peers = [
+      %Host{address: {192, 168, 1, 2}, port: 9042, data_center: "datacenter2"},
+      %Host{address: {192, 168, 1, 3}, port: 9042, data_center: "datacenter3"}
+    ]
+
+    send(ctrl_conn, {:__test_refreshed_topology__, new_peers})
+
+    refute_receive {^mirror_ref, {_, %Host{address: {192, 168, 1, 1}}}}, 100
+    refute_receive {^mirror_ref, {_, %Host{address: {192, 168, 1, 2}}}}, 100
+    refute_receive {^mirror_ref, {_, %Host{address: {192, 168, 1, 3}}}}, 100
   end
 
   defp mirror(parent, ref) do
