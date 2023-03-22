@@ -429,13 +429,6 @@ defmodule Xandra.Cluster do
 
   ## Callbacks and implementation stuff
 
-  defguardp is_inet_port(port) when port in 0..65355
-  defguardp is_ip(ip) when is_tuple(ip) and tuple_size(ip) in [4, 8]
-
-  defguardp is_peername(peername)
-            when is_tuple(peername) and tuple_size(peername) == 2 and is_ip(elem(peername, 0)) and
-                   is_inet_port(elem(peername, 1))
-
   @impl true
   def init({cluster_opts, pool_opts}) do
     {nodes, cluster_opts} = Keyword.pop!(cluster_opts, :nodes)
@@ -499,7 +492,7 @@ defmodule Xandra.Cluster do
 
     state = update_in(state.load_balancing_state, &state.load_balancing_module.host_up(&1, host))
 
-    state = start_pool(state, {host.address, host.port})
+    state = start_pool(state, host)
     {:noreply, state}
   end
 
@@ -519,7 +512,7 @@ defmodule Xandra.Cluster do
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_added(&1, host))
 
-    state = start_pool(state, {host.address, host.port})
+    state = start_pool(state, host)
     {:noreply, state}
   end
 
@@ -539,28 +532,32 @@ defmodule Xandra.Cluster do
 
   # This function is idempotent: you can call it as many times as you want with the same
   # peer, and it'll only start it once.
-  defp start_pool(state, {_ip, _port} = peer) when is_peername(peer) do
-    conn_options = Keyword.put(state.pool_options, :nodes, [Host.format_peername(peer)])
+  defp start_pool(state, %Host{} = host) do
+    conn_options = Keyword.put(state.pool_options, :nodes, [Host.format_address(host)])
+    peername = Host.to_peername(host)
 
     pool_spec =
-      Supervisor.child_spec({state.xandra_mod, conn_options}, id: peer, restart: :transient)
+      Supervisor.child_spec({state.xandra_mod, conn_options},
+        id: peername,
+        restart: :transient
+      )
 
     case Supervisor.start_child(state.pool_supervisor, pool_spec) do
       {:ok, pool} ->
-        Logger.debug("Started pool to: #{Host.format_peername(peer)}")
-        put_in(state.pools[peer], pool)
+        Logger.debug("Started pool to: #{Host.format_address(host)}")
+        put_in(state.pools[peername], pool)
 
       {:error, :already_present} ->
-        case Supervisor.restart_child(state.pool_supervisor, _id = peer) do
+        case Supervisor.restart_child(state.pool_supervisor, _id = peername) do
           {:ok, pool} ->
-            Logger.debug("Restarted pool to: #{Host.format_peername(peer)}")
-            put_in(state.pools[peer], pool)
+            Logger.debug("Restarted pool to: #{Host.format_address(host)}")
+            put_in(state.pools[peername], pool)
 
           {:error, reason} when reason in [:running, :restarting] ->
             state
 
           {:error, other} ->
-            raise "unexpected error when restarting pool for #{Host.format_peername(peer)}: #{inspect(other)}"
+            raise "unexpected error when restarting pool for #{Host.format_address(host)}: #{inspect(other)}"
         end
 
       {:error, {:already_started, _pool}} ->

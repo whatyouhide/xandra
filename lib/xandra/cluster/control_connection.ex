@@ -327,6 +327,7 @@ defmodule Xandra.Cluster.ControlConnection do
     )
 
     # "Reset" the load-balancing policy.
+    # TODO: only do this if the list of peers has changed.
     data = update_in(data.lbp, fn {lb_module, _} -> {lb_module, lb_module.init(peers)} end)
 
     # Diff the current world with the new list of peers, and send the
