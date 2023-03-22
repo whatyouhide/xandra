@@ -53,6 +53,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
+      refresh_topology_interval: 60_000,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -67,6 +68,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["bad-domain", "127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
+      refresh_topology_interval: 60_000,
       load_balancing_module: ListLBP
     ]
 
@@ -87,6 +89,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["bad-domain", "other-bad-domain"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
+      refresh_topology_interval: 60_000,
       load_balancing_module: ListLBP
     ]
 
@@ -108,6 +111,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
+      refresh_topology_interval: 60_000,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -130,6 +134,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
+      refresh_topology_interval: 60_000,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -151,6 +156,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
+      refresh_topology_interval: 60_000,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -205,6 +211,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
+      refresh_topology_interval: 60_000,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -227,6 +234,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
+      refresh_topology_interval: 60_000,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -254,6 +262,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
+      refresh_topology_interval: 60_000,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -269,7 +278,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
           {:__test_event__, %TopologyChange{effect: "MOVED_NODE", address: {127, 0, 0, 2}}}
         )
 
-        refute_receive _, 100
+        Process.sleep(100)
       end)
 
     assert log =~ "Ignored TOPOLOGY_CHANGE event"
@@ -282,6 +291,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
+      refresh_topology_interval: 60_000,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
