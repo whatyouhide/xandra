@@ -495,7 +495,7 @@ defmodule Xandra.Cluster do
   def handle_info(msg, state)
 
   def handle_info({:host_up, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host marked as UP: #{format_host(host)}")
+    Logger.debug("Host marked as UP: #{Host.format_address(host)}")
 
     state = update_in(state.load_balancing_state, &state.load_balancing_module.host_up(&1, host))
 
@@ -504,7 +504,7 @@ defmodule Xandra.Cluster do
   end
 
   def handle_info({:host_down, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host marked as DOWN: #{format_host(host)}")
+    Logger.debug("Host marked as DOWN: #{Host.format_address(host)}")
 
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_down(&1, host))
@@ -514,7 +514,7 @@ defmodule Xandra.Cluster do
   end
 
   def handle_info({:host_added, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host added to the cluster: #{format_host(host)}")
+    Logger.debug("Host added to the cluster: #{Host.format_address(host)}")
 
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_added(&1, host))
@@ -524,7 +524,7 @@ defmodule Xandra.Cluster do
   end
 
   def handle_info({:host_removed, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host removed from the cluster: #{format_host(host)}")
+    Logger.debug("Host removed from the cluster: #{Host.format_address(host)}")
     _ = Supervisor.terminate_child(state.pool_supervisor, {host.address, host.port})
     _ = Supervisor.delete_child(state.pool_supervisor, {host.address, host.port})
 
@@ -540,27 +540,27 @@ defmodule Xandra.Cluster do
   # This function is idempotent: you can call it as many times as you want with the same
   # peer, and it'll only start it once.
   defp start_pool(state, {_ip, _port} = peer) when is_peername(peer) do
-    conn_options = Keyword.put(state.pool_options, :nodes, [peername_to_string(peer)])
+    conn_options = Keyword.put(state.pool_options, :nodes, [Host.format_peername(peer)])
 
     pool_spec =
       Supervisor.child_spec({state.xandra_mod, conn_options}, id: peer, restart: :transient)
 
     case Supervisor.start_child(state.pool_supervisor, pool_spec) do
       {:ok, pool} ->
-        Logger.debug("Started pool to: #{peername_to_string(peer)}")
+        Logger.debug("Started pool to: #{Host.format_peername(peer)}")
         put_in(state.pools[peer], pool)
 
       {:error, :already_present} ->
         case Supervisor.restart_child(state.pool_supervisor, _id = peer) do
           {:ok, pool} ->
-            Logger.debug("Restarted pool to: #{peername_to_string(peer)}")
+            Logger.debug("Restarted pool to: #{Host.format_peername(peer)}")
             put_in(state.pools[peer], pool)
 
           {:error, reason} when reason in [:running, :restarting] ->
             state
 
           {:error, other} ->
-            raise "unexpected error when restarting pool for #{peername_to_string(peer)}: #{inspect(other)}"
+            raise "unexpected error when restarting pool for #{Host.format_peername(peer)}: #{inspect(other)}"
         end
 
       {:error, {:already_started, _pool}} ->
@@ -571,13 +571,5 @@ defmodule Xandra.Cluster do
   defp stop_pool(state, %Host{} = host) do
     _ = Supervisor.terminate_child(state.pool_supervisor, {host.address, host.port})
     update_in(state.pools, &Map.delete(&1, {host.address, host.port}))
-  end
-
-  defp peername_to_string({ip, port} = peername) when is_peername(peername) do
-    "#{:inet.ntoa(ip)}:#{port}"
-  end
-
-  defp format_host(%Host{address: address, port: port}) do
-    "#{:inet.ntoa(address)}:#{port}"
   end
 end

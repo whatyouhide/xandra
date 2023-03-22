@@ -272,7 +272,7 @@ defmodule Xandra.Cluster.ControlConnection do
         return
 
       {:error, reason} ->
-        peer = peername_to_string({host.address, host.port})
+        peer = Host.format_address(host)
         log_warn("Error connecting: #{:inet.format_error(reason)}", peer: peer)
         connect_to_first_available_node(nodes, data)
     end
@@ -285,7 +285,7 @@ defmodule Xandra.Cluster.ControlConnection do
     # A nil :protocol_version means "negotiate". A non-nil one means "enforce".
     proto_vsn = Keyword.get(options, :protocol_version)
 
-    Logger.metadata(peer: peername_to_string(node))
+    Logger.metadata(peer: Host.format_peername(node))
     Logger.debug("Opening new connection")
 
     case transport.connect(address, port, data.transport_options, @default_timeout) do
@@ -320,13 +320,10 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  defp format_host(%Host{address: address, port: port}) do
-    "#{:inet.ntoa(address)}:#{port}"
-  end
-
   defp refresh_topology(%__MODULE__{} = data, peers) do
     Logger.debug(
-      "Refreshing cluster topology with peers: " <> Enum.map_join(peers, ", ", &format_host/1)
+      "Refreshing cluster topology with peers: " <>
+        Enum.map_join(peers, ", ", &Host.format_address/1)
     )
 
     # "Reset" the load-balancing policy.
@@ -546,21 +543,6 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defp inet_mod(:gen_tcp), do: :inet
   defp inet_mod(:ssl), do: :ssl
-
-  defp peername_to_string({host_or_ip, port}) do
-    if ip_address?(host_or_ip) do
-      "#{:inet.ntoa(host_or_ip)}:#{port}"
-    else
-      "#{host_or_ip}:#{port}"
-    end
-  end
-
-  # TODO: remove the conditional once we depend on OTP 25+.
-  if function_exported?(:inet, :is_ip_address, 1) do
-    defp ip_address?(term), do: :inet.is_ip_address(term)
-  else
-    defp ip_address?(term), do: is_tuple(term)
-  end
 
   defp recv_frame(transport, socket, protocol_format) do
     Utils.recv_frame(transport, socket, protocol_format, _compressor = nil)
