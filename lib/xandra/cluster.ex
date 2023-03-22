@@ -466,7 +466,7 @@ defmodule Xandra.Cluster do
         connection_options: state.pool_options,
         autodiscovered_nodes_port: state.autodiscovered_nodes_port,
         load_balancing_module: load_balancing_mod,
-        refresh_topology_interval: dbg(Keyword.fetch!(cluster_opts, :refresh_topology_interval))
+        refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval)
       )
 
     state = %__MODULE__{state | pool_supervisor: pool_sup, control_connection: control_conn}
