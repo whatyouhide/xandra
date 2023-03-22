@@ -163,6 +163,16 @@ defmodule Xandra.Cluster do
       This might get fixed in future Cassandra versions.
       """
     ],
+    refresh_topology_interval: [
+      type: :timeout,
+      default: 300_000,
+      doc: """
+      The interval at which Xandra will refresh the cluster topology by querying the control
+      connection to discover peers. When the connection refreshes the topology, it will
+      also start and stop pools for new and removed nodes, effectively "syncing" with
+      the cluster. *Available since v0.15.0*.
+      """
+    ],
     name: [
       type: :any,
       doc: """
@@ -455,7 +465,8 @@ defmodule Xandra.Cluster do
         contact_points: nodes,
         connection_options: state.pool_options,
         autodiscovered_nodes_port: state.autodiscovered_nodes_port,
-        load_balancing_module: load_balancing_mod
+        load_balancing_module: load_balancing_mod,
+        refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval)
       )
 
     state = %__MODULE__{state | pool_supervisor: pool_sup, control_connection: control_conn}

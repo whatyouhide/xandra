@@ -20,15 +20,9 @@ defmodule Xandra.Cluster.ControlConnection do
     contact_points: [type: :any, required: true],
     connection_options: [type: :keyword_list, required: true],
     autodiscovered_nodes_port: [type: :non_neg_integer, required: true],
-    load_balancing_module: [type: :atom, required: true]
+    load_balancing_module: [type: :atom, required: true],
+    refresh_topology_interval: [type: :timeout, required: true]
   ]
-
-  # TODO: make this configurable via a Xandra.Cluster option.
-  if Mix.env() == :prod do
-    @refresh_topology_interval 60_000
-  else
-    @refresh_topology_interval 10_000
-  end
 
   defstruct [
     # The PID of the parent cluster.
@@ -46,6 +40,9 @@ defmodule Xandra.Cluster.ControlConnection do
 
     # The same as in the cluster.
     :autodiscovered_nodes_port,
+
+    # The interval at which to refresh the cluster topology.
+    :refresh_topology_interval,
 
     # The load balancing policy, as a {mod, state} tuple.
     :lbp,
@@ -91,6 +88,7 @@ defmodule Xandra.Cluster.ControlConnection do
       cluster: Keyword.fetch!(options, :cluster),
       contact_points: contact_points,
       autodiscovered_nodes_port: Keyword.fetch!(options, :autodiscovered_nodes_port),
+      refresh_topology_interval: Keyword.fetch!(options, :refresh_topology_interval),
       lbp: {lb_module, lb_module.init([])},
       options: connection_options,
       transport: transport,
@@ -126,8 +124,8 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   # If we connect successfully, we set up a timer to periodically refresh the topology.
-  def handle_event(:enter, _old = :disconnected, _new = {:connected, _node}, _data) do
-    {:keep_state_and_data, {{:timeout, :refresh_topology}, @refresh_topology_interval, nil}}
+  def handle_event(:enter, _old = :disconnected, _new = {:connected, _node}, data) do
+    {:keep_state_and_data, {{:timeout, :refresh_topology}, data.refresh_topology_interval, nil}}
   end
 
   # If we disconnect, we cancel the timer for the periodic refresh.
@@ -177,7 +175,7 @@ defmodule Xandra.Cluster.ControlConnection do
          {:ok, peers} <- fetch_cluster_topology(data, node),
          :ok <- inet_mod(data.transport).setopts(socket, active: :once) do
       data = refresh_topology(data, peers)
-      {:keep_state, data, {{:timeout, :refresh_topology}, @refresh_topology_interval, nil}}
+      {:keep_state, data, {{:timeout, :refresh_topology}, data.refresh_topology_interval, nil}}
     else
       {:error, _reason} ->
         _ = data.transport.close(socket)
