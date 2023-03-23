@@ -11,6 +11,7 @@ defmodule Xandra.Cluster.ControlConnection do
   @default_backoff 5_000
   @default_timeout 5_000
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
+  @delay_after_topology_change 5_000
 
   # Internal NimbleOptions schema used to validate the options given to start_link/1.
   # This is only used for internal consistency and having an additional layer of
@@ -130,8 +131,13 @@ defmodule Xandra.Cluster.ControlConnection do
 
   # If we disconnect, we cancel the timer for the periodic refresh.
   def handle_event(:enter, _old = {:connected, _node}, _new = :disconnected, _data) do
-    # TODO: replace with {{:timeout, :refresh_topology}, :cancel} when we depend on OTP 22.1+.
-    {:keep_state_and_data, {{:timeout, :refresh_topology}, :infinity, nil}}
+    timeouts_to_cancel =
+      for name <- [:refresh_topology, :delayed_topology_change] do
+        # TODO: replace with {{:timeout, name}, :cancel} when we depend on OTP 22.1+.
+        {{:timeout, name}, :infinity, nil}
+      end
+
+    {:keep_state_and_data, timeouts_to_cancel}
   end
 
   # Connecting is the hardest thing control connections do. The gist is this:
@@ -164,6 +170,8 @@ defmodule Xandra.Cluster.ControlConnection do
     {:keep_state_and_data, {:next_event, :internal, :connect}}
   end
 
+  # Connected state
+
   def handle_event(
         {:timeout, :refresh_topology},
         nil,
@@ -183,7 +191,27 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  # Connected state
+  # TODO: should we just refresh the topology here?
+  def handle_event(
+        {:timeout, :delayed_topology_change},
+        %TopologyChange{effect: "NEW_NODE", address: address},
+        {:connected, connected_node},
+        %__MODULE__{} = data
+      ) do
+    select_peers_query =
+      "SELECT peer, data_center, host_id, rack, release_version, schema_version, tokens FROM system.peers"
+
+    with {:ok, peers} <- query(data, connected_node, select_peers_query),
+         host when not is_nil(host) <- Enum.find(peers, fn peer -> peer["peer"] == address end) do
+      new_host = queried_peer_to_host(host)
+      new_host = %Host{new_host | port: data.autodiscovered_nodes_port}
+      data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :added))
+      send(data.cluster, {:host_added, new_host})
+      put_in(data.peers[{new_host.address, new_host.port}], %{status: :up, host: host})
+    else
+      _ -> data
+    end
+  end
 
   # If there's a socket error with the current node, we TODO.
   def handle_event(
@@ -224,8 +252,8 @@ defmodule Xandra.Cluster.ControlConnection do
       when kind in [:tcp, :ssl] do
     :ok = inet_mod(data.transport).setopts(socket, active: :once)
     data = update_in(data.buffer, &(&1 <> bytes))
-    data = consume_new_data(data, connected_node)
-    {:keep_state, data}
+    {data, actions} = consume_new_data(data, connected_node)
+    {:keep_state, data, actions}
   end
 
   # This is a hack. We don't have code to encode EVENT frames to test this properly,
@@ -237,8 +265,8 @@ defmodule Xandra.Cluster.ControlConnection do
         {:connected, connected_node},
         %__MODULE__{} = data
       ) do
-    data = handle_change_event(data, connected_node, event)
-    {:keep_state, data}
+    {data, actions} = handle_change_event(data, connected_node, event)
+    {:keep_state, data, actions}
   end
 
   # This is a hack. We need to figure out a better way to simulate discovering
@@ -430,14 +458,14 @@ defmodule Xandra.Cluster.ControlConnection do
     case data.peers do
       # We already know this peer and we already think it's up, nothing to do.
       %{^peer => %{status: :up}} ->
-        data
+        {data, _actions = []}
 
       # We already know this peer but we think it's down, so let's mark it as up
       # and notify the cluster.
       %{^peer => %{status: :down, host: host}} ->
         data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :up))
         send(data.cluster, {:host_up, host})
-        put_in(data.peers[peer].status, :up)
+        {put_in(data.peers[peer].status, :up), _actions = []}
     end
   end
 
@@ -451,39 +479,21 @@ defmodule Xandra.Cluster.ControlConnection do
     case data.peers do
       # We already know this peer and we already think it's down, nothing to do.
       %{^peer => %{status: :down}} ->
-        data
+        {data, _actions = []}
 
       # We already know this peer but we think it's down, so let's mark it as up
       # and notify the cluster.
       %{^peer => %{status: :up, host: host}} ->
         data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :down))
         send(data.cluster, {:host_down, host})
-        put_in(data.peers[peer].status, :down)
+        {put_in(data.peers[peer].status, :down), _actions = []}
     end
   end
 
   # When we get a NEW_NODE, we need to re-query the system.peers to get info about the new node.
-  defp handle_change_event(data, connected_node, %TopologyChange{
-         effect: "NEW_NODE",
-         address: address
-       }) do
-    # TODO: make this a supported API, we need to wait a sec before querying according to other
-    # drivers.
-    Process.sleep(500)
-
-    select_peers_query =
-      "SELECT peer, data_center, host_id, rack, release_version, schema_version, tokens FROM system.peers"
-
-    with {:ok, peers} <- query(data, connected_node, select_peers_query),
-         host when not is_nil(host) <- Enum.find(peers, fn peer -> peer["peer"] == address end) do
-      new_host = queried_peer_to_host(host)
-      new_host = %Host{new_host | port: data.autodiscovered_nodes_port}
-      data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :added))
-      send(data.cluster, {:host_added, new_host})
-      put_in(data.peers[{new_host.address, new_host.port}], %{status: :up, host: host})
-    else
-      _ -> data
-    end
+  defp handle_change_event(data, _connected_node, %TopologyChange{effect: "NEW_NODE"} = event) do
+    timeout_action = {{:timeout, :delayed_topology_change}, @delay_after_topology_change, event}
+    {data, [timeout_action]}
   end
 
   # If we know about this node, we remove it from the list of nodes and send the event
@@ -497,28 +507,32 @@ defmodule Xandra.Cluster.ControlConnection do
       {%{host: host}, data} ->
         data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :removed))
         send(data.cluster, {:host_removed, host})
-        data
+        {data, _actions = []}
 
       {nil, data} ->
-        data
+        {data, _actions = []}
     end
   end
 
   defp handle_change_event(data, _connected_node, %TopologyChange{effect: "MOVED_NODE"} = event) do
     Logger.warn("Ignored TOPOLOGY_CHANGE event: #{inspect(event)}")
-    data
+    {data, _actions = []}
   end
 
   defp consume_new_data(%__MODULE__{} = data, %ConnectedNode{} = connected_node) do
+    consume_new_data(data, connected_node, [])
+  end
+
+  defp consume_new_data(%__MODULE__{} = data, %ConnectedNode{} = connected_node, actions) do
     case decode_frame(data.buffer) do
       {frame, rest} ->
         {change_event, _warnings} = connected_node.protocol_module.decode_response(frame)
         Logger.debug("Received event: #{inspect(change_event)}")
-        data = handle_change_event(data, connected_node, change_event)
-        consume_new_data(%__MODULE__{data | buffer: rest}, connected_node)
+        {data, new_actions} = handle_change_event(data, connected_node, change_event)
+        consume_new_data(%__MODULE__{data | buffer: rest}, connected_node, actions ++ new_actions)
 
       :error ->
-        data
+        {data, actions}
     end
   end
 
