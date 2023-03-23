@@ -256,28 +256,14 @@ defmodule Xandra.Cluster.ControlConnection do
     {:keep_state, data, actions}
   end
 
-  # This is a hack. We don't have code to encode EVENT frames to test this properly,
-  # so for now we're just cheating.
-  # TODO: make me a good piece of code please!
-  def handle_event(
-        :info,
-        {:__test_event__, %_{} = event},
-        {:connected, connected_node},
-        %__MODULE__{} = data
-      ) do
-    {data, actions} = handle_change_event(data, connected_node, event)
+  # Used only for testing.
+  def handle_event(:cast, {:change_event, %_{} = event}, {:connected, node}, %__MODULE__{} = data) do
+    {data, actions} = handle_change_event(data, node, event)
     {:keep_state, data, actions}
   end
 
-  # This is a hack. We need to figure out a better way to simulate discovering
-  # different peers.
-  # TODO: make me a good piece of code please!
-  def handle_event(
-        :info,
-        {:__test_refreshed_topology__, peers},
-        {:connected, _node},
-        %__MODULE__{} = data
-      ) do
+  # Used only for testing.
+  def handle_event(:cast, {:refresh_topology, peers}, {:connected, _node}, %__MODULE__{} = data) do
     {:keep_state, refresh_topology(data, peers)}
   end
 

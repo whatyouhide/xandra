@@ -166,17 +166,17 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
 
     # No-op: sending a UP event for a node that is already up.
-    send(
+    :gen_statem.cast(
       ctrl_conn,
-      {:__test_event__, %StatusChange{effect: "UP", address: {127, 0, 0, 1}, port: 9042}}
+      {:change_event, %StatusChange{effect: "UP", address: {127, 0, 0, 1}, port: 9042}}
     )
 
     refute_receive {:host_up, _host}, 100
 
     # With StatusChange DOWN it notifies the cluster of the host being down.
-    send(
+    :gen_statem.cast(
       ctrl_conn,
-      {:__test_event__, %StatusChange{effect: "DOWN", address: {127, 0, 0, 1}, port: 9042}}
+      {:change_event, %StatusChange{effect: "DOWN", address: {127, 0, 0, 1}, port: 9042}}
     )
 
     assert_receive {^mirror_ref, {:host_down, %Host{} = host}}
@@ -185,17 +185,17 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert host.data_center == "datacenter1"
 
     # Getting the same DOWN event once more doesn't do anything, the host is already down.
-    send(
+    :gen_statem.cast(
       ctrl_conn,
-      {:__test_event__, %StatusChange{effect: "DOWN", address: {127, 0, 0, 1}, port: 9042}}
+      {:change_event, %StatusChange{effect: "DOWN", address: {127, 0, 0, 1}, port: 9042}}
     )
 
     refute_receive {:host_down, _host}, 100
 
     # Getting StatusChange UP for the node brings it back up and notifies the cluster.
-    send(
+    :gen_statem.cast(
       ctrl_conn,
-      {:__test_event__, %StatusChange{effect: "UP", address: {127, 0, 0, 1}, port: 9042}}
+      {:change_event, %StatusChange{effect: "UP", address: {127, 0, 0, 1}, port: 9042}}
     )
 
     assert_receive {^mirror_ref, {:host_up, %Host{} = host}}
@@ -220,9 +220,9 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {^mirror_ref, {:host_added, _peer}}
     assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
 
-    send(
+    :gen_statem.cast(
       ctrl_conn,
-      {:__test_event__, %TopologyChange{effect: "NEW_NODE", address: {127, 0, 0, 2}}}
+      {:change_event, %TopologyChange{effect: "NEW_NODE", address: {127, 0, 0, 2}}}
     )
 
     flunk("TODO: we need to run this in the cluster")
@@ -243,9 +243,9 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {^mirror_ref, {:host_added, _peer}}
     assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
 
-    send(
+    :gen_statem.cast(
       ctrl_conn,
-      {:__test_event__,
+      {:change_event,
        %TopologyChange{effect: "REMOVED_NODE", address: {127, 0, 0, 1}, port: 9042}}
     )
 
@@ -273,9 +273,9 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     log =
       capture_log(fn ->
-        send(
+        :gen_statem.cast(
           ctrl_conn,
-          {:__test_event__, %TopologyChange{effect: "MOVED_NODE", address: {127, 0, 0, 2}}}
+          {:change_event, %TopologyChange{effect: "MOVED_NODE", address: {127, 0, 0, 2}}}
         )
 
         Process.sleep(100)
@@ -303,7 +303,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       %Host{address: {192, 168, 1, 2}, port: 9042, data_center: "datacenter2"}
     ]
 
-    send(ctrl_conn, {:__test_refreshed_topology__, new_peers})
+    :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
 
     assert_receive {^mirror_ref, {:host_removed, %Host{address: {127, 0, 0, 1}}}}
     assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 1}}}}
@@ -314,7 +314,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       %Host{address: {192, 168, 1, 3}, port: 9042, data_center: "datacenter3"}
     ]
 
-    send(ctrl_conn, {:__test_refreshed_topology__, new_peers})
+    :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
 
     assert_receive {^mirror_ref, {:host_removed, %Host{address: {192, 168, 1, 1}}}}
     assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 3}}}}
@@ -325,7 +325,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       %Host{address: {192, 168, 1, 3}, port: 9042, data_center: "datacenter3"}
     ]
 
-    send(ctrl_conn, {:__test_refreshed_topology__, new_peers})
+    :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
 
     refute_receive {^mirror_ref, {_, %Host{address: {192, 168, 1, 1}}}}, 100
     refute_receive {^mirror_ref, {_, %Host{address: {192, 168, 1, 2}}}}, 100
