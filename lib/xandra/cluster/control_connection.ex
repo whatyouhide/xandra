@@ -320,44 +320,46 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  defp refresh_topology(%__MODULE__{} = data, peers) do
-    # "Reset" the load-balancing policy.
-    # TODO: only do this if the list of peers has changed.
-    data = update_in(data.lbp, fn {lb_module, _} -> {lb_module, lb_module.init(peers)} end)
+  defp refresh_topology(%__MODULE__{peers: old_peers} = data, new_peers) do
+    old_peers_set = old_peers |> Map.keys() |> MapSet.new()
+    new_peers_set = MapSet.new(new_peers, &Host.to_peername/1)
 
-    # Diff the current world with the new list of peers, and send the
-    # appropriate events to the cluster.
-    {new_peers, hosts_to_remove} =
-      Enum.reduce(peers, {data.peers, _hosts_to_remove = data.peers}, fn %Host{} = host,
-                                                                         {old_peers,
-                                                                          hosts_to_remove} ->
-        hosts_to_remove = Map.delete(hosts_to_remove, {host.address, host.port})
+    # Notify cluster of all the peers that got removed.
+    Enum.each(MapSet.difference(old_peers_set, new_peers_set), fn peername ->
+      %{host: %Host{} = host} = Map.fetch!(old_peers, peername)
+      send(data.cluster, {:host_removed, host})
+    end)
 
-        updated_peers =
-          case Map.fetch(old_peers, {host.address, host.port}) do
-            {:ok, %{status: :up}} ->
-              old_peers
+    final_peers =
+      Enum.reduce(new_peers, %{}, fn %Host{} = host, acc ->
+        peername = Host.to_peername(host)
 
-            {:ok, %{status: :down}} ->
-              send(data.cluster, {:host_up, host})
-              Map.replace!(old_peers, {host.address, host.port}, %{host: host, status: :up})
+        case Map.fetch(old_peers, peername) do
+          {:ok, %{status: :up}} ->
+            Map.put(acc, peername, %{host: host, status: :up})
 
-            :error ->
-              send(data.cluster, {:host_added, host})
-              Map.put(old_peers, {host.address, host.port}, %{host: host, status: :up})
-          end
+          {:ok, %{status: :down}} ->
+            send(data.cluster, {:host_up, host})
+            Map.put(acc, peername, %{host: host, status: :up})
 
-        {updated_peers, hosts_to_remove}
+          :error ->
+            send(data.cluster, {:host_added, host})
+            Map.put(acc, peername, %{host: host, status: :up})
+        end
       end)
 
-    new_peers =
-      Enum.reduce(hosts_to_remove, new_peers, fn {{address, port}, %{host: %Host{} = host}},
-                                                 new_peers ->
-        send(data.cluster, {:host_removed, host})
-        Map.delete(new_peers, {address, port})
-      end)
+    data =
+      if final_peers != old_peers do
+        # "Reset" the load-balancing policy.
+        update_in(data.lbp, fn {lb_module, _} ->
+          hosts = Enum.map(final_peers, fn {_peername, %{host: host}} -> host end)
+          {lb_module, lb_module.init(hosts)}
+        end)
+      else
+        data
+      end
 
-    %__MODULE__{data | peers: new_peers}
+    %__MODULE__{data | peers: final_peers}
   end
 
   defp startup_connection(%__MODULE__{} = data, %ConnectedNode{} = node, supported_options) do
