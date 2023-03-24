@@ -28,10 +28,7 @@ defmodule Xandra.Connection do
   @impl true
   def connect(options) when is_list(options) do
     {address, port} = Keyword.fetch!(options, :node)
-    prepared_cache = Keyword.fetch!(options, :prepared_cache)
     compressor = Keyword.get(options, :compressor)
-    default_consistency = Keyword.fetch!(options, :default_consistency)
-    atom_keys? = Keyword.get(options, :atom_keys, false)
     enforced_protocol = Keyword.get(options, :protocol_version)
     transport = if(options[:encryption], do: :ssl, else: :gen_tcp)
 
@@ -49,10 +46,10 @@ defmodule Xandra.Connection do
           transport: transport,
           transport_options: transport_options,
           socket: socket,
-          prepared_cache: prepared_cache,
+          prepared_cache: Keyword.fetch!(options, :prepared_cache),
           compressor: compressor,
-          default_consistency: default_consistency,
-          atom_keys?: atom_keys?,
+          default_consistency: Keyword.fetch!(options, :default_consistency),
+          atom_keys?: Keyword.fetch!(options, :atom_keys),
           current_keyspace: nil,
           address: address,
           port: port
