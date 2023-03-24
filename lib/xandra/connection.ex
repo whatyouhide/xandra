@@ -73,6 +73,13 @@ defmodule Xandra.Connection do
                  compressor,
                  options
                ) do
+          :telemetry.execute([:xandra, :connect], %{}, %{
+            connection: self(),
+            connection_name: :xandra,
+            host: address,
+            port: port
+          })
+
           {:ok, state}
         else
           {:error, {:unsupported_protocol, protocol_version}} ->
@@ -148,6 +155,7 @@ defmodule Xandra.Connection do
 
   @impl true
   def handle_prepare(%Prepared{} = prepared, options, %__MODULE__{socket: socket} = state) do
+    IO.inspect(prepared, label: :prepared)
     compressor = get_right_compressor(state, options[:compressor])
 
     prepared = %Prepared{
@@ -164,9 +172,11 @@ defmodule Xandra.Connection do
 
     case prepared_cache_lookup(state, prepared, force?) do
       {:ok, prepared} ->
+        :telemetry.execute([:xandra, :prepared_cache, :hit], %{query: prepared})
         {:ok, prepared, state}
 
       :error ->
+        :telemetry.execute([:xandra, :prepared_cache, :miss], %{query: prepared})
         frame_options =
           options
           |> Keyword.take([:tracing, :custom_payload])
@@ -274,7 +284,19 @@ defmodule Xandra.Connection do
   end
 
   @impl true
-  def disconnect(_exception, %__MODULE__{transport: transport, socket: socket}) do
+  def disconnect(_exception, %__MODULE__{
+        transport: transport,
+        socket: socket,
+        address: address,
+        port: port
+      }) do
+    :telemetry.execute([:xandra, :disconnection], %{}, %{
+      connection: self(),
+      connection_name: :xandra,
+      host: address,
+      port: port
+    })
+
     :ok = transport.close(socket)
   end
 
