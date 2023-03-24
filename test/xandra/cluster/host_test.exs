@@ -3,6 +3,8 @@ defmodule Xandra.Cluster.HostTest do
 
   alias Xandra.Cluster.Host
 
+  doctest Host
+
   describe "format_address/1" do
     test "formats an IPv4 address" do
       host = %Host{address: {127, 0, 0, 1}, port: 9042}

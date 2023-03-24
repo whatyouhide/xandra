@@ -38,6 +38,13 @@ defmodule Xandra.Cluster.Host do
 
   @doc """
   Formats a host's address and port as a string.
+
+  ## Examples
+
+      iex> host = %Xandra.Cluster.Host{address: {127, 0, 0, 1}, port: 9042}
+      iex> Xandra.Cluster.Host.format_address(host)
+      "127.0.0.1:9042"
+
   """
   @doc since: "0.15.0"
   @spec format_address(t()) :: String.t()
