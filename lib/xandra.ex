@@ -227,11 +227,25 @@ defmodule Xandra do
     Simple
   }
 
+  @typedoc """
+  A statement (query) to pass to `execute/4` and other functions.
+  """
   @type statement :: String.t()
+
   @type values :: list | map
-  @type error :: Error.t() | ConnectionError.t()
+
+  @typedoc "The result of a query."
   @type result :: Xandra.Void.t() | Page.t() | Xandra.SetKeyspace.t() | Xandra.SchemaChange.t()
-  @type conn :: DBConnection.conn()
+
+  @typedoc "A Xandra connection pool."
+  @opaque conn :: DBConnection.conn()
+
+  @typedoc """
+  An error that can be returned from a query.
+
+  This is either a semantic error returned by Cassandra or a connection error.
+  """
+  @type error :: Error.t() | ConnectionError.t()
 
   @typedoc """
   Custom payload that Xandra can exchange with the server.
@@ -241,6 +255,7 @@ defmodule Xandra do
   """
   @type custom_payload :: %{optional(String.t()) => binary()}
 
+  @typedoc "Xandra-specific options for `start_link/1`."
   @type xandra_start_option ::
           {:nodes, [String.t()]}
           | {:compressor, module}
@@ -251,8 +266,12 @@ defmodule Xandra do
                Enum.reduce(Frame.supported_protocols(), &quote(do: unquote(&1) | unquote(&2)))
              )}
 
+  @typedoc "Options passed to `DBConnection.start_link/2`."
   @type db_connection_start_option :: {atom(), any}
+
   @type start_option :: xandra_start_option | db_connection_start_option
+
+  @typedoc "Options for `start_link/1`."
   @type start_options :: [start_option]
 
   @valid_consistencies [

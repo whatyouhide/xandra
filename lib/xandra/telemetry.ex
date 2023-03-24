@@ -2,9 +2,11 @@ defmodule Xandra.Telemetry do
   @moduledoc """
   Telemetry integration for event tracing, metrics, and logging.
 
-  `Xandra` uses [telemetry](https://github.com/beam-telemetry/telemetry) for reporting
+  Xandra uses [telemetry](https://github.com/beam-telemetry/telemetry) for reporting
   metrics and events. Below we list all the possible events emitted by Xandra, alongside
   their measurements and metadata.
+
+  Xandra emits telemetry events *since v0.15.0*.
 
   ### Warnings
 
@@ -22,4 +24,5 @@ defmodule Xandra.Telemetry do
         `t:Xandra.Prepared.t/0`, or `t:Xandra.Simple.t/0`
 
   """
+  @moduledoc since: "0.15.0"
 end
