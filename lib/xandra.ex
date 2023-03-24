@@ -255,13 +255,22 @@ defmodule Xandra do
   @type start_option :: xandra_start_option | db_connection_start_option
   @type start_options :: [start_option]
 
+  @valid_consistencies [
+    :one,
+    :two,
+    :three,
+    :serial,
+    :all,
+    :quorum,
+    :local_one,
+    :local_quorum,
+    :each_quorum,
+    :local_serial
+  ]
+
   # Raw NimbleOptions schema before parsing. Broken out to work around
   # `mix format`.
   @start_link_opts_schema [
-    address: [
-      type: {:custom, Xandra.OptionsValidators, :validate_ip, []},
-      doc: false
-    ],
     atom_keys: [
       type: :boolean,
       default: false,
@@ -284,25 +293,12 @@ defmodule Xandra do
       type: {:custom, Xandra.OptionsValidators, :validate_module, ["compressor"]},
       doc: """
       The compressor module to use for compressing and decompressing data.
-      See the "Compression" section in the module documentation. By default
+      See the ["Compression" section](#module-compression) in the module documentation. By default
       this option is not present, which means no compression is used.
       """
     ],
     default_consistency: [
-      type:
-        {:in,
-         [
-           :one,
-           :two,
-           :three,
-           :serial,
-           :all,
-           :quorum,
-           :local_one,
-           :local_quorum,
-           :each_quorum,
-           :local_serial
-         ]},
+      type: {:in, @valid_consistencies},
       default: :one,
       doc: """
       The default consistency to set for all queries. For a list of values,
@@ -345,10 +341,6 @@ defmodule Xandra do
       The number of connections to start for the pool. The default pool size of `1`
       means that a single connection is started to the given node.
       """
-    ],
-    port: [
-      type: :non_neg_integer,
-      doc: false
     ],
     protocol_version: [
       type: {:in, Frame.supported_protocols()},
@@ -748,45 +740,21 @@ defmodule Xandra do
 
   @execute_opts_schema [
     consistency: [
-      type:
-        {:in,
-         [
-           :one,
-           :two,
-           :three,
-           :any,
-           :quorum,
-           :all,
-           :local_quorum,
-           :each_quorum,
-           :serial,
-           :local_serial,
-           :local_one
-         ]},
+      type: {:in, @valid_consistencies},
       doc: """
       Specifies the consistency level for the given
       query. See the Cassandra documentation for more information on consistency
       levels. If not present, defaults to the value of the `:default_consistency` option
       used when starting the connection (see `start_link/1`).
       The value of this option can be one of:
-        * `:one`
-        * `:two`
-        * `:three`
-        * `:any`
-        * `:quorum`
-        * `:all`
-        * `:local_quorum`
-        * `:each_quorum`
-        * `:serial`
-        * `:local_serial`
-        * `:local_one`
+      #{Enum.map_join(@valid_consistencies, "\n", &"  * `#{inspect(&1)}`")}
       """
     ],
     page_size: [
       type: :non_neg_integer,
       default: 10_000,
       doc: """
-      The size of a page of results. If `query` returns
+      The size of a page of results. If `query` returns a
       `Xandra.Page` struct, that struct will contain at most `:page_size` rows in it.
       """
     ],
