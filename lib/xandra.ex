@@ -238,7 +238,7 @@ defmodule Xandra do
   @type result :: Xandra.Void.t() | Page.t() | Xandra.SetKeyspace.t() | Xandra.SchemaChange.t()
 
   @typedoc "A Xandra connection pool."
-  @opaque conn :: DBConnection.conn()
+  @type conn :: DBConnection.conn()
 
   @typedoc """
   An error that can be returned from a query.
