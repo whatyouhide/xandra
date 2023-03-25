@@ -385,6 +385,12 @@ defmodule Xandra do
       then the transport is SSL (see the Erlang `:ssl` module) otherwise it's
       TCP (see the `:gen_tcp` Erlang module).
       """
+    ],
+
+    # Internal, used by Xandra.Cluster.
+    registry: [
+      doc: false,
+      type: :atom
     ]
   ]
 

@@ -22,7 +22,10 @@ defmodule Xandra.Connection do
     :protocol_module,
     :current_keyspace,
     :address,
-    :port
+    :port,
+    :registry,
+    :pool_index,
+    :peername
   ]
 
   @impl true
@@ -42,6 +45,8 @@ defmodule Xandra.Connection do
 
     case transport.connect(address, port, transport_options, @default_timeout) do
       {:ok, socket} ->
+        {:ok, peername} = inet_mod(transport).peername(socket)
+
         state = %__MODULE__{
           transport: transport,
           transport_options: transport_options,
@@ -52,7 +57,10 @@ defmodule Xandra.Connection do
           atom_keys?: Keyword.fetch!(options, :atom_keys),
           current_keyspace: nil,
           address: address,
-          port: port
+          port: port,
+          registry: Keyword.get(options, :registry),
+          pool_index: Keyword.fetch!(options, :pool_index),
+          peername: peername
         }
 
         with {:ok, supported_options, protocol_module} <-
@@ -70,6 +78,7 @@ defmodule Xandra.Connection do
                  compressor,
                  options
                ) do
+          maybe_register_or_put_value(state, :up)
           {:ok, state}
         else
           {:error, {:unsupported_protocol, protocol_version}} ->
@@ -271,7 +280,8 @@ defmodule Xandra.Connection do
   end
 
   @impl true
-  def disconnect(_exception, %__MODULE__{transport: transport, socket: socket}) do
+  def disconnect(_exception, %__MODULE__{transport: transport, socket: socket} = state) do
+    maybe_register_or_put_value(state, :down)
     :ok = transport.close(socket)
   end
 
@@ -347,6 +357,23 @@ defmodule Xandra.Connection do
     end
   end
 
+  defp maybe_register_or_put_value(%__MODULE__{registry: nil}, _value) do
+    :ok
+  end
+
+  defp maybe_register_or_put_value(%__MODULE__{peername: {address, port}} = state, value)
+       when is_tuple(address) do
+    key = {{address, port}, state.pool_index}
+
+    case Registry.register(state.registry, key, value) do
+      {:ok, _owner} ->
+        :ok
+
+      {:error, {:already_registered, _}} ->
+        {_new, _old} = Registry.update_value(state.registry, key, fn _ -> value end)
+    end
+  end
+
   defp get_right_compressor(%__MODULE__{} = state, provided) do
     case Xandra.Protocol.frame_protocol_format(state.protocol_module) do
       :v5_or_more -> assert_valid_compressor(state.compressor, provided) || state.compressor
@@ -387,4 +414,7 @@ defmodule Xandra.Connection do
               "module (which uses the #{inspect(initial_algorithm)} algorithm)"
     end
   end
+
+  defp inet_mod(:gen_tcp), do: :inet
+  defp inet_mod(:ssl), do: :ssl
 end

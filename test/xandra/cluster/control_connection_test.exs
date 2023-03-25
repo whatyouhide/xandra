@@ -40,20 +40,26 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
   @protocol_version XandraTest.IntegrationCase.protocol_version()
 
-  setup do
+  setup context do
     parent = self()
     mirror_ref = make_ref()
     mirror = spawn_link(fn -> mirror(parent, mirror_ref) end)
-    %{mirror_ref: mirror_ref, mirror: mirror}
+
+    registry = :"#{context.test} registry"
+    start_link_supervised!({Registry, keys: :unique, name: registry})
+
+    %{mirror_ref: mirror_ref, mirror: mirror, registry: registry}
   end
 
-  test "reporting data upon successful connection", %{mirror_ref: mirror_ref, mirror: mirror} do
+  test "reporting data upon successful connection",
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
     opts = [
       cluster: mirror,
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
+      registry: registry,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -62,13 +68,15 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert %Host{address: {127, 0, 0, 1}, data_center: "datacenter1", rack: "rack1"} = local_peer
   end
 
-  test "trying all the nodes in the contact points", %{mirror_ref: mirror_ref, mirror: mirror} do
+  test "trying all the nodes in the contact points",
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
     opts = [
       cluster: mirror,
       contact_points: ["bad-domain", "127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
+      registry: registry,
       load_balancing_module: ListLBP
     ]
 
@@ -83,13 +91,15 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert log =~ "peer=bad-domain:9042"
   end
 
-  test "when all contact points are unavailable", %{mirror_ref: mirror_ref, mirror: mirror} do
+  test "when all contact points are unavailable",
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
     opts = [
       cluster: mirror,
       contact_points: ["bad-domain", "other-bad-domain"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
+      registry: registry,
       load_balancing_module: ListLBP
     ]
 
@@ -105,13 +115,15 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert log =~ "peer=other-bad-domain:9042"
   end
 
-  test "reconnecting after the node closes its socket", %{mirror_ref: mirror_ref, mirror: mirror} do
+  test "reconnecting after the node closes its socket",
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
     opts = [
       cluster: mirror,
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
+      registry: registry,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -128,13 +140,14 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "reconnecting after the node's socket errors out",
-       %{mirror_ref: mirror_ref, mirror: mirror} do
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
     opts = [
       cluster: mirror,
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
+      registry: registry,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -150,13 +163,15 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     end)
   end
 
-  test "deals with StatusChange for known nodes", %{mirror_ref: mirror_ref, mirror: mirror} do
+  test "deals with StatusChange for known nodes",
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
     opts = [
       cluster: mirror,
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
+      registry: registry,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -205,13 +220,15 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   @tag :skip
-  test "deals with TopologyChange NEW_NODE events", %{mirror_ref: mirror_ref, mirror: mirror} do
+  test "deals with TopologyChange NEW_NODE events",
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
     opts = [
       cluster: mirror,
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
+      registry: registry,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -228,13 +245,15 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     flunk("TODO: we need to run this in the cluster")
   end
 
-  test "deals with TopologyChange REMOVED_NODE events", %{mirror_ref: mirror_ref, mirror: mirror} do
+  test "deals with TopologyChange REMOVED_NODE events",
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
     opts = [
       cluster: mirror,
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
+      registry: registry,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -256,13 +275,14 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "ignores TopologyChange events of type MOVED_NODE",
-       %{mirror_ref: mirror_ref, mirror: mirror} do
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
     opts = [
       cluster: mirror,
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
+      registry: registry,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -285,13 +305,14 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "sends the right events when refreshing the cluster topology",
-       %{mirror_ref: mirror_ref, mirror: mirror} do
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
     opts = [
       cluster: mirror,
       contact_points: ["127.0.0.1"],
       connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
+      registry: registry,
       load_balancing_module: LoadBalancingPolicy.Random
     ]
 
@@ -330,6 +351,53 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     refute_receive {^mirror_ref, {_, %Host{address: {192, 168, 1, 1}}}}, 100
     refute_receive {^mirror_ref, {_, %Host{address: {192, 168, 1, 2}}}}, 100
     refute_receive {^mirror_ref, {_, %Host{address: {192, 168, 1, 3}}}}, 100
+  end
+
+  test "sends :host_down if all the connections for a node report as disconnected",
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
+    parent = self()
+
+    [task1_pid, task2_pid] =
+      for index <- 1..2 do
+        {:ok, task_pid} =
+          Task.start_link(fn ->
+            key = {{{127, 0, 0, 1}, 9042}, index}
+            {:ok, _} = Registry.register(registry, key, :up)
+            send(parent, {:ready, self()})
+
+            receive do
+              {:disconnect, ctrl_conn} ->
+                {_, _} = Registry.update_value(registry, key, fn _ -> :down end)
+                send(ctrl_conn, {:disconnected, self()})
+            end
+
+            Process.sleep(:infinity)
+          end)
+
+        task_pid
+      end
+
+    assert_receive {:ready, ^task1_pid}
+    assert_receive {:ready, ^task2_pid}
+
+    opts = [
+      cluster: mirror,
+      contact_points: ["127.0.0.1"],
+      connection_options: [protocol_version: @protocol_version],
+      autodiscovered_nodes_port: 9042,
+      refresh_topology_interval: 60_000,
+      registry: registry,
+      load_balancing_module: LoadBalancingPolicy.Random
+    ]
+
+    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+    assert_receive {^mirror_ref, {:host_added, %Host{address: {127, 0, 0, 1}}}}
+
+    send(task1_pid, {:disconnect, ctrl_conn})
+    refute_receive {^mirror_ref, {:host_down, %Host{address: {127, 0, 0, 1}}}}, 100
+
+    send(task2_pid, {:disconnect, ctrl_conn})
+    assert_receive {^mirror_ref, {:host_down, %Host{address: {127, 0, 0, 1}}}}
   end
 
   defp mirror(parent, ref) do

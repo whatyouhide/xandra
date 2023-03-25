@@ -115,6 +115,9 @@ defmodule Xandra.Cluster do
     :load_balancing_module,
     :load_balancing_state,
 
+    # The registry where connections are registered.
+    :registry,
+
     # A map of peername to pool PID pairs.
     pools: %{},
 
@@ -433,6 +436,11 @@ defmodule Xandra.Cluster do
   def init({cluster_opts, pool_opts}) do
     {nodes, cluster_opts} = Keyword.pop!(cluster_opts, :nodes)
 
+    registry_name =
+      Module.concat([Xandra.ClusterRegistry, to_string(System.unique_integer([:positive]))])
+
+    {:ok, _} = Registry.start_link(keys: :unique, name: registry_name)
+
     load_balancing_mod =
       case Keyword.fetch!(cluster_opts, :load_balancing) do
         :random -> LoadBalancingPolicy.Random
@@ -446,7 +454,8 @@ defmodule Xandra.Cluster do
       load_balancing_state: load_balancing_mod.init([]),
       autodiscovered_nodes_port: Keyword.fetch!(cluster_opts, :autodiscovered_nodes_port),
       xandra_mod: Keyword.fetch!(cluster_opts, :xandra_module),
-      control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module)
+      control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module),
+      registry: registry_name
     }
 
     # Start supervisor for the pools.
@@ -459,7 +468,8 @@ defmodule Xandra.Cluster do
         connection_options: state.pool_options,
         autodiscovered_nodes_port: state.autodiscovered_nodes_port,
         load_balancing_module: load_balancing_mod,
-        refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval)
+        refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval),
+        registry: registry_name
       )
 
     state = %__MODULE__{state | pool_supervisor: pool_sup, control_connection: control_conn}
@@ -533,7 +543,13 @@ defmodule Xandra.Cluster do
   # This function is idempotent: you can call it as many times as you want with the same
   # peer, and it'll only start it once.
   defp start_pool(state, %Host{} = host) do
-    conn_options = Keyword.put(state.pool_options, :nodes, [Host.format_address(host)])
+    conn_options =
+      Keyword.merge(state.pool_options,
+        nodes: [Host.format_address(host)],
+        registry: state.registry,
+        connection_listeners: [state.control_connection]
+      )
+
     peername = Host.to_peername(host)
 
     pool_spec =
