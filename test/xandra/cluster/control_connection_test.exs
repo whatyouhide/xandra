@@ -46,7 +46,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     mirror = spawn_link(fn -> mirror(parent, mirror_ref) end)
 
     registry = :"#{context.test} registry"
-    start_link_supervised!({Registry, keys: :unique, name: registry})
+    TestHelper.start_link_supervised!({Registry, keys: :unique, name: registry})
 
     %{mirror_ref: mirror_ref, mirror: mirror, registry: registry}
   end
