@@ -4,6 +4,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   import ExUnit.CaptureLog
 
   alias Xandra.TestHelper
+  alias Xandra.TestHelper.ListLBP
 
   alias Xandra.Cluster.{
     ControlConnection,
@@ -12,31 +13,6 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     StatusChange,
     TopologyChange
   }
-
-  # A load-balancing policy that just always returns the hosts in the order they were
-  # initially given. Great for deterministic tests!
-  # TODO: Replace this with any round-robin policy once we have one.
-  defmodule ListLBP do
-    @behaviour Xandra.Cluster.LoadBalancingPolicy
-
-    @impl true
-    def init(hosts), do: hosts
-
-    @impl true
-    def host_added(hosts, host), do: hosts ++ [host]
-
-    @impl true
-    def host_removed(hosts, host), do: Enum.reject(hosts, &(&1 == host))
-
-    @impl true
-    def host_up(hosts, _host), do: hosts
-
-    @impl true
-    def host_down(hosts, _host), do: hosts
-
-    @impl true
-    def hosts_plan(hosts), do: {hosts, hosts}
-  end
 
   @protocol_version XandraTest.IntegrationCase.protocol_version()
 
@@ -60,7 +36,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing_module: LoadBalancingPolicy.Random
+      load_balancing: {LoadBalancingPolicy.Random, []}
     ]
 
     TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -77,7 +53,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing_module: ListLBP
+      load_balancing: {ListLBP, []}
     ]
 
     log =
@@ -100,7 +76,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing_module: ListLBP
+      load_balancing: {ListLBP, []}
     ]
 
     log =
@@ -124,7 +100,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing_module: LoadBalancingPolicy.Random
+      load_balancing: {LoadBalancingPolicy.Random, []}
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -148,7 +124,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing_module: LoadBalancingPolicy.Random
+      load_balancing: {LoadBalancingPolicy.Random, []}
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -172,7 +148,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing_module: LoadBalancingPolicy.Random
+      load_balancing: {LoadBalancingPolicy.Random, []}
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -229,7 +205,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing_module: LoadBalancingPolicy.Random
+      load_balancing: {LoadBalancingPolicy.Random, []}
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -254,7 +230,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing_module: LoadBalancingPolicy.Random
+      load_balancing: {LoadBalancingPolicy.Random, []}
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -283,7 +259,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing_module: LoadBalancingPolicy.Random
+      load_balancing: {LoadBalancingPolicy.Random, []}
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -313,7 +289,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing_module: LoadBalancingPolicy.Random
+      load_balancing: {LoadBalancingPolicy.Random, []}
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
@@ -387,7 +363,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing_module: LoadBalancingPolicy.Random
+      load_balancing: {LoadBalancingPolicy.Random, []}
     ]
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
