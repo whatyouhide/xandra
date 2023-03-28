@@ -22,7 +22,8 @@ defmodule Xandra.Cluster.ControlConnection do
     connection_options: [type: :keyword_list, required: true],
     autodiscovered_nodes_port: [type: :non_neg_integer, required: true],
     load_balancing_module: [type: :atom, required: true],
-    refresh_topology_interval: [type: :timeout, required: true]
+    refresh_topology_interval: [type: :timeout, required: true],
+    registry: [type: :atom, required: true]
   ]
 
   defstruct [
@@ -47,6 +48,9 @@ defmodule Xandra.Cluster.ControlConnection do
 
     # The load balancing policy, as a {mod, state} tuple.
     :lbp,
+
+    # The registry to use to register connections.
+    :registry,
 
     # A map of {ip, port} => %{host: %Host{}, status: atom}.
     peers: %{},
@@ -93,7 +97,8 @@ defmodule Xandra.Cluster.ControlConnection do
       lbp: {lb_module, lb_module.init([])},
       options: connection_options,
       transport: transport,
-      transport_options: Keyword.merge(transport_options, @forced_transport_options)
+      transport_options: Keyword.merge(transport_options, @forced_transport_options),
+      registry: Keyword.fetch!(options, :registry)
     }
 
     :gen_statem.start_link(__MODULE__, data, [])
@@ -163,6 +168,12 @@ defmodule Xandra.Cluster.ControlConnection do
   def handle_event(:info, msg, :disconnected, %__MODULE__{})
       when is_tuple(msg) and elem(msg, 0) in [:tcp_error, :ssl_error, :tcp_closed, :ssl_closed] do
     :keep_state_and_data
+  end
+
+  # Postpone these messages for when the connection is connected.
+  def handle_event(:info, {event, pid}, :disconnected, %__MODULE__{} = _data)
+      when event in [:connected, :disconnected] and is_pid(pid) do
+    {:keep_state_and_data, :postpone}
   end
 
   # Trigger the reconnect event once the timer expires.
@@ -254,6 +265,37 @@ defmodule Xandra.Cluster.ControlConnection do
     data = update_in(data.buffer, &(&1 <> bytes))
     {data, actions} = consume_new_data(data, connected_node)
     {:keep_state, data, actions}
+  end
+
+  # A DBConnection single connection process went up. We don't need to do anything
+  def handle_event(:info, {:connected, pid}, {:connected, _node}, %__MODULE__{})
+      when is_pid(pid) do
+    :keep_state_and_data
+  end
+
+  # A DBConnection single connection process disconnected. We check the registry to see if there
+  # are any "up" connections to the same node. If there aren't, we mark the node as down.
+  # Eventually, the control connection is going to refresh the cluster topology and we'll
+  # know for sure whether the node is permanently down or not. If it isn't and it shows up
+  # in the cluster topology, we'll add it again and the cycle continues.
+  def handle_event(:info, {:disconnected, pid}, {:connected, _node}, %__MODULE__{} = data)
+      when is_pid(pid) do
+    [{{address, port}, _pool_index}] = Registry.keys(data.registry, pid)
+    host_info = Map.fetch!(data.peers, {address, port})
+
+    # This match spec was built in IEx using:
+    # :ets.fun2ms(fn {{addr_and_port, _}, _, val} when addr_and_port == {{127, 0, 0, 1}, 9042} -> val end)
+    spec = [{{{:"$1", :_}, :_, :"$2"}, [{:==, :"$1", {{{address}, port}}}], [:"$2"]}]
+    statuses = Registry.select(data.registry, spec)
+
+    if host_info.status == :up and Enum.all?(statuses, &(&1 == :down)) do
+      data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host_info.host, :down))
+      data = put_in(data.peers[{address, port}].status, :down)
+      send(data.cluster, {:host_down, host_info.host})
+      {:keep_state, data}
+    else
+      :keep_state_and_data
+    end
   end
 
   # Used only for testing.
