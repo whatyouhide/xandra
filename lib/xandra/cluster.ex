@@ -118,6 +118,9 @@ defmodule Xandra.Cluster do
     # The registry where connections are registered.
     :registry,
 
+    # The number of target pools.
+    :target_pools,
+
     # A map of peername to pool PID pairs.
     pools: %{},
 
@@ -128,12 +131,13 @@ defmodule Xandra.Cluster do
 
   @start_link_opts_schema [
     load_balancing: [
-      type: {:in, [:priority, :random]},
+      type: {:or, [{:in, [:priority, :random]}, :mod_arg]},
       default: :random,
       doc: """
       Load balancing "strategy". Either `:random` or `:priority`. See the "Load balancing
       strategies" section in the module documentation. If `:autodiscovery` is `true`,
       the only supported strategy is `:random`.
+      TODO: fix docs here
       """
     ],
     nodes: [
@@ -152,14 +156,19 @@ defmodule Xandra.Cluster do
     ],
     autodiscovery: [
       type: :boolean,
+      doc: """
+      Whether to enable autodiscovery. Since v0.15.0, this option is deprecated and
+      autodiscovery is always enabled.
+      """,
       deprecated: """
-      :autodiscovery is deprecated since 0.15.0 and now always enabled due to internal changes
+      :autodiscovery is deprecated since v0.15.0 and now always enabled due to internal changes
       to Xandra.Cluster.
       """
     ],
     autodiscovered_nodes_port: [
       type: {:in, 0..65535},
       default: @default_port,
+      # TODO: use type_doc: "`t::inet.port_number/0`" when we depend on nimble_options 1.0.
       doc: """
       The port to use when connecting to autodiscovered nodes. Cassandra does not advertise
       the port of nodes when discovering them, so you'll need to specify one explicitly.
@@ -174,6 +183,17 @@ defmodule Xandra.Cluster do
       connection to discover peers. When the connection refreshes the topology, it will
       also start and stop pools for new and removed nodes, effectively "syncing" with
       the cluster. *Available since v0.15.0*.
+      """
+    ],
+    target_pools: [
+      type: :pos_integer,
+      default: 2,
+      doc: """
+      The number of nodes to start pools to. Each pool will use the `:pool_size` option
+      (see `Xandra.start_link/1`) to determine how many single connections to open to that
+      node. This number is a *target* number, which means that sometimes there might not
+      be enough nodes to start this many pools. Xandra won't ever start more than
+      `:target_pools` pools. *Available since v0.15.0*.
       """
     ],
     name: [
@@ -201,6 +221,7 @@ defmodule Xandra.Cluster do
 
   #{NimbleOptions.docs(@start_link_opts_schema)}
 
+  # TODO: Fix below
   > #### Control connections {: .neutral}
   >
   > A `Xandra.Cluster` starts **one additional "control connection"** for each node.
@@ -441,20 +462,21 @@ defmodule Xandra.Cluster do
 
     {:ok, _} = Registry.start_link(keys: :unique, name: registry_name)
 
-    load_balancing_mod =
+    {lb_mod, lb_opts} =
       case Keyword.fetch!(cluster_opts, :load_balancing) do
-        :random -> LoadBalancingPolicy.Random
+        :random -> {LoadBalancingPolicy.Random, []}
         :priority -> raise "not implemented yet"
-        module when is_atom(module) -> module
+        {mod, opts} -> {mod, opts}
       end
 
     state = %__MODULE__{
       pool_options: pool_opts,
-      load_balancing_module: load_balancing_mod,
-      load_balancing_state: load_balancing_mod.init([]),
+      load_balancing_module: lb_mod,
+      load_balancing_state: lb_mod.init(lb_opts),
       autodiscovered_nodes_port: Keyword.fetch!(cluster_opts, :autodiscovered_nodes_port),
       xandra_mod: Keyword.fetch!(cluster_opts, :xandra_module),
       control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module),
+      target_pools: Keyword.fetch!(cluster_opts, :target_pools),
       registry: registry_name
     }
 
@@ -467,7 +489,7 @@ defmodule Xandra.Cluster do
         contact_points: nodes,
         connection_options: state.pool_options,
         autodiscovered_nodes_port: state.autodiscovered_nodes_port,
-        load_balancing_module: load_balancing_mod,
+        load_balancing: {lb_mod, lb_opts},
         refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval),
         registry: registry_name
       )
@@ -478,20 +500,18 @@ defmodule Xandra.Cluster do
 
   @impl true
   def handle_call(:checkout, _from, %__MODULE__{} = state) do
-    case state do
-      %__MODULE__{pools: pools} when map_size(pools) == 0 ->
-        {:reply, {:error, :empty}, state}
+    {hosts_plan, state} =
+      get_and_update_in(state.load_balancing_state, fn lb_state ->
+        state.load_balancing_module.hosts_plan(lb_state)
+      end)
 
-      %__MODULE__{} ->
-        {hosts_plan, state} =
-          get_and_update_in(state.load_balancing_state, fn lb_state ->
-            state.load_balancing_module.hosts_plan(lb_state)
-          end)
+    # Find the first host in the plan for which we have a pool.
+    reply =
+      hosts_plan
+      |> Stream.map(fn %Host{} = host -> Map.fetch(state.pools, Host.to_peername(host)) end)
+      |> Enum.find(_default = {:error, :empty}, &match?({:ok, _}, &1))
 
-        %Host{address: ip, port: port} = Enum.at(hosts_plan, 0)
-        pool = Map.fetch!(state.pools, {ip, port})
-        {:reply, {:ok, pool}, state}
-    end
+    {:reply, reply, state}
   end
 
   @impl true
@@ -499,10 +519,8 @@ defmodule Xandra.Cluster do
 
   def handle_info({:host_up, %Host{} = host}, %__MODULE__{} = state) do
     Logger.debug("Host marked as UP: #{Host.format_address(host)}")
-
     state = update_in(state.load_balancing_state, &state.load_balancing_module.host_up(&1, host))
-
-    state = start_pool(state, host)
+    state = maybe_start_pools(state)
     {:noreply, state}
   end
 
@@ -513,6 +531,7 @@ defmodule Xandra.Cluster do
       update_in(state.load_balancing_state, &state.load_balancing_module.host_down(&1, host))
 
     state = stop_pool(state, host)
+    state = maybe_start_pools(state)
     {:noreply, state}
   end
 
@@ -522,19 +541,23 @@ defmodule Xandra.Cluster do
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_added(&1, host))
 
-    state = start_pool(state, host)
+    state = maybe_start_pools(state)
     {:noreply, state}
   end
 
   def handle_info({:host_removed, %Host{} = host}, %__MODULE__{} = state) do
     Logger.debug("Host removed from the cluster: #{Host.format_address(host)}")
-    _ = Supervisor.terminate_child(state.pool_supervisor, {host.address, host.port})
+    state = stop_pool(state, host)
+
+    # Also delete the child from the supervisor altogether.
     _ = Supervisor.delete_child(state.pool_supervisor, {host.address, host.port})
 
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_removed(&1, host))
 
     state = update_in(state.pools, &Map.delete(&1, {host.address, host.port}))
+
+    state = maybe_start_pools(state)
     {:noreply, state}
   end
 
@@ -584,5 +607,34 @@ defmodule Xandra.Cluster do
   defp stop_pool(state, %Host{} = host) do
     _ = Supervisor.terminate_child(state.pool_supervisor, {host.address, host.port})
     update_in(state.pools, &Map.delete(&1, {host.address, host.port}))
+  end
+
+  defp maybe_start_pools(%__MODULE__{target_pools: target, pools: pools} = state)
+       when map_size(pools) == target do
+    state
+  end
+
+  defp maybe_start_pools(%__MODULE__{target_pools: target, pools: pools} = state)
+       when map_size(pools) < target do
+    {hosts_plan, state} =
+      get_and_update_in(state.load_balancing_state, fn lb_state ->
+        state.load_balancing_module.hosts_plan(lb_state)
+      end)
+
+    Enum.reduce_while(hosts_plan, state, fn %Host{} = host, state ->
+      case Map.fetch(pools, Host.to_peername(host)) do
+        {:ok, _pool} ->
+          {:cont, state}
+
+        :error ->
+          state = start_pool(state, host)
+
+          if map_size(state.pools) == target do
+            {:halt, state}
+          else
+            {:cont, state}
+          end
+      end
+    end)
   end
 end

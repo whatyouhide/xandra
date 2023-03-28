@@ -21,7 +21,7 @@ defmodule Xandra.Cluster.ControlConnection do
     contact_points: [type: :any, required: true],
     connection_options: [type: :keyword_list, required: true],
     autodiscovered_nodes_port: [type: :non_neg_integer, required: true],
-    load_balancing_module: [type: :atom, required: true],
+    load_balancing: [type: :mod_arg, required: true],
     refresh_topology_interval: [type: :timeout, required: true],
     registry: [type: :atom, required: true]
   ]
@@ -46,8 +46,9 @@ defmodule Xandra.Cluster.ControlConnection do
     # The interval at which to refresh the cluster topology.
     :refresh_topology_interval,
 
-    # The load balancing policy, as a {mod, state} tuple.
+    # The load balancing policy, as a {mod, state} tuple, and the options.
     :lbp,
+    :lb_opts,
 
     # The registry to use to register connections.
     :registry,
@@ -87,14 +88,15 @@ defmodule Xandra.Cluster.ControlConnection do
       |> Keyword.fetch!(:contact_points)
       |> contact_points_to_hosts()
 
-    lb_module = Keyword.fetch!(options, :load_balancing_module)
+    {lb_module, lb_opts} = Keyword.fetch!(options, :load_balancing)
 
     data = %__MODULE__{
       cluster: Keyword.fetch!(options, :cluster),
       contact_points: contact_points,
       autodiscovered_nodes_port: Keyword.fetch!(options, :autodiscovered_nodes_port),
       refresh_topology_interval: Keyword.fetch!(options, :refresh_topology_interval),
-      lbp: {lb_module, lb_module.init([])},
+      lbp: {lb_module, lb_module.init(lb_opts)},
+      lb_opts: lb_opts,
       options: connection_options,
       transport: transport,
       transport_options: Keyword.merge(transport_options, @forced_transport_options),
@@ -406,11 +408,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
     data =
       if final_peers != old_peers do
-        # "Reset" the load-balancing policy.
-        update_in(data.lbp, fn {lb_module, _} ->
-          hosts = Enum.map(final_peers, fn {_peername, %{host: host}} -> host end)
-          {lb_module, lb_module.init(hosts)}
-        end)
+        reset_lbp(data, Enum.map(final_peers, fn {_peername, %{host: host}} -> host end))
       else
         data
       end
@@ -660,6 +658,15 @@ defmodule Xandra.Cluster.ControlConnection do
     else
       {hosts, data}
     end
+  end
+
+  defp reset_lbp(%__MODULE__{lbp: {mod, _state}, lb_opts: lb_opts} = data, new_hosts) do
+    state =
+      Enum.reduce(new_hosts, mod.init(lb_opts), fn %Host{} = host, acc ->
+        mod.host_added(acc, host)
+      end)
+
+    %__MODULE__{data | lbp: {mod, state}}
   end
 
   # Returns {:error, reason} if the socket was closes or if there was any data

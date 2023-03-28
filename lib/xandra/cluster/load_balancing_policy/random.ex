@@ -12,41 +12,31 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.Random do
   @behaviour Xandra.Cluster.LoadBalancingPolicy
 
   @impl true
-  def init(hosts) do
-    Enum.map(hosts, &{&1, :up})
+  def init([] = _options) do
+    []
   end
 
   @impl true
   def host_added(hosts, new_host) do
-    Enum.uniq_by([{new_host, :up}] ++ hosts, fn {host, _status} -> {host.address, host.port} end)
+    Enum.uniq_by([{new_host, :up}] ++ hosts, fn {host, _status} -> Host.to_peername(host) end)
   end
 
   @impl true
   def host_removed(hosts, host) do
-    Enum.reject(hosts, fn {%Host{address: address, port: port}, _status} ->
-      address == host.address and port == host.port
-    end)
+    Enum.reject(hosts, fn {existing_host, _status} -> host_match?(existing_host, host) end)
   end
 
   @impl true
   def host_up(hosts, new_host) do
     Enum.map(hosts, fn {host, status} ->
-      if host.address == new_host.address and host.port == new_host.port do
-        {host, :up}
-      else
-        {host, status}
-      end
+      if host_match?(host, new_host), do: {host, :up}, else: {host, status}
     end)
   end
 
   @impl true
   def host_down(hosts, host_down) do
     Enum.map(hosts, fn {host, status} ->
-      if host.address == host_down.address and host.port == host_down.port do
-        {host, :down}
-      else
-        {host, status}
-      end
+      if host_match?(host, host_down), do: {host, :down}, else: {host, status}
     end)
   end
 
@@ -54,5 +44,9 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.Random do
   def hosts_plan(hosts) do
     up_hosts = for {host, :up} <- hosts, do: host
     {Enum.shuffle(up_hosts), hosts}
+  end
+
+  defp host_match?(%Host{} = host1, %Host{} = host2) do
+    host1.address == host2.address and host1.port == host2.port
   end
 end

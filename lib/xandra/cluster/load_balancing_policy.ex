@@ -17,45 +17,39 @@ defmodule Xandra.Cluster.LoadBalancingPolicy do
 
   Can be any term and is passed around to all callbacks.
   """
-  @typedoc since: "0.15.0"
   @type state() :: term()
 
   @doc """
   Called to initialize the load-balancing policy.
 
-  Hosts is the initial list of hosts. You can assume that all of them are *up*.
+  `options` is given by the user when configuring the cluster, and is specific to
+  the load-balancing policy.
   """
-  @doc since: "0.15.0"
-  @callback init(hosts :: [Host.t()]) :: state()
+  @callback init(options :: term()) :: state()
 
   @doc """
   Called when the Cassandra cluster marks `host` as "up".
   """
-  @doc since: "0.15.0"
   @callback host_up(state(), host :: Host.t()) :: state()
 
   @doc """
   Called when the Cassandra cluster marks `host` as "down".
   """
-  @doc since: "0.15.0"
   @callback host_down(state(), host :: Host.t()) :: state()
 
   @doc """
   Called when the Cassandra cluster reports a new host that joined.
   """
-  @doc since: "0.15.0"
   @callback host_added(state(), host :: Host.t()) :: state()
 
   @doc """
   Called when the Cassandra cluster reports a host that left the cluster.
   """
-  @doc since: "0.15.0"
   @callback host_removed(state(), host :: Host.t()) :: state()
 
   @doc """
   Called to return a "plan", which is an enumerable of hosts to query in order.
   """
-  @doc since: "0.15.0"
   # TODO: remove the check once we depend on Elixir 1.14+. Enumerable.t/1 was
   # introduced in 1.14.
   if Version.match?(System.version(), ">= 1.14.0") do
