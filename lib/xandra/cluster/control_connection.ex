@@ -23,7 +23,8 @@ defmodule Xandra.Cluster.ControlConnection do
     autodiscovered_nodes_port: [type: :non_neg_integer, required: true],
     load_balancing: [type: :mod_arg, required: true],
     refresh_topology_interval: [type: :timeout, required: true],
-    registry: [type: :atom, required: true]
+    registry: [type: :atom, required: true],
+    name: [type: :any]
   ]
 
   defstruct [
@@ -52,6 +53,9 @@ defmodule Xandra.Cluster.ControlConnection do
 
     # The registry to use to register connections.
     :registry,
+
+    # The name of the cluster (as given through the :name option).
+    :name,
 
     # A map of {ip, port} => %{host: %Host{}, status: atom}.
     peers: %{},
@@ -100,7 +104,8 @@ defmodule Xandra.Cluster.ControlConnection do
       options: connection_options,
       transport: transport,
       transport_options: Keyword.merge(transport_options, @forced_transport_options),
-      registry: Keyword.fetch!(options, :registry)
+      registry: Keyword.fetch!(options, :registry),
+      name: Keyword.get(options, :name)
     }
 
     :gen_statem.start_link(__MODULE__, data, [])
@@ -218,6 +223,14 @@ defmodule Xandra.Cluster.ControlConnection do
          host when not is_nil(host) <- Enum.find(peers, fn peer -> peer["peer"] == address end) do
       new_host = queried_peer_to_host(host)
       new_host = %Host{new_host | port: data.autodiscovered_nodes_port}
+
+      execute_telemetry(data, [:change_event], %{}, %{
+        event_type: :host_added,
+        host: new_host,
+        changed: true,
+        source: :cassandra
+      })
+
       data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :added))
       send(data.cluster, {:host_added, new_host})
       put_in(data.peers[{new_host.address, new_host.port}], %{status: :up, host: host})
@@ -291,6 +304,13 @@ defmodule Xandra.Cluster.ControlConnection do
     statuses = Registry.select(data.registry, spec)
 
     if host_info.status == :up and Enum.all?(statuses, &(&1 == :down)) do
+      execute_telemetry(data, [:change_event], %{}, %{
+        event_type: :host_down,
+        host: host_info.host,
+        changed: true,
+        source: :xandra
+      })
+
       data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host_info.host, :down))
       data = put_in(data.peers[{address, port}].status, :down)
       send(data.cluster, {:host_down, host_info.host})
@@ -386,6 +406,13 @@ defmodule Xandra.Cluster.ControlConnection do
     Enum.each(MapSet.difference(old_peers_set, new_peers_set), fn peername ->
       %{host: %Host{} = host} = Map.fetch!(old_peers, peername)
       send(data.cluster, {:host_removed, host})
+
+      execute_telemetry(data, [:change_event], %{}, %{
+        event_type: :host_removed,
+        host: host,
+        changed: true,
+        source: :xandra
+      })
     end)
 
     final_peers =
@@ -397,10 +424,24 @@ defmodule Xandra.Cluster.ControlConnection do
             Map.put(acc, peername, %{host: host, status: :up})
 
           {:ok, %{status: :down}} ->
+            execute_telemetry(data, [:change_event], %{}, %{
+              event_type: :host_up,
+              host: host,
+              changed: true,
+              source: :xandra
+            })
+
             send(data.cluster, {:host_up, host})
             Map.put(acc, peername, %{host: host, status: :up})
 
           :error ->
+            execute_telemetry(data, [:change_event], %{}, %{
+              event_type: :host_added,
+              host: host,
+              changed: true,
+              source: :xandra
+            })
+
             send(data.cluster, {:host_added, host})
             Map.put(acc, peername, %{host: host, status: :up})
         end
@@ -480,15 +521,19 @@ defmodule Xandra.Cluster.ControlConnection do
          port: port
        }) do
     peer = {address, port}
+    %{host: host, status: status} = Map.fetch!(data.peers, peer)
+    telemetry_meta = %{event_type: :host_up, source: :cassandra, host: host}
 
-    case data.peers do
+    case status do
       # We already know this peer and we already think it's up, nothing to do.
-      %{^peer => %{status: :up}} ->
+      :up ->
+        execute_telemetry(data, [:change_event], %{}, Map.put(telemetry_meta, :changed, false))
         {data, _actions = []}
 
       # We already know this peer but we think it's down, so let's mark it as up
       # and notify the cluster.
-      %{^peer => %{status: :down, host: host}} ->
+      :down ->
+        execute_telemetry(data, [:change_event], %{}, Map.put(telemetry_meta, :changed, true))
         data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :up))
         send(data.cluster, {:host_up, host})
         {put_in(data.peers[peer].status, :up), _actions = []}
@@ -501,15 +546,19 @@ defmodule Xandra.Cluster.ControlConnection do
          port: port
        }) do
     peer = {address, port}
+    %{host: host, status: status} = Map.fetch!(data.peers, peer)
+    telemetry_meta = %{event_type: :host_down, source: :cassandra, host: host}
 
-    case data.peers do
+    case status do
       # We already know this peer and we already think it's down, nothing to do.
-      %{^peer => %{status: :down}} ->
+      :down ->
+        execute_telemetry(data, [:change_event], %{}, Map.put(telemetry_meta, :changed, false))
         {data, _actions = []}
 
       # We already know this peer but we think it's down, so let's mark it as up
       # and notify the cluster.
-      %{^peer => %{status: :up, host: host}} ->
+      :up ->
+        execute_telemetry(data, [:change_event], %{}, Map.put(telemetry_meta, :changed, true))
         data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :down))
         send(data.cluster, {:host_down, host})
         {put_in(data.peers[peer].status, :down), _actions = []}
@@ -529,13 +578,29 @@ defmodule Xandra.Cluster.ControlConnection do
          address: address,
          port: port
        }) do
+    telemetry_meta = %{event_type: :host_removed, source: :cassandra}
+
     case get_and_update_in(data.peers, &Map.pop(&1, {address, port})) do
       {%{host: host}, data} ->
+        execute_telemetry(
+          data,
+          [:change_event],
+          %{},
+          Map.merge(telemetry_meta, %{host: host, changed: true})
+        )
+
         data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :removed))
         send(data.cluster, {:host_removed, host})
         {data, _actions = []}
 
       {nil, data} ->
+        execute_telemetry(
+          data,
+          [:change_event],
+          %{},
+          Map.merge(telemetry_meta, %{host: %Host{address: address, port: port}, changed: false})
+        )
+
         {data, _actions = []}
     end
   end
@@ -667,6 +732,11 @@ defmodule Xandra.Cluster.ControlConnection do
       end)
 
     %__MODULE__{data | lbp: {mod, state}}
+  end
+
+  defp execute_telemetry(%__MODULE__{} = data, event_postfix, measurements, extra_meta) do
+    meta = Map.merge(%{cluster_name: data.name, cluster_pid: data.cluster}, extra_meta)
+    :telemetry.execute([:xandra, :cluster] ++ event_postfix, measurements, meta)
   end
 
   # Returns {:error, reason} if the socket was closes or if there was any data

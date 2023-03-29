@@ -23,6 +23,9 @@ defmodule Xandra.Telemetry do
       * `:query` - the query that caused the warning, of type `t:Xandra.Batch.t/0`,
         `t:Xandra.Prepared.t/0`, or `t:Xandra.Simple.t/0`
 
+  ### Cluster events
+
+  See the "Telemetry" section in the documentation for `Xandra.Cluster`.
   """
   @moduledoc since: "0.15.0"
 end

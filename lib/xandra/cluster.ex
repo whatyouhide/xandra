@@ -87,6 +87,31 @@ defmodule Xandra.Cluster do
   If all specified nodes happen to be down when a query is executed, a
   `Xandra.ConnectionError` with reason `{:cluster, :not_connected}` will be
   returned.
+
+  ## Telemetry
+
+  This section describes all the Telemetry events that `Xandra.Cluster` emits. These events
+  are available since *v0.15.0*. See also `Xandra.Telemetry`.
+
+  * `[:xandra, :cluster, :change_event]` — emitted when there is a change in the
+    cluster, either as reported by Cassandra itself or as detected by Xandra.
+
+    **Measurements**: *none*.
+
+    **Metadata**:
+      * `:event_type` - one of `:host_up` (a host went up), `:host_down` (a host went down),
+        `:host_added` (a host was added to the cluster topology), or `:host_removed` (a host
+        was removed from the cluster topology).
+      * `:source` - one of `:cassandra` or `:xandra`. If the event was reported by
+        Cassandra itself, the source is `:cassandra`. If the event was detected by
+        Xandra, the source is `:xandra`.
+      * `:changed` (`t:boolean/0`) - this is `true` if the node wasn't in the state
+        reported by the event, and `false` if the node was already in the reported state.
+      * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that went up or down.
+      * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
+      * `:cluster_name` - the name of the cluster executing the event, if provided
+        through the `:name` option in `start_link/1`.
+
   """
 
   use GenServer
@@ -511,7 +536,8 @@ defmodule Xandra.Cluster do
         autodiscovered_nodes_port: state.autodiscovered_nodes_port,
         load_balancing: {lb_mod, lb_opts},
         refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval),
-        registry: registry_name
+        registry: registry_name,
+        name: Keyword.get(cluster_opts, :name)
       )
 
     state = %__MODULE__{state | pool_supervisor: pool_sup, control_connection: control_conn}
