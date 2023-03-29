@@ -156,6 +156,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     assert_receive {^mirror_ref, {:host_added, _peer}}
     assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
+    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], _, _}
 
     # No-op: sending a UP event for a node that is already up.
     :gen_statem.cast(
@@ -283,6 +284,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     assert_receive {^mirror_ref, {:host_added, _peer}}
     assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
+    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], _, _}
 
     :gen_statem.cast(
       ctrl_conn,
@@ -351,6 +353,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
     assert_receive {^mirror_ref, {:host_added, %Host{address: {127, 0, 0, 1}}}}
+    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], _, _}
 
     new_peers = [
       %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"},
