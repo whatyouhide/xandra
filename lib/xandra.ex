@@ -578,6 +578,14 @@ defmodule Xandra do
       payload must be of type `t:custom_payload/0`. See the
       ["Custom payloads"](#module-custom-payloads) section in the module documentation.
       """
+    ],
+    telemetry_metadata: [
+      type: :map,
+      default: %{},
+      doc: """
+      Custom metadata to be added to the metadata of `[:xandra, :prepare_query, :start]`
+      and `[:xandra, :prepare_query, :stop]` telemetry events as `extra_metadata` field.
+      """
     ]
   ]
 
@@ -903,6 +911,14 @@ defmodule Xandra do
       default: :string,
       doc: """
       Same as the `:uuid_format` option, but for values of the *timeuuid* type.
+      """
+    ],
+    telemetry_metadata: [
+      type: :map,
+      default: %{},
+      doc: """
+      Custom metadata to be added to the metadata of `[:xandra, :execute_query, :start]`
+      and `[:xandra, :execute_query, :stop]` telemetry events as `extra_metadata` field.
       """
     ]
   ]
