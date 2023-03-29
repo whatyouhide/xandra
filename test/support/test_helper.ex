@@ -45,29 +45,4 @@ defmodule Xandra.TestHelper do
       Process.sleep(@sleep_interval)
       wait_for_passing(time_left - @sleep_interval, fun)
   end
-
-  # A load-balancing policy that just always returns the hosts in the order they were
-  # initially given. Great for deterministic tests!
-  # TODO: Replace this with any round-robin policy once we have one.
-  defmodule ListLBP do
-    @behaviour Xandra.Cluster.LoadBalancingPolicy
-
-    @impl true
-    def init([] = _opts), do: []
-
-    @impl true
-    def host_added(hosts, host), do: hosts ++ [host]
-
-    @impl true
-    def host_removed(hosts, host), do: Enum.reject(hosts, &(&1 == host))
-
-    @impl true
-    def host_up(hosts, _host), do: hosts
-
-    @impl true
-    def host_down(hosts, _host), do: hosts
-
-    @impl true
-    def hosts_plan(hosts), do: {hosts, hosts}
-  end
 end

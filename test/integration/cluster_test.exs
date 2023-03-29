@@ -118,7 +118,7 @@ defmodule Xandra.ClusterTest do
         control_connection_module: ControlConnectionMock,
         nodes: ["node1.example.com"],
         target_pools: 2,
-        load_balancing_policy: {TestHelper.ListLBP, []}
+        load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []}
       ]
 
       cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
@@ -148,7 +148,7 @@ defmodule Xandra.ClusterTest do
       control_connection_module: ControlConnectionMock,
       nodes: ["node1"],
       target_pools: 1,
-      load_balancing_policy: {TestHelper.ListLBP, []}
+      load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []}
     ]
 
     cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
@@ -193,7 +193,7 @@ defmodule Xandra.ClusterTest do
       control_connection_module: ControlConnectionMock,
       nodes: ["node1"],
       target_pools: 2,
-      load_balancing_policy: {TestHelper.ListLBP, []}
+      load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []}
     ]
 
     cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})

@@ -4,7 +4,6 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   import ExUnit.CaptureLog
 
   alias Xandra.TestHelper
-  alias Xandra.TestHelper.ListLBP
 
   alias Xandra.Cluster.{
     ControlConnection,
@@ -53,7 +52,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing: {ListLBP, []}
+      load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []}
     ]
 
     log =
@@ -76,7 +75,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
-      load_balancing: {ListLBP, []}
+      load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []}
     ]
 
     log =
