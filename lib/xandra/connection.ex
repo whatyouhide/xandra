@@ -22,7 +22,8 @@ defmodule Xandra.Connection do
     :protocol_module,
     :current_keyspace,
     :address,
-    :port
+    :port,
+    :connection_name
   ]
 
   @impl true
@@ -34,6 +35,7 @@ defmodule Xandra.Connection do
     atom_keys? = Keyword.get(options, :atom_keys, false)
     enforced_protocol = Keyword.get(options, :protocol_version)
     transport = if(options[:encryption], do: :ssl, else: :gen_tcp)
+    connection_name = options[:name]
 
     transport_options =
       options
@@ -55,7 +57,8 @@ defmodule Xandra.Connection do
           atom_keys?: atom_keys?,
           current_keyspace: nil,
           address: address,
-          port: port
+          port: port,
+          connection_name: connection_name
         }
 
         with {:ok, supported_options, protocol_module} <-
@@ -73,9 +76,8 @@ defmodule Xandra.Connection do
                  compressor,
                  options
                ) do
-          :telemetry.execute([:xandra, :connect], %{}, %{
-            connection: self(),
-            connection_name: :xandra,
+          :telemetry.execute([:xandra, :connection], %{}, %{
+            connection_name: connection_name,
             host: address,
             port: port
           })
@@ -155,7 +157,6 @@ defmodule Xandra.Connection do
 
   @impl true
   def handle_prepare(%Prepared{} = prepared, options, %__MODULE__{socket: socket} = state) do
-    IO.inspect(prepared, label: :prepared)
     compressor = get_right_compressor(state, options[:compressor])
 
     prepared = %Prepared{
@@ -168,45 +169,41 @@ defmodule Xandra.Connection do
     }
 
     force? = Keyword.fetch!(options, :force)
-    transport = state.transport
 
     case prepared_cache_lookup(state, prepared, force?) do
       {:ok, prepared} ->
         :telemetry.execute([:xandra, :prepared_cache, :hit], %{query: prepared})
         {:ok, prepared, state}
 
-      :error ->
-        :telemetry.execute([:xandra, :prepared_cache, :miss], %{query: prepared})
-        frame_options =
-          options
-          |> Keyword.take([:tracing, :custom_payload])
-          |> Keyword.put(:compressor, compressor)
+      {:error, cache_status} ->
+        :telemetry.execute([:xandra, :prepared_cache, cache_status], %{query: prepared})
+        telemetry_metadata = Keyword.fetch!(options, :telemetry_metadata)
 
-        payload =
-          Frame.new(:prepare, frame_options)
-          |> state.protocol_module.encode_request(prepared)
-          |> Frame.encode(state.protocol_module)
+        metadata = %{
+          query: prepared,
+          connection_name: state.connection_name,
+          host: state.address,
+          port: state.port,
+          extra_metadata: telemetry_metadata
+        }
 
-        protocol_format = Xandra.Protocol.frame_protocol_format(state.protocol_module)
+        :telemetry.span(
+          [:xandra, :prepare_query],
+          metadata,
+          fn ->
+            case send_prepared(prepared, socket, options, state) do
+              {:ok, prepared, state} ->
+                reprepared = cache_status == :hit
+                {{:ok, prepared, state}, Map.put(metadata, :reprepared, reprepared)}
 
-        with :ok <- transport.send(socket, payload),
-             {:ok, %Frame{} = frame} <-
-               Utils.recv_frame(transport, socket, protocol_format, state.compressor) do
-          frame = %Frame{frame | atom_keys?: state.atom_keys?}
+              {:error, reason, state} ->
+                {{:error, reason, state}, Map.put(metadata, :reason, reason)}
 
-          case state.protocol_module.decode_response(frame, prepared) do
-            {%Prepared{} = prepared, warnings} ->
-              maybe_execute_telemetry_event_for_warnings(state, prepared, warnings)
-              Prepared.Cache.insert(state.prepared_cache, prepared)
-              {:ok, prepared, state}
-
-            %Xandra.Error{} = reason ->
-              {:error, reason, state}
+              {:disconnect, reason, state} ->
+                {{:disconnect, reason, state}, Map.put(metadata, :reason, reason)}
+            end
           end
-        else
-          {:error, reason} ->
-            {:disconnect, ConnectionError.new("prepare", reason), state}
-        end
+        )
     end
   end
 
@@ -234,17 +231,80 @@ defmodule Xandra.Connection do
     {:ok, batch, state}
   end
 
-  @impl true
-  def handle_execute(query, payload, options, %__MODULE__{} = state) do
-    %{socket: socket, compressor: compressor, atom_keys?: atom_keys?} = state
-    assert_valid_compressor(compressor, options[:compressor])
+  defp send_prepared(%Prepared{compressor: compressor} = prepared, socket, options, state) do
+    transport = state.transport
+
+    frame_options =
+      options
+      |> Keyword.take([:tracing, :custom_payload])
+      |> Keyword.put(:compressor, compressor)
+
+    payload =
+      Frame.new(:prepare, frame_options)
+      |> state.protocol_module.encode_request(prepared)
+      |> Frame.encode(state.protocol_module)
 
     protocol_format = Xandra.Protocol.frame_protocol_format(state.protocol_module)
 
-    with :ok <- state.transport.send(socket, payload),
+    with :ok <- transport.send(socket, payload),
          {:ok, %Frame{} = frame} <-
-           Utils.recv_frame(state.transport, socket, protocol_format, compressor) do
-      frame = %Frame{frame | atom_keys?: atom_keys?}
+           Utils.recv_frame(transport, socket, protocol_format, state.compressor) do
+      frame = %Frame{frame | atom_keys?: state.atom_keys?}
+
+      case state.protocol_module.decode_response(frame, prepared) do
+        {%Prepared{} = prepared, warnings} ->
+          maybe_execute_telemetry_event_for_warnings(state, prepared, warnings)
+          Prepared.Cache.insert(state.prepared_cache, prepared)
+          {:ok, prepared, state}
+
+        %Xandra.Error{} = reason ->
+          {:error, reason, state}
+      end
+    else
+      {:error, reason} ->
+        {:disconnect, ConnectionError.new("prepare", reason), state}
+    end
+  end
+
+  @impl true
+  def handle_execute(query, payload, options, %__MODULE__{} = state) do
+    assert_valid_compressor(state.compressor, options[:compressor])
+
+    telemetry_metadata = Keyword.fetch!(options, :telemetry_metadata)
+
+    metadata = %{
+      query: query,
+      connection_name: state.connection_name,
+      host: state.address,
+      port: state.port,
+      extra_metadata: telemetry_metadata
+    }
+
+    :telemetry.span(
+      [:xandra, :execute_query],
+      metadata,
+      fn ->
+        case send_query(query, payload, options, state) do
+          {:ok, response, state} ->
+            {{:ok, query, response, state}, metadata}
+
+          {:error, reason, state} ->
+            {{:ok, query, reason, state}, Map.put(metadata, :reason, reason)}
+
+          {:disconnect, reason, state} ->
+            {{:disconnect, reason, state}, Map.put(metadata, :reason, reason)}
+        end
+      end
+    )
+  end
+
+  defp send_query(query, payload, options, %__MODULE__{} = state) do
+    protocol_format = Xandra.Protocol.frame_protocol_format(state.protocol_module)
+
+    with :ok <- state.transport.send(state.socket, payload),
+         {:ok, %Frame{} = frame} <-
+           Utils.recv_frame(state.transport, state.socket, protocol_format, state.compressor) do
+      frame = %Frame{frame | atom_keys?: state.atom_keys?}
 
       case state.protocol_module.decode_response(frame, query, options) do
         {%_{} = response, warnings} ->
@@ -256,10 +316,10 @@ defmodule Xandra.Connection do
               _other -> state
             end
 
-          {:ok, query, response, state}
+          {:ok, response, state}
 
         %Xandra.Error{} = error ->
-          {:ok, query, error, state}
+          {:error, error, state}
       end
     else
       {:error, reason} ->
@@ -284,7 +344,7 @@ defmodule Xandra.Connection do
   end
 
   @impl true
-  def disconnect(_exception, %__MODULE__{
+  def disconnect(exception, %__MODULE__{
         transport: transport,
         socket: socket,
         address: address,
@@ -294,7 +354,8 @@ defmodule Xandra.Connection do
       connection: self(),
       connection_name: :xandra,
       host: address,
-      port: port
+      port: port,
+      reason: exception
     })
 
     :ok = transport.close(socket)
@@ -316,12 +377,21 @@ defmodule Xandra.Connection do
   end
 
   defp prepared_cache_lookup(state, prepared, true) do
+    cache_status =
+      case Prepared.Cache.lookup(state.prepared_cache, prepared) do
+        {:ok, %Prepared{}} -> :hit
+        :error -> :miss
+      end
+
     Prepared.Cache.delete(state.prepared_cache, prepared)
-    :error
+    {:error, cache_status}
   end
 
   defp prepared_cache_lookup(state, prepared, false) do
-    Prepared.Cache.lookup(state.prepared_cache, prepared)
+    case Prepared.Cache.lookup(state.prepared_cache, prepared) do
+      {:ok, prepared} -> {:ok, prepared}
+      :error -> {:error, :miss}
+    end
   end
 
   defp startup_connection(
