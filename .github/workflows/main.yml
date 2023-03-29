@@ -78,7 +78,7 @@ jobs:
         include:
           - otp: "25.3"
             elixir: "1.14"
-            cassandra_version: "4"
+            cassandra_version: "4.1"
             cassandra_native_protocols: "v4,v5"
             lint: true
           - otp: "25.3"
@@ -140,12 +140,12 @@ jobs:
         include:
           - otp: "24.2"
             elixir: "1.13"
-            cassandra_version: "4"
+            cassandra_version: "4.1"
             cassandra_native_protocol: "v5"
             lint: true
           - otp: "24.2"
             elixir: "1.13"
-            cassandra_version: "4"
+            cassandra_version: "4.1"
             cassandra_native_protocol: "v4"
           - otp: "24.2"
             elixir: "1.13"
