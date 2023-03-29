@@ -4,6 +4,8 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.Random do
 
   This load-balancing policy doesn't make any attempt to be smart: it doesn't take
   data center or tokens into consideration, and considers all available nodes.
+
+  This policy is available since Xandra *v0.15.0*.
   """
   @moduledoc since: "0.15.0"
 
