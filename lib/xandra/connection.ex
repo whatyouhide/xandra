@@ -81,7 +81,7 @@ defmodule Xandra.Connection do
                  compressor,
                  options
                ) do
-          :telemetry.execute([:xandra, :connection], %{}, %{
+          :telemetry.execute([:xandra, :connected], %{}, %{
             connection_name: connection_name,
             host: address,
             port: port
@@ -352,7 +352,7 @@ defmodule Xandra.Connection do
 
   @impl true
   def disconnect(exception, %__MODULE__{transport: transport, socket: socket} = state) do
-    :telemetry.execute([:xandra, :disconnection], %{}, %{
+    :telemetry.execute([:xandra, :disconnected], %{}, %{
       connection: self(),
       connection_name: state.connection_name,
       host: state.address,

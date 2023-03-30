@@ -12,10 +12,10 @@ defmodule TelemetryTest do
 
   describe "connection" do
     test "sends event on connection/disconnection" do
-      mirror_telemetry_event([:xandra, :connection])
+      mirror_telemetry_event([:xandra, :connected])
       start_supervised!({Xandra, [name: :telemetry_test_connection, pool_size: 1]})
 
-      assert_receive {:telemetry_event, [:xandra, :connection], measurements, metadata}
+      assert_receive {:telemetry_event, [:xandra, :connected], measurements, metadata}
 
       assert measurements == %{}
       assert metadata.connection_name == :telemetry_test_connection

@@ -10,7 +10,7 @@ defmodule Xandra.Telemetry do
 
   ### Xandra Connection
 
-  * `[:xandra, :connection]` and `[:xandra, :disconnection]`
+  * `[:xandra, :connected]` and `[:xandra, :disconnected]`
 
     * Measurements:
 
@@ -77,8 +77,8 @@ defmodule Xandra.Telemetry do
   @doc """
   Attaches a handler that logs the given events:
 
-  `[:xandra, :connection]` - logged at info level
-  `[:xandra, :disconnection]` - logged at warn level
+  `[:xandra, :connected]` - logged at info level
+  `[:xandra, :disconnected]` - logged at warn level
   `[:xandra, :prepared_cache, :hit]` and `[:xandra, :prepared_cache, :miss]` - logged at debug level
   `[:xandra, :prepare_query, :start]` and `[:xandra, :prepare_query, :stop]` - logged at debug level
   `[:xandra, :prepare_query, :exception]` - logged at exception level
@@ -88,8 +88,8 @@ defmodule Xandra.Telemetry do
   """
   def attach_default_handler() do
     events = [
-      [:xandra, :connection],
-      [:xandra, :disconnection],
+      [:xandra, :connected],
+      [:xandra, :disconnected],
       [:xandra, :prepared_cache, :hit],
       [:xandra, :prepared_cache, :miss],
       [:xandra, :prepare_query, :start],
@@ -112,10 +112,10 @@ defmodule Xandra.Telemetry do
   @spec handle_event(nonempty_maybe_improper_list, any, any, :no_config) :: :ok
   def handle_event([:xandra | event], measurements, metadata, :no_config) do
     case event do
-      [:connection] ->
+      [:connected] ->
         Logger.info("Connection established to #{metadata.host}:#{metadata.port}")
 
-      [:disconnection] ->
+      [:disconnected] ->
         Logger.warn(
           "Disconnected from #{metadata.host}:#{metadata.port}. Reason: #{inspect(metadata.reason)}"
         )
