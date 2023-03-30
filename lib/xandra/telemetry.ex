@@ -147,7 +147,7 @@ defmodule Xandra.Telemetry do
 
       [:prepare_query, :exception] ->
         Logger.error(
-          "An exception occcured while preparing  #{inspect(metadata.query)}, kind: #{metadata.kind}" <>
+          "An exception occcured while preparing #{inspect(metadata.query)}, kind: #{metadata.kind}" <>
             "reason: #{inspect(metadata.reason)}, stacktrace: #{metadata.stacktrace}"
         )
 
@@ -155,7 +155,7 @@ defmodule Xandra.Telemetry do
         start = DateTime.from_unix!(measurements.system_time, :native)
 
         Logger.debug(
-          "Started executing query  #{inspect(metadata.query)} at system_time: #{DateTime.to_string(start)}," <>
+          "Started executing query #{inspect(metadata.query)} at system_time: #{DateTime.to_string(start)}," <>
             " ref: #{inspect(metadata.telemetry_span_context)}"
         )
 
@@ -163,13 +163,13 @@ defmodule Xandra.Telemetry do
         duration = System.convert_time_unit(measurements.duration, :native, :millisecond)
 
         Logger.debug(
-          "Finished executing query  #{inspect(metadata.query)} in #{duration}ms" <>
+          "Finished executing query #{inspect(metadata.query)} in #{duration}ms" <>
             " ref: #{inspect(metadata.telemetry_span_context)}"
         )
 
       [:execute_query, :exception] ->
         Logger.error(
-          "An exception occcured while executing  #{inspect(metadata.query)}, kind: #{metadata.kind}" <>
+          "An exception occcured while executing #{inspect(metadata.query)}, kind: #{metadata.kind}" <>
             "reason: #{inspect(metadata.reason)}, stacktrace: #{metadata.stacktrace}"
         )
     end
