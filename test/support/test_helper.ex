@@ -45,4 +45,18 @@ defmodule Xandra.TestHelper do
       Process.sleep(@sleep_interval)
       wait_for_passing(time_left - @sleep_interval, fun)
   end
+
+  def mirror_telemetry_event(event_name) do
+    :telemetry.attach(
+      make_ref(),
+      event_name,
+      &__MODULE__.mirror_telemetry_event_handler/4,
+      %{test_pid: self()}
+    )
+  end
+
+  # Public to use &__MODULE__.fun/4 and avoid Telemetry warnings.
+  def mirror_telemetry_event_handler(event_name, measurements, meta, %{test_pid: test_pid}) do
+    send(test_pid, {:telemetry_event, event_name, measurements, meta})
+  end
 end

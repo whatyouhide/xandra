@@ -1,6 +1,8 @@
 defmodule WarningTest do
   use XandraTest.IntegrationCase, async: true
 
+  import Xandra.TestHelper, only: [{:mirror_telemetry_event, 1}]
+
   alias Xandra.Batch
 
   @moduletag :skip_for_native_protocol_v3
@@ -81,19 +83,5 @@ defmodule WarningTest do
     """
 
     Xandra.execute!(conn, query, Enum.map(ids, &{"int", &1}))
-  end
-
-  defp mirror_telemetry_event(event_name) do
-    :telemetry.attach(
-      make_ref(),
-      event_name,
-      &__MODULE__.mirror_telemetry_event_handler/4,
-      %{test_pid: self()}
-    )
-  end
-
-  # Public to use &__MODULE__.fun/4 and avoid Telemetry warnings.
-  def mirror_telemetry_event_handler(event_name, measurements, meta, %{test_pid: test_pid}) do
-    send(test_pid, {:telemetry_event, event_name, measurements, meta})
   end
 end
