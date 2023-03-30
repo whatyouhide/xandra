@@ -19,7 +19,7 @@ defmodule TelemetryTest do
 
       assert measurements == %{}
       assert metadata.connection_name == :telemetry_test_connection
-      assert metadata.host == '127.0.0.1'
+      assert metadata.address == '127.0.0.1'
       assert metadata.port == 9042
     end
   end
@@ -53,7 +53,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.host == '127.0.0.1'
+    assert metadata.address == '127.0.0.1'
     assert metadata.port == 9042
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(system_time)
@@ -62,7 +62,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.host == '127.0.0.1'
+    assert metadata.address == '127.0.0.1'
     assert metadata.port == 9042
     assert metadata.extra_metadata == %{foo: :bar}
     assert metadata.reprepared == false
@@ -74,7 +74,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.host == '127.0.0.1'
+    assert metadata.address == '127.0.0.1'
     assert metadata.port == 9042
     assert metadata.extra_metadata == %{foo: :bar}
     assert metadata.reprepared == true
@@ -92,7 +92,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.host == '127.0.0.1'
+    assert metadata.address == '127.0.0.1'
     assert metadata.port == 9042
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(system_time)
@@ -101,7 +101,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.host == '127.0.0.1'
+    assert metadata.address == '127.0.0.1'
     assert metadata.port == 9042
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(duration)

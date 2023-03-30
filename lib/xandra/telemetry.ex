@@ -16,7 +16,7 @@ defmodule Xandra.Telemetry do
 
     * Metadata:
       * `:connection_name` - given name of the connection or `nil` if not set
-      * `:host` - the host of the node the connection is connected to
+      * `:address` - the address of the node the connection is connected to
       * `:port` - the port of the node the connection is connected to
       * `:reason` - reason of disconnection
 
@@ -29,7 +29,7 @@ defmodule Xandra.Telemetry do
     * Metadata:
       * `:query` - the `t:Xandra.Prepared.t/0` query
       * `:connection_name` - given name of the connection or `nil` if not set
-      * `:host` - the host of the node the connection is connected to
+      * `:address` - the address of the node the connection is connected to
       * `:port` - the port of the node the connection is connected to
       * `:reason` - if error, reason
 
@@ -42,7 +42,7 @@ defmodule Xandra.Telemetry do
     * Metadata:
       * `:query` - the `t:Xandra.Simple.t/0` or `t:Xandra.Batch.t/0` query
       * `:connection_name` - given name of the connection or `nil` if not set
-      * `:host` - the host of the node the connection is connected to
+      * `:address` - the address of the node the connection is connected to
       * `:port` - the port of the node the connection is connected to
       * `:reason` - if error, reason
 
@@ -60,7 +60,7 @@ defmodule Xandra.Telemetry do
         one element.
 
     * Metadata:
-      * `:host` - the host of the node the connection is connected to
+      * `:address` - the address of the node the connection is connected to
       * `:port` - the port of the node the connection is connected to
       * `:current_keyspace` - the current keyspace of the connection, or `nil` if not set
       * `:query` - the query that caused the warning, of type `t:Xandra.Batch.t/0`,
@@ -113,16 +113,16 @@ defmodule Xandra.Telemetry do
   def handle_event([:xandra | event], measurements, metadata, :no_config) do
     case event do
       [:connected] ->
-        Logger.info("Connection established to #{metadata.host}:#{metadata.port}")
+        Logger.info("Connection established to #{metadata.address}:#{metadata.port}")
 
       [:disconnected] ->
         Logger.warn(
-          "Disconnected from #{metadata.host}:#{metadata.port}. Reason: #{inspect(metadata.reason)}"
+          "Disconnected from #{metadata.address}:#{metadata.port}. Reason: #{inspect(metadata.reason)}"
         )
 
       [:server_warnings] ->
         Logger.warn(
-          "Received warning from #{metadata.host}:#{metadata.port}, " <>
+          "Received warning from #{metadata.address}:#{metadata.port}, " <>
             "warnings: #{inspect(measurements.warnings)}"
         )
 

@@ -83,7 +83,7 @@ defmodule Xandra.Connection do
                ) do
           :telemetry.execute([:xandra, :connected], %{}, %{
             connection_name: connection_name,
-            host: address,
+            address: address,
             port: port
           })
 
@@ -188,7 +188,7 @@ defmodule Xandra.Connection do
         metadata = %{
           query: prepared,
           connection_name: state.connection_name,
-          host: state.address,
+          address: state.address,
           port: state.port,
           extra_metadata: telemetry_metadata
         }
@@ -281,7 +281,7 @@ defmodule Xandra.Connection do
     metadata = %{
       query: query,
       connection_name: state.connection_name,
-      host: state.address,
+      address: state.address,
       port: state.port,
       extra_metadata: telemetry_metadata
     }
@@ -337,9 +337,8 @@ defmodule Xandra.Connection do
     if warnings != [] do
       metadata =
         state
-        |> Map.take([:port, :current_keyspace])
+        |> Map.take([:address, :port, :current_keyspace])
         |> Map.put(:query, query)
-        |> Map.put(:host, state.address)
 
       :telemetry.execute([:xandra, :server_warnings], %{warnings: warnings}, metadata)
     end
@@ -355,7 +354,7 @@ defmodule Xandra.Connection do
     :telemetry.execute([:xandra, :disconnected], %{}, %{
       connection: self(),
       connection_name: state.connection_name,
-      host: state.address,
+      address: state.address,
       port: state.port,
       reason: exception
     })
