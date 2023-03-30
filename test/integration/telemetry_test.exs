@@ -1,5 +1,5 @@
 defmodule TelemetryTest do
-  use XandraTest.IntegrationCase, async: true
+  use XandraTest.IntegrationCase, async: false
 
   alias Xandra.Prepared
 
