@@ -337,8 +337,9 @@ defmodule Xandra.Connection do
     if warnings != [] do
       metadata =
         state
-        |> Map.take([:address, :port, :current_keyspace])
+        |> Map.take([:port, :current_keyspace])
         |> Map.put(:query, query)
+        |> Map.put(:host, state.address)
 
       :telemetry.execute([:xandra, :server_warnings], %{warnings: warnings}, metadata)
     end

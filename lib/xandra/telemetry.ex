@@ -60,7 +60,7 @@ defmodule Xandra.Telemetry do
         one element.
 
     * Metadata:
-      * `:address` - the address of the node the connection is connected to
+      * `:host` - the host of the node the connection is connected to
       * `:port` - the port of the node the connection is connected to
       * `:current_keyspace` - the current keyspace of the connection, or `nil` if not set
       * `:query` - the query that caused the warning, of type `t:Xandra.Batch.t/0`,
@@ -77,7 +77,8 @@ defmodule Xandra.Telemetry do
   @doc """
   Attaches a handler that logs the given events:
 
-  `[:xandra, :connection]` and  `[:xandra, :disconnection]` - logged at info level
+  `[:xandra, :connection]` - logged at info level
+  `[:xandra, :disconnection]` - logged at warn level
   `[:xandra, :prepared_cache, :hit]` and `[:xandra, :prepared_cache, :miss]` - logged at debug level
   `[:xandra, :prepare_query, :start]` and `[:xandra, :prepare_query, :stop]` - logged at debug level
   `[:xandra, :prepare_query, :exception]` - logged at exception level
@@ -118,7 +119,7 @@ defmodule Xandra.Telemetry do
         )
 
       [:disconnection] ->
-        Logger.info(
+        Logger.warn(
           "Disconnected from #{metadata.host}:#{metadata.port} with name: " <>
             "#{metadata.connection_name}. Reason: #{inspect(metadata.reason)}"
         )
@@ -126,7 +127,7 @@ defmodule Xandra.Telemetry do
       [:server_warnings] ->
         # TODO incompatible names
         Logger.warn(
-          "Received warning from #{metadata.address}:#{metadata.port}, " <>
+          "Received warning from #{metadata.host}:#{metadata.port}, " <>
             "warnings: #{inspect(measurements.warnings)}"
         )
 
