@@ -63,7 +63,8 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       end)
 
     assert log =~ "Error connecting: non-existing domain"
-    assert log =~ "peer=bad-domain:9042"
+    assert log =~ "xandra_address=bad-domain"
+    assert log =~ "xandra_port=9042"
   end
 
   test "when all contact points are unavailable",
@@ -86,17 +87,25 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       end)
 
     assert log =~ "Error connecting: non-existing domain"
-    assert log =~ "peer=bad-domain:9042"
-    assert log =~ "peer=other-bad-domain:9042"
+    assert log =~ "xandra_address=bad-domain"
+    assert log =~ "xandra_address=other-bad-domain"
   end
 
   test "reconnecting after the node closes its socket",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} = context do
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
     telemetry_ref =
-      attach_telemetry(context, [
+      :telemetry_test.attach_event_handlers(self(), [
         [:xandra, :cluster, :control_connection, :disconnected],
         [:xandra, :cluster, :control_connection, :connected]
       ])
+
+    assert_telemetry = fn event ->
+      assert_receive {[:xandra, :cluster, :control_connection, ^event], ^telemetry_ref,
+                      measurements, metadata}
+
+      assert measurements == %{}
+      metadata
+    end
 
     opts = [
       cluster: mirror,
@@ -112,35 +121,22 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     assert_receive {^mirror_ref, {:host_added, _peer}}
 
-    assert_receive {:telemetry, ^telemetry_ref,
-                    [:xandra, :cluster, :control_connection, :connected], measurements, metadata}
-
-    assert measurements == %{}
-
     assert %{cluster_name: nil, cluster_pid: ^mirror, host: %Host{address: {127, 0, 0, 1}}} =
-             metadata
+             assert_telemetry.(:connected)
 
+    # Manually simulate closing the socket
     assert {{:connected, connected_node}, _data} = :sys.get_state(ctrl_conn)
-
     send(ctrl_conn, {:tcp_closed, connected_node.socket})
-
-    assert_receive {:telemetry, ^telemetry_ref,
-                    [:xandra, :cluster, :control_connection, :disconnected], measurements,
-                    metadata}
-
-    assert measurements == %{}
 
     assert %{
              cluster_name: nil,
              cluster_pid: ^mirror,
              host: %Host{address: {127, 0, 0, 1}},
              reason: :closed
-           } = metadata
+           } = assert_telemetry.(:disconnected)
 
-    assert_receive {:telemetry, ^telemetry_ref,
-                    [:xandra, :cluster, :control_connection, :connected], %{}, %{}}
-
-    assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
+    # Assert that it eventually reconnects
+    assert_telemetry.(:connected)
   end
 
   test "reconnecting after the node's socket errors out",
@@ -168,8 +164,9 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "deals with StatusChange for known nodes",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} = context do
-    telemetry_ref = attach_telemetry(context, [[:xandra, :cluster, :change_event]])
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
+    telemetry_ref =
+      :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
 
     opts = [
       cluster: mirror,
@@ -184,8 +181,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
     assert_receive {^mirror_ref, {:host_added, _peer}}
-    assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], _, _}
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
     # No-op: sending a UP event for a node that is already up.
     :gen_statem.cast(
@@ -195,15 +191,10 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     refute_receive {:host_up, _host}, 100
 
-    # Telemetry
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], measurements,
-                    meta}
-
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, measurements, meta}
     assert measurements == %{}
-    assert meta.source == :cassandra
-    assert meta.event_type == :host_up
-    assert meta.changed == false
     assert meta.cluster_pid == mirror
+    assert %{source: :cassandra, event_type: :host_up, changed: false} = meta
     assert %Host{address: {127, 0, 0, 1}} = meta.host
 
     # With StatusChange DOWN it notifies the cluster of the host being down.
@@ -217,15 +208,10 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert host.port == 9042
     assert host.data_center == "datacenter1"
 
-    # Telemetry
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], measurements,
-                    meta}
-
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, measurements, meta}
     assert measurements == %{}
-    assert meta.source == :cassandra
-    assert meta.event_type == :host_down
-    assert meta.changed == true
     assert meta.cluster_pid == mirror
+    assert %{source: :cassandra, event_type: :host_down, changed: true} = meta
     assert %Host{address: {127, 0, 0, 1}} = meta.host
 
     # Getting the same DOWN event once more doesn't do anything, the host is already down.
@@ -236,15 +222,10 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     refute_receive {:host_down, _host}, 100
 
-    # Telemetry
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], measurements,
-                    meta}
-
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, measurements, meta}
     assert measurements == %{}
-    assert meta.source == :cassandra
-    assert meta.event_type == :host_down
-    assert meta.changed == false
     assert meta.cluster_pid == mirror
+    assert %{source: :cassandra, event_type: :host_down, changed: false} = meta
     assert %Host{address: {127, 0, 0, 1}} = meta.host
 
     # Getting StatusChange UP for the node brings it back up and notifies the cluster.
@@ -258,14 +239,10 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert host.port == 9042
     assert host.data_center == "datacenter1"
 
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], measurements,
-                    meta}
-
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, measurements, meta}
     assert measurements == %{}
-    assert meta.source == :cassandra
-    assert meta.event_type == :host_up
-    assert meta.changed == true
     assert meta.cluster_pid == mirror
+    assert %{source: :cassandra, event_type: :host_up, changed: true} = meta
     assert %Host{address: {127, 0, 0, 1}} = meta.host
   end
 
@@ -296,8 +273,9 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "deals with TopologyChange REMOVED_NODE events",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} = context do
-    telemetry_ref = attach_telemetry(context, [[:xandra, :cluster, :change_event]])
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
+    telemetry_ref =
+      :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
 
     opts = [
       cluster: mirror,
@@ -312,8 +290,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
     assert_receive {^mirror_ref, {:host_added, _peer}}
-    assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], _, _}
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
     :gen_statem.cast(
       ctrl_conn,
@@ -326,13 +303,9 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert host.port == 9042
     assert host.data_center == "datacenter1"
 
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], measurements,
-                    meta}
-
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, measurements, meta}
     assert measurements == %{}
-    assert meta.source == :cassandra
-    assert meta.event_type == :host_removed
-    assert meta.changed == true
+    assert %{source: :cassandra, event_type: :host_removed, changed: true} = meta
     assert %Host{address: {127, 0, 0, 1}} = meta.host
   end
 
@@ -367,8 +340,9 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "sends the right events when refreshing the cluster topology",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} = context do
-    telemetry_ref = attach_telemetry(context, [[:xandra, :cluster, :change_event]])
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
+    telemetry_ref =
+      :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
 
     opts = [
       cluster: mirror,
@@ -382,7 +356,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
     assert_receive {^mirror_ref, {:host_added, %Host{address: {127, 0, 0, 1}}}}
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], _, _}
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
     new_peers = [
       %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"},
@@ -395,7 +369,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 1}}}}
     assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 2}}}}
 
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], %{},
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
                     %{
                       event_type: :host_removed,
                       changed: true,
@@ -403,7 +377,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
                       host: %Host{address: {127, 0, 0, 1}}
                     }}
 
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], %{},
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
                     %{
                       event_type: :host_added,
                       changed: true,
@@ -411,7 +385,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
                       host: %Host{address: {192, 168, 1, 1}}
                     }}
 
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], %{},
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
                     %{
                       event_type: :host_added,
                       changed: true,
@@ -429,7 +403,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {^mirror_ref, {:host_removed, %Host{address: {192, 168, 1, 1}}}}
     assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 3}}}}
 
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], %{},
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
                     %{
                       event_type: :host_removed,
                       changed: true,
@@ -437,7 +411,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
                       host: %Host{address: {192, 168, 1, 1}}
                     }}
 
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], %{},
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
                     %{
                       event_type: :host_added,
                       changed: true,
@@ -459,8 +433,10 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "sends :host_down if all the connections for a node report as disconnected",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} = context do
-    telemetry_ref = attach_telemetry(context, [[:xandra, :cluster, :change_event]])
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
+    telemetry_ref =
+      :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
+
     parent = self()
 
     [task1_pid, task2_pid] =
@@ -505,7 +481,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     send(task2_pid, {:disconnect, ctrl_conn})
     assert_receive {^mirror_ref, {:host_down, %Host{address: {127, 0, 0, 1}}}}
 
-    assert_receive {:telemetry, ^telemetry_ref, [:xandra, :cluster, :change_event], %{},
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
                     %{
                       event_type: :host_down,
                       changed: true,
@@ -520,25 +496,5 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     end
 
     mirror(parent, ref)
-  end
-
-  defp attach_telemetry(context, events) do
-    test_ref = make_ref()
-
-    :ok =
-      :telemetry.attach_many(context.test, events, &__MODULE__.telemetry_mirror/4, %{
-        pid: self(),
-        ref: test_ref
-      })
-
-    on_exit(fn ->
-      :telemetry.detach(context.test)
-    end)
-
-    test_ref
-  end
-
-  def telemetry_mirror(event, measurements, meta, %{pid: pid, ref: ref}) do
-    send(pid, {:telemetry, ref, event, measurements, meta})
   end
 end
