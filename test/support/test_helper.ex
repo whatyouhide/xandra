@@ -44,5 +44,5 @@ defmodule Xandra.TestHelper do
     _, _ ->
       Process.sleep(@sleep_interval)
       wait_for_passing(time_left - @sleep_interval, fun)
-    end
+  end
 end

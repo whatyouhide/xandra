@@ -100,7 +100,8 @@ defmodule TelemetryTest do
     assert {:ok, %Xandra.Void{}} =
              Xandra.execute(conn, statement, [], telemetry_metadata: %{foo: :bar})
 
-    assert_receive {[:xandra, :execute_query, :start], ^ref, %{system_time: system_time}, metadata}
+    assert_receive {[:xandra, :execute_query, :start], ^ref, %{system_time: system_time},
+                    metadata}
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
