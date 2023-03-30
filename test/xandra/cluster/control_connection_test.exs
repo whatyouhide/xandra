@@ -23,41 +23,32 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     registry = :"#{context.test} registry"
     TestHelper.start_link_supervised!({Registry, keys: :unique, name: registry})
 
-    %{mirror_ref: mirror_ref, mirror: mirror, registry: registry}
+    # Base start options for the control connection.
+    start_options = [
+      cluster: mirror,
+      refresh_topology_interval: 60_000,
+      autodiscovered_nodes_port: 9042,
+      connection_options: [protocol_version: @protocol_version],
+      registry: registry,
+      load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []},
+      contact_points: ["127.0.0.1"]
+    ]
+
+    %{mirror_ref: mirror_ref, mirror: mirror, registry: registry, start_options: start_options}
   end
 
   test "reporting data upon successful connection",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
-    opts = [
-      cluster: mirror,
-      contact_points: ["127.0.0.1"],
-      connection_options: [protocol_version: @protocol_version],
-      autodiscovered_nodes_port: 9042,
-      refresh_topology_interval: 60_000,
-      registry: registry,
-      load_balancing: {LoadBalancingPolicy.Random, []}
-    ]
-
-    TestHelper.start_link_supervised!({ControlConnection, opts})
+       %{mirror_ref: mirror_ref, start_options: start_options} do
+    start_control_connection!(start_options)
     assert_receive {^mirror_ref, {:host_added, local_peer}}
     assert %Host{address: {127, 0, 0, 1}, data_center: "datacenter1", rack: "rack1"} = local_peer
   end
 
   test "trying all the nodes in the contact points",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
-    opts = [
-      cluster: mirror,
-      contact_points: ["bad-domain", "127.0.0.1"],
-      connection_options: [protocol_version: @protocol_version],
-      autodiscovered_nodes_port: 9042,
-      refresh_topology_interval: 60_000,
-      registry: registry,
-      load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []}
-    ]
-
+       %{mirror_ref: mirror_ref, start_options: start_options} do
     log =
       capture_log(fn ->
-        TestHelper.start_link_supervised!({ControlConnection, opts})
+        start_control_connection!(start_options, contact_points: ["bad-domain", "127.0.0.1"])
         assert_receive {^mirror_ref, {:host_added, local_peer}}
         assert %Host{address: {127, 0, 0, 1}} = local_peer
       end)
@@ -68,20 +59,14 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "when all contact points are unavailable",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
-    opts = [
-      cluster: mirror,
-      contact_points: ["bad-domain", "other-bad-domain"],
-      connection_options: [protocol_version: @protocol_version],
-      autodiscovered_nodes_port: 9042,
-      refresh_topology_interval: 60_000,
-      registry: registry,
-      load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []}
-    ]
-
+       %{mirror_ref: mirror_ref, start_options: start_options} do
     log =
       capture_log(fn ->
-        ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+        ctrl_conn =
+          start_control_connection!(start_options,
+            contact_points: ["bad-domain", "other-bad-domain"]
+          )
+
         refute_receive {^mirror_ref, _}, 500
         assert {:disconnected, _data} = :sys.get_state(ctrl_conn)
       end)
@@ -92,7 +77,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "reconnecting after the node closes its socket",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
+       %{mirror_ref: mirror_ref, mirror: mirror, start_options: start_options} do
     telemetry_ref =
       :telemetry_test.attach_event_handlers(self(), [
         [:xandra, :cluster, :control_connection, :disconnected],
@@ -107,17 +92,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       metadata
     end
 
-    opts = [
-      cluster: mirror,
-      contact_points: ["127.0.0.1"],
-      connection_options: [protocol_version: @protocol_version],
-      autodiscovered_nodes_port: 9042,
-      refresh_topology_interval: 60_000,
-      registry: registry,
-      load_balancing: {LoadBalancingPolicy.Random, []}
-    ]
-
-    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+    ctrl_conn = start_control_connection!(start_options)
 
     assert_receive {^mirror_ref, {:host_added, _peer}}
 
@@ -139,46 +114,31 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_telemetry.(:connected)
   end
 
-  test "reconnecting after the node's socket errors out",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
-    opts = [
-      cluster: mirror,
-      contact_points: ["127.0.0.1"],
-      connection_options: [protocol_version: @protocol_version],
-      autodiscovered_nodes_port: 9042,
-      refresh_topology_interval: 60_000,
-      registry: registry,
-      load_balancing: {LoadBalancingPolicy.Random, []}
-    ]
+  test "reconnecting after the node's socket errors out", %{start_options: start_options} do
+    telemetry_ref =
+      :telemetry_test.attach_event_handlers(self(), [
+        [:xandra, :cluster, :control_connection, :connected],
+        [:xandra, :cluster, :control_connection, :disconnected]
+      ])
 
-    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+    ctrl_conn = start_control_connection!(start_options)
 
-    assert_receive {^mirror_ref, {:host_added, _peer}}
+    assert_receive {[:xandra, :cluster, :control_connection, :connected], ^telemetry_ref, _, _}
     assert {{:connected, connected_node}, _data} = :sys.get_state(ctrl_conn)
 
     send(ctrl_conn, {:tcp_error, connected_node.socket, :econnreset})
 
-    TestHelper.wait_for_passing(500, fn ->
-      assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
-    end)
+    assert_receive {[:xandra, :cluster, :control_connection, :disconnected], ^telemetry_ref, _, _}
+    assert_receive {[:xandra, :cluster, :control_connection, :connected], ^telemetry_ref, _, _}
+    assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
   end
 
   test "deals with StatusChange for known nodes",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
+       %{mirror_ref: mirror_ref, mirror: mirror, start_options: start_options} do
     telemetry_ref =
       :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
 
-    opts = [
-      cluster: mirror,
-      contact_points: ["127.0.0.1"],
-      connection_options: [protocol_version: @protocol_version],
-      autodiscovered_nodes_port: 9042,
-      refresh_topology_interval: 60_000,
-      registry: registry,
-      load_balancing: {LoadBalancingPolicy.Random, []}
-    ]
-
-    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+    ctrl_conn = start_control_connection!(start_options)
 
     assert_receive {^mirror_ref, {:host_added, _peer}}
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
@@ -252,7 +212,6 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     opts = [
       cluster: mirror,
       contact_points: ["127.0.0.1"],
-      connection_options: [protocol_version: @protocol_version],
       autodiscovered_nodes_port: 9042,
       refresh_topology_interval: 60_000,
       registry: registry,
@@ -273,21 +232,11 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "deals with TopologyChange REMOVED_NODE events",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
+       %{mirror_ref: mirror_ref, start_options: start_options} do
     telemetry_ref =
       :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
 
-    opts = [
-      cluster: mirror,
-      contact_points: ["127.0.0.1"],
-      connection_options: [protocol_version: @protocol_version],
-      autodiscovered_nodes_port: 9042,
-      refresh_topology_interval: 60_000,
-      registry: registry,
-      load_balancing: {LoadBalancingPolicy.Random, []}
-    ]
-
-    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+    ctrl_conn = start_control_connection!(start_options)
 
     assert_receive {^mirror_ref, {:host_added, _peer}}
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
@@ -310,18 +259,8 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "ignores TopologyChange events of type MOVED_NODE",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
-    opts = [
-      cluster: mirror,
-      contact_points: ["127.0.0.1"],
-      connection_options: [protocol_version: @protocol_version],
-      autodiscovered_nodes_port: 9042,
-      refresh_topology_interval: 60_000,
-      registry: registry,
-      load_balancing: {LoadBalancingPolicy.Random, []}
-    ]
-
-    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+       %{mirror_ref: mirror_ref, start_options: start_options} do
+    ctrl_conn = start_control_connection!(start_options)
 
     assert_receive {^mirror_ref, {:host_added, _peer}}
     assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
@@ -340,21 +279,11 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "sends the right events when refreshing the cluster topology",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
+       %{mirror_ref: mirror_ref, start_options: start_options} do
     telemetry_ref =
       :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
 
-    opts = [
-      cluster: mirror,
-      contact_points: ["127.0.0.1"],
-      connection_options: [protocol_version: @protocol_version],
-      autodiscovered_nodes_port: 9042,
-      refresh_topology_interval: 60_000,
-      registry: registry,
-      load_balancing: {LoadBalancingPolicy.Random, []}
-    ]
-
-    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+    ctrl_conn = start_control_connection!(start_options)
     assert_receive {^mirror_ref, {:host_added, %Host{address: {127, 0, 0, 1}}}}
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
@@ -433,7 +362,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "sends :host_down if all the connections for a node report as disconnected",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
+       %{mirror_ref: mirror_ref, registry: registry, start_options: start_options} do
     telemetry_ref =
       :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
 
@@ -462,17 +391,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {:ready, ^task1_pid}
     assert_receive {:ready, ^task2_pid}
 
-    opts = [
-      cluster: mirror,
-      contact_points: ["127.0.0.1"],
-      connection_options: [protocol_version: @protocol_version],
-      autodiscovered_nodes_port: 9042,
-      refresh_topology_interval: 60_000,
-      registry: registry,
-      load_balancing: {LoadBalancingPolicy.Random, []}
-    ]
-
-    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
+    ctrl_conn = start_control_connection!(start_options)
     assert_receive {^mirror_ref, {:host_added, %Host{address: {127, 0, 0, 1}}}}
 
     send(task1_pid, {:disconnect, ctrl_conn})
@@ -488,6 +407,11 @@ defmodule Xandra.Cluster.ControlConnectionTest do
                       source: :xandra,
                       host: %Host{address: {127, 0, 0, 1}}
                     }}
+  end
+
+  defp start_control_connection!(start_options, overrides \\ []) do
+    options = Keyword.merge(start_options, overrides)
+    TestHelper.start_link_supervised!({ControlConnection, options})
   end
 
   defp mirror(parent, ref) do
