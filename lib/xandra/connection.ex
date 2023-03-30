@@ -203,8 +203,8 @@ defmodule Xandra.Connection do
                 reprepared = cache_status == :hit
                 {{:ok, prepared, state}, Map.put(metadata, :reprepared, reprepared)}
 
-              {:error, reason, state} ->
-                {{:error, reason, state}, Map.put(metadata, :reason, reason)}
+              {:error, %Xandra.Error{} = error, state} ->
+                {{:error, error, state}, Map.put(metadata, :reason, error)}
 
               {:disconnect, reason, state} ->
                 {{:disconnect, reason, state}, Map.put(metadata, :reason, reason)}
