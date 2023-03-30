@@ -349,15 +349,6 @@ defmodule Xandra.Connection do
     {:ok, query, state}
   end
 
-  @impl true
-  def disconnect(exception, %__MODULE__{
-        transport: transport,
-        socket: socket,
-        address: address,
-        port: port
-      }) do
-
-
   def disconnect(_exception, %__MODULE__{transport: transport, socket: socket} = state) do
     :telemetry.execute([:xandra, :disconnection], %{}, %{
       connection: self(),
