@@ -20,36 +20,48 @@ defmodule Xandra.Telemetry do
       * `:port` - the port of the node the connection is connected to
       * `:reason` - reason of disconnection
 
-  * `[:xandra, :prepare_query, :start]` and `[:xandra, :prepare_query, :stop]`
+  * `[:xandra, :prepare_query, :start]`, `[:xandra, :prepare_query, :exception]`
+    and `[:xandra, :prepare_query, :stop]` span
 
     * Measurements:
-      * `:system_time` on `:start`
-      * `:duration` on `:stop`
+      * `:system_time` and `:monotonic_time` on `:start`
+      * `:duration` and `:monotonic_time` on `:stop` and `:exception`
 
     * Metadata:
       * `:query` - the `t:Xandra.Prepared.t/0` query
       * `:connection_name` - given name of the connection or `nil` if not set
       * `:address` - the address of the node the connection is connected to
       * `:port` - the port of the node the connection is connected to
-      * `:reason` - if error, reason
+      * `:reason` - if error, reason (only on `:stop` and `:exception`)
+      * `:kind` - kind on `:exception`
+      * `:stacktrace` - stacktrace on `:exception`
+      * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
 
-  * `[:xandra, :execute_query, :start]` and `[:xandra, :execute_query, :stop]`
+  * `[:xandra, :execute_query, :start]`, `[:xandra, :execute_query, :exception]`
+    and `[:xandra, :execute_query, :stop]` span
 
     * Measurements:
-      * `:system_time` on `:start`
-      * `:duration` on `:stop`
+      * `:system_time` and `:monotonic_time` on `:start`
+      * `:duration` and `:monotonic_time` on `:stop` and `:exception`
 
     * Metadata:
       * `:query` - the `t:Xandra.Simple.t/0` or `t:Xandra.Batch.t/0` query
       * `:connection_name` - given name of the connection or `nil` if not set
       * `:address` - the address of the node the connection is connected to
       * `:port` - the port of the node the connection is connected to
-      * `:reason` - if error, reason
+      * `:reason` - if error, reason (only on `:stop` and `:exception`)
+      * `:kind` - kind on `:exception`
+      * `:stacktrace` - stacktrace on `:exception`
+      * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
 
   * `[:xandra, :prepared_cache, :hit]` and `[:xandra, :prepared_cache, :miss]`
 
     * Measurements:
       * `:query` - the `t:Xandra.Prepared.t/0` query
+      * `:connection_name` - given name of the connection or `nil` if not set
+      * `:address` - the address of the node the connection is connected to
+      * `:port` - the port of the node the connection is connected to
+      * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
 
   ### Warnings
 
