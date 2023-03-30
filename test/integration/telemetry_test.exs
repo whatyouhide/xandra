@@ -32,16 +32,31 @@ defmodule TelemetryTest do
     statement = "SELECT * FROM names"
     assert {:ok, prepared} = Xandra.prepare(conn, statement)
 
-    assert_receive {[:xandra, :prepared_cache, :miss], ^ref, %{}, %{query: %Prepared{}}}
+    assert_receive {[:xandra, :prepared_cache, :miss], ^ref, %{}, metadata}
+
+    assert metadata.query.statement == statement
+    assert metadata.connection_name == nil
+    assert metadata.address == '127.0.0.1'
+    assert metadata.port == 9042
 
     # Successive call to prepare uses cache.
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement)
 
-    assert_receive {[:xandra, :prepared_cache, :hit], ^ref, %{}, %{query: %Prepared{}}}
+    assert_receive {[:xandra, :prepared_cache, :hit], ^ref, %{}, metadata}
+
+    assert metadata.query.statement == statement
+    assert metadata.connection_name == nil
+    assert metadata.address == '127.0.0.1'
+    assert metadata.port == 9042
 
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement, force: true)
 
-    assert_receive {[:xandra, :prepared_cache, :hit], ^ref, %{}, %{query: %Prepared{}}}
+    assert_receive {[:xandra, :prepared_cache, :hit], ^ref, %{}, metadata}
+
+    assert metadata.query.statement == statement
+    assert metadata.connection_name == nil
+    assert metadata.address == '127.0.0.1'
+    assert metadata.port == 9042
   end
 
   test "prepare query", %{conn: conn} do
