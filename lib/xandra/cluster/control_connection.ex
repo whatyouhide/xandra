@@ -66,7 +66,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defmodule ConnectedNode do
     @moduledoc false
-    defstruct [:socket, :protocol_module, :ip, :port]
+    defstruct [:socket, :protocol_module, :ip, :port, :host]
   end
 
   # Need to manually define child_spec/1 because :gen_statem doesn't provide any utilities
@@ -137,7 +137,8 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   # If we connect successfully, we set up a timer to periodically refresh the topology.
-  def handle_event(:enter, _old = :disconnected, _new = {:connected, _node}, data) do
+  def handle_event(:enter, _old = :disconnected, _new = {:connected, node}, data) do
+    execute_telemetry(data, [:control_connection, :connected], %{}, %{host: node.host})
     {:keep_state_and_data, {{:timeout, :refresh_topology}, data.refresh_topology_interval, nil}}
   end
 
@@ -203,8 +204,9 @@ defmodule Xandra.Cluster.ControlConnection do
       data = refresh_topology(data, peers)
       {:keep_state, data, {{:timeout, :refresh_topology}, data.refresh_topology_interval, nil}}
     else
-      {:error, _reason} ->
+      {:error, reason} ->
         _ = data.transport.close(socket)
+        execute_disconnected_telemetry(data, node, reason)
         {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
     end
   end
@@ -243,12 +245,15 @@ defmodule Xandra.Cluster.ControlConnection do
   def handle_event(
         :info,
         {kind, socket, reason},
-        {:connected, %ConnectedNode{socket: socket}},
+        {:connected, %ConnectedNode{socket: socket} = node},
         %__MODULE__{} = data
       )
       when kind in [:tcp_error, :ssl_error] do
     _ = data.transport.close(socket)
     Logger.debug("Socket error: #{:inet.format_error(reason)}")
+    Logger.metadata(peer: nil)
+
+    execute_disconnected_telemetry(data, node, reason)
     {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
   end
 
@@ -256,7 +261,7 @@ defmodule Xandra.Cluster.ControlConnection do
   def handle_event(
         :info,
         {kind, socket},
-        {:connected, %ConnectedNode{socket: socket}},
+        {:connected, %ConnectedNode{socket: socket} = node},
         %__MODULE__{} = data
       )
       when kind in [:tcp_closed, :ssl_closed] do
@@ -264,6 +269,7 @@ defmodule Xandra.Cluster.ControlConnection do
     Logger.debug("Socket closed")
     Logger.metadata(peer: nil)
 
+    execute_disconnected_telemetry(data, node, :closed)
     data = %__MODULE__{data | buffer: <<>>}
     {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
   end
@@ -381,7 +387,8 @@ defmodule Xandra.Cluster.ControlConnection do
              {:ok, peers} <- fetch_cluster_topology(data, connected_node),
              :ok <- register_to_events(data, connected_node),
              :ok <- inet_mod(transport).setopts(socket, active: :once) do
-          {:ok, connected_node, peers}
+          [local_host | _] = peers
+          {:ok, %ConnectedNode{connected_node | host: local_host}, peers}
         else
           {:error, {:use_this_protocol_instead, _failed_protocol_version, proto_vsn}} ->
             Logger.debug("Cassandra said to use protocol #{inspect(proto_vsn)}, reconnecting")
@@ -737,6 +744,11 @@ defmodule Xandra.Cluster.ControlConnection do
   defp execute_telemetry(%__MODULE__{} = data, event_postfix, measurements, extra_meta) do
     meta = Map.merge(%{cluster_name: data.name, cluster_pid: data.cluster}, extra_meta)
     :telemetry.execute([:xandra, :cluster] ++ event_postfix, measurements, meta)
+  end
+
+  defp execute_disconnected_telemetry(%__MODULE__{} = data, %ConnectedNode{host: host}, reason) do
+    meta = %{host: host, reason: reason}
+    execute_telemetry(data, [:control_connection, :disconnected], %{}, meta)
   end
 
   # Returns {:error, reason} if the socket was closes or if there was any data

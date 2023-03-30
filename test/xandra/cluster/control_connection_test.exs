@@ -91,7 +91,13 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   end
 
   test "reconnecting after the node closes its socket",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
+       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} = context do
+    telemetry_ref =
+      attach_telemetry(context, [
+        [:xandra, :cluster, :control_connection, :disconnected],
+        [:xandra, :cluster, :control_connection, :connected]
+      ])
+
     opts = [
       cluster: mirror,
       contact_points: ["127.0.0.1"],
@@ -105,13 +111,36 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
     assert_receive {^mirror_ref, {:host_added, _peer}}
+
+    assert_receive {:telemetry, ^telemetry_ref,
+                    [:xandra, :cluster, :control_connection, :connected], measurements, metadata}
+
+    assert measurements == %{}
+
+    assert %{cluster_name: nil, cluster_pid: ^mirror, host: %Host{address: {127, 0, 0, 1}}} =
+             metadata
+
     assert {{:connected, connected_node}, _data} = :sys.get_state(ctrl_conn)
 
     send(ctrl_conn, {:tcp_closed, connected_node.socket})
 
-    TestHelper.wait_for_passing(500, fn ->
-      assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
-    end)
+    assert_receive {:telemetry, ^telemetry_ref,
+                    [:xandra, :cluster, :control_connection, :disconnected], measurements,
+                    metadata}
+
+    assert measurements == %{}
+
+    assert %{
+             cluster_name: nil,
+             cluster_pid: ^mirror,
+             host: %Host{address: {127, 0, 0, 1}},
+             reason: :closed
+           } = metadata
+
+    assert_receive {:telemetry, ^telemetry_ref,
+                    [:xandra, :cluster, :control_connection, :connected], %{}, %{}}
+
+    assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
   end
 
   test "reconnecting after the node's socket errors out",
