@@ -4,27 +4,23 @@ defmodule Xandra.Cluster do
 
   This module is a "proxy" connection with support for connecting to multiple
   nodes in a Cassandra cluster and executing queries on such nodes based on a
-  given *strategy*.
+  given *policy*.
 
   ## Usage
 
-  This module manages connections to different nodes in a Cassandra cluster.
-  Each connection to a node is a pool of `Xandra` connections. When a `Xandra.Cluster`
-  connection is started, one `Xandra` pool of connections will be started for
-  each node specified in the `:nodes` option plus for autodiscovered nodes
-  if the `:autodiscovery` option is `true`.
+  This module manages pools of connections to different nodes in a Cassandra cluster.
+  Each pool is a pool of `Xandra` connections to a specific node.
 
   The API provided by this module mirrors the API provided by the `Xandra`
   module. Queries executed through this module will be "routed" to nodes
-  in the provided list of nodes based on a strategy. See the
-  ["Load balancing strategies" section](#module-load-balancing-strategies).
+  in the provided list of nodes based on a policy. See the
+  ["Load balancing policies" section](#module-load-balancing-policies).
 
   Regardless of the underlying pool, `Xandra.Cluster` will establish
-  one extra connection to each node in the specified list of `:nodes` (used for
-  internal purposes). See `start_link/1`.
+  one extra connection to a node in the cluster for internal purposes.
+  We refer to this connection as the **control connection**.
 
-  Here is an example of how one could use `Xandra.Cluster` to connect to
-  multiple nodes:
+  Here is an example of how one could use `Xandra.Cluster` to connect to a cluster:
 
       Xandra.Cluster.start_link(
         nodes: ["cassandra1.example.net", "cassandra2.example.net"],
@@ -32,8 +28,8 @@ defmodule Xandra.Cluster do
       )
 
   The code above will establish a pool of ten connections to each of the nodes
-  specified in `:nodes`, plus two extra connections (one per node) used for internal
-  purposes, for a total of twenty-two connections going out of the machine.
+  specified in `:nodes`, plus one extra connection used for internal
+  purposes, for a total of twenty-one connections going out of the machine.
 
   ## Child specification
 
@@ -42,29 +38,44 @@ defmodule Xandra.Cluster do
 
       children = [
         # ...,
-        {Xandra.Cluster, autodiscovery: true, nodes: ["cassandra-seed.example.net"]}
+        {Xandra.Cluster, nodes: ["cassandra-seed.example.net"]}
       ]
 
-  ## Autodiscovery
+  ## Contact points and cluster discovery
 
-  When the `:autodiscovery` option is `true`, `Xandra.Cluster` discovers peer
-  nodes that live in the same cluster as the nodes specified in the `:nodes`
-  option. The nodes in `:nodes` act as **seed nodes**. When nodes in the cluster
-  are discovered, a `Xandra` pool of connections is started for each node that
-  is in the **same datacenter** as one of the nodes in `:nodes`. For now, there
-  is no limit on how many nodes in the same datacenter `Xandra.Cluster`
-  discovers and connects to.
+  `Xandra.Cluster` auto-discovers peer nodes in the cluster, by using the `system.peers`
+  built-in Cassandra table. Once Xandra discovers peers, it opens a pool of connections
+  to a subset of the peers based on the chosen load-balancing policy (see below).
 
-  ## Load-balancing strategies
+  The `:nodes` option in `start_link/1` specifies the **contact points**. The contact
+  points are used to discover the rest of the nodes in the cluster. It's generally
+  a good idea to provide multiple contacts points, so that if some of those are
+  unreachable, the others can be used to discover the rest of the cluster. `Xandra.Cluster`
+  tries to connect to contact points in the order they are specified in the `:nodes`
+  option, initially ignoring the chosen load-balancing policy. Once a connection is
+  established, then that contact point is used to discover the rest of the cluster
+  and open connection pools according to the load-balancing policy.
 
-  These are the available load-balancing strategies:
+  Xandra also **refreshes** the cluster topology periodically. See the
+  `:refresh_topology_interval` option in `start_link/1`.
 
-    * `:random` - it will choose one of the connected nodes at random and
-      execute the query on that node.
+  ## Load-balancing policies
 
-    * `:priority` - it will choose a node to execute the query according
-      to the order nodes appear in `:nodes`. Not supported when `:autodiscovery`
-      is `true`.
+  `Xandra.Cluster` uses customizable "load-balancing policies" to manage nodes
+  in the cluster. A load-balancing policy is a module that implements the
+  `Xandra.Cluster.LoadBalancing` behaviour. Xandra uses load-balancing policies
+  for these purposes:
+
+    * Choosing which node to execute a query on
+    * Choosing which nodes to open pools of connections to (see the `:target_pools`
+      option in `start_link/1`)
+    * Choosing which node the control connection connects to (or **re-connects** to
+      in case of disconnections)
+
+  Xandra ships with the following built-in load-balancing policies:
+
+    * `Xandra.Cluster.LoadBalancingPolicy.Random` - it will choose one of the
+      connected nodes at random and execute the query on that node.
 
   ## Disconnections and reconnections
 
@@ -76,6 +87,57 @@ defmodule Xandra.Cluster do
   If all specified nodes happen to be down when a query is executed, a
   `Xandra.ConnectionError` with reason `{:cluster, :not_connected}` will be
   returned.
+
+  ## Telemetry
+
+  This section describes all the Telemetry events that `Xandra.Cluster` emits. These events
+  are available since *v0.15.0*. See also `Xandra.Telemetry`.
+
+  * `[:xandra, :cluster, :change_event]` — emitted when there is a change in the
+    cluster, either as reported by Cassandra itself or as detected by Xandra.
+
+    **Measurements**: *none*.
+
+    **Metadata**:
+      * `:event_type` - one of `:host_up` (a host went up), `:host_down` (a host went down),
+        `:host_added` (a host was added to the cluster topology), or `:host_removed` (a host
+        was removed from the cluster topology).
+      * `:source` - one of `:cassandra` or `:xandra`. If the event was reported by
+        Cassandra itself, the source is `:cassandra`. If the event was detected by
+        Xandra, the source is `:xandra`.
+      * `:changed` (`t:boolean/0`) - this is `true` if the node wasn't in the state
+        reported by the event, and `false` if the node was already in the reported state.
+      * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that went up or down.
+      * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
+      * `:cluster_name` - the name of the cluster executing the event, if provided
+        through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+
+  * `[:xandra, :cluster, :control_connection, :connected]` — emitted when the control
+    connection for the cluster is established.
+
+    **Measurements**: *none*.
+
+    **Metadata**:
+      * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that the control connection is
+        connected to.
+      * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
+      * `:cluster_name` - the name of the cluster executing the event, if provided
+        through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+
+  * `[:xandra, :cluster, :control_connection, :disconnected]` — emitted when the control
+    connection for the cluster is established.
+
+    **Measurements**: *none*.
+
+    **Metadata**:
+      * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that the control connection is
+        connected to.
+      * `:reason` - the reason for the disconnection. For example, `:closed` if the connected
+        node closes the connection peacefully.
+      * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
+      * `:cluster_name` - the name of the cluster executing the event, if provided
+        through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+
   """
 
   use GenServer
@@ -115,6 +177,12 @@ defmodule Xandra.Cluster do
     :load_balancing_module,
     :load_balancing_state,
 
+    # The registry where connections are registered.
+    :registry,
+
+    # The number of target pools.
+    :target_pools,
+
     # A map of peername to pool PID pairs.
     pools: %{},
 
@@ -124,43 +192,73 @@ defmodule Xandra.Cluster do
   ]
 
   @start_link_opts_schema [
-    load_balancing: [
-      type: {:in, [:priority, :random]},
-      default: :random,
-      doc: """
-      Load balancing "strategy". Either `:random` or `:priority`. See the "Load balancing
-      strategies" section in the module documentation. If `:autodiscovery` is `true`,
-      the only supported strategy is `:random`.
-      """
-    ],
     nodes: [
       type: {:list, {:custom, Xandra.OptionsValidators, :validate_node, []}},
       default: ["127.0.0.1"],
       doc: """
-      A list of nodes to use as seed nodes when setting up the cluster. Each node in this list
-      must be a hostname (`"cassandra.example.net"`), IPv4 (`"192.168.0.100"`),
+      A list of nodes to use as *contact points* when setting up the cluster. Each node in this
+      list must be a hostname (`"cassandra.example.net"`), IPv4 (`"192.168.0.100"`),
       or IPv6 (`"16:64:c8:0:2c:58:5c:c7"`) address. An optional port can be specified by
       including `:<port>` after the address, such as `"cassandra.example.net:9876"`.
-      The behavior of this option depends on the `:autodiscovery` option. See the "Autodiscovery"
-      section. If the `:autodiscovery` option is `false`, the cluster only connects
-      to the nodes in `:nodes` and sets up one additional control connection
-      for each one of these nodes.
+      See the [*Contact points and cluster discovery*
+      section](#module-contact-points-and-cluster-discovery) in the module documentation.
+      """
+    ],
+    load_balancing: [
+      type: {:or, [{:in, [:priority, :random]}, :mod_arg]},
+      default: :random,
+      doc: """
+      Load balancing "policy". See the [*Load balancing policies*
+      section](#module-load-balancing-policies) in the module documentation.
+      The policy must be expressed as a `{module, options}` tuple, where `module`
+      is a module that implements the `Xandra.Cluster.LoadBalancingPolicy` behaviour, and
+      `options` is any term that is passed to the `c:Xandra.Cluster.LoadBalancingPolicy.init/1`
+      callback. This option changed in v0.15.0.
+      Before *v0.15.0*, the only supported values were `:priority` and `:random`.
+      `:random` is deprecated in favor of using `{Xandra.Cluster.LoadBalancingPolicy.Random, []}`.
+      `:priority` has been removed.
       """
     ],
     autodiscovery: [
       type: :boolean,
+      doc: """
+      (**deprecated**) Whether to enable autodiscovery. Since v0.15.0, this option is deprecated
+      and autodiscovery is always enabled.
+      """,
       deprecated: """
-      :autodiscovery is deprecated since 0.15.0 and now always enabled due to internal changes
+      :autodiscovery is deprecated since v0.15.0 and now always enabled due to internal changes
       to Xandra.Cluster.
       """
     ],
     autodiscovered_nodes_port: [
       type: {:in, 0..65535},
       default: @default_port,
+      # TODO: use type_doc: "`t::inet.port_number/0`" when we depend on nimble_options 1.0.
       doc: """
       The port to use when connecting to autodiscovered nodes. Cassandra does not advertise
       the port of nodes when discovering them, so you'll need to specify one explicitly.
       This might get fixed in future Cassandra versions.
+      """
+    ],
+    refresh_topology_interval: [
+      type: :timeout,
+      default: 300_000,
+      doc: """
+      The interval at which Xandra will refresh the cluster topology by querying the control
+      connection to discover peers. When the connection refreshes the topology, it will
+      also start and stop pools for new and removed nodes, effectively "syncing" with
+      the cluster. *Available since v0.15.0*.
+      """
+    ],
+    target_pools: [
+      type: :pos_integer,
+      default: 2,
+      doc: """
+      The number of nodes to start pools to. Each pool will use the `:pool_size` option
+      (see `Xandra.start_link/1`) to determine how many single connections to open to that
+      node. This number is a *target* number, which means that sometimes there might not
+      be enough nodes to start this many pools. Xandra won't ever start more than
+      `:target_pools` pools. *Available since v0.15.0*.
       """
     ],
     name: [
@@ -177,6 +275,15 @@ defmodule Xandra.Cluster do
 
   @start_link_opts_schema_keys Keyword.keys(@start_link_opts_schema)
 
+  @typedoc """
+  Cluster-specific options for `start_link/1`.
+
+  Some of these options are internal and not part of the public API. Only use
+  the options explicitly documented in `start_link/1`.
+  """
+  @typedoc since: "0.15.0"
+  @type start_option() :: unquote(NimbleOptions.option_typespec(@start_link_opts_schema))
+
   @doc """
   Starts connections to a cluster.
 
@@ -188,24 +295,22 @@ defmodule Xandra.Cluster do
 
   #{NimbleOptions.docs(@start_link_opts_schema)}
 
-  > #### Control connections {: .neutral}
+  > #### Control connection {: .neutral}
   >
-  > A `Xandra.Cluster` starts **one additional "control connection"** for each node.
-  >
-  > If the `:autodiscovery` option is `false`, then this means one additional connection
-  > to each node listed in the `:nodes` option. If `:autodiscovery` is `true`, then
-  > this means an additional connection to each node in `:nodes` plus one for each
-  > "autodiscovered" node.
+  > A `Xandra.Cluster` starts **one additional "control connection"** to one of the
+  > nodes in the cluster. This could be a node in the given `:nodes` (a *contact point*)
+  > or a discovered peer in the cluster. See the [*Contact points and cluster discovery*
+  > section](#module-contact-points-and-cluster-discovery) in the module documentation.
 
   ## Examples
 
-  Starting a cluster connection to two specific nodes in the cluster:
+  Starting a Xandra cluster using two nodes as the contact points:
 
       {:ok, cluster} =
         Xandra.Cluster.start_link(nodes: ["cassandra1.example.net", "cassandra2.example.net"])
 
-  Starting a pool of five connections to nodes in the same cluster as the given
-  *seed node*:
+  Starting a pool of five connections to each node in the same cluster as the given
+  contact point:
 
       {:ok, cluster} =
         Xandra.Cluster.start_link(nodes: ["cassandra-seed.example.net"], pool_size: 5)
@@ -220,7 +325,7 @@ defmodule Xandra.Cluster do
 
   """
   @spec start_link([option]) :: GenServer.on_start()
-        when option: Xandra.start_option() | {atom(), term()}
+        when option: Xandra.start_option() | start_option()
   def start_link(options) when is_list(options) do
     {cluster_opts, pool_opts} = Keyword.split(options, @start_link_opts_schema_keys)
     cluster_opts = NimbleOptions.validate!(cluster_opts, @start_link_opts_schema)
@@ -257,7 +362,7 @@ defmodule Xandra.Cluster do
   Same as `Xandra.prepare/3`.
 
   Preparing a query through `Xandra.Cluster` will prepare it only on one node,
-  according to the load balancing strategy chosen in `start_link/1`. To prepare
+  according to the load-balancing policy chosen in `start_link/1`. To prepare
   and execute a query on the same node, you could use `run/3`:
 
       Xandra.Cluster.run(cluster, fn conn ->
@@ -327,7 +432,7 @@ defmodule Xandra.Cluster do
   Executes a query on a node in the cluster.
 
   This function executes a query on a node in the cluster. The node is chosen based
-  on the load balancing strategy given in `start_link/1`.
+  on the load-balancing policy given in `start_link/1`.
 
   Supports the same options as `Xandra.execute/4`. In particular, the `:retry_strategy`
   option is cluster-aware, meaning that queries are retried on possibly different nodes
@@ -419,31 +524,31 @@ defmodule Xandra.Cluster do
 
   ## Callbacks and implementation stuff
 
-  defguardp is_inet_port(port) when port in 0..65355
-  defguardp is_ip(ip) when is_tuple(ip) and tuple_size(ip) in [4, 8]
-
-  defguardp is_peername(peername)
-            when is_tuple(peername) and tuple_size(peername) == 2 and is_ip(elem(peername, 0)) and
-                   is_inet_port(elem(peername, 1))
-
   @impl true
   def init({cluster_opts, pool_opts}) do
     {nodes, cluster_opts} = Keyword.pop!(cluster_opts, :nodes)
 
-    load_balancing_mod =
+    registry_name =
+      Module.concat([Xandra.ClusterRegistry, to_string(System.unique_integer([:positive]))])
+
+    {:ok, _} = Registry.start_link(keys: :unique, name: registry_name)
+
+    {lb_mod, lb_opts} =
       case Keyword.fetch!(cluster_opts, :load_balancing) do
-        :random -> LoadBalancingPolicy.Random
+        :random -> {LoadBalancingPolicy.Random, []}
         :priority -> raise "not implemented yet"
-        module when is_atom(module) -> module
+        {mod, opts} -> {mod, opts}
       end
 
     state = %__MODULE__{
       pool_options: pool_opts,
-      load_balancing_module: load_balancing_mod,
-      load_balancing_state: load_balancing_mod.init([]),
+      load_balancing_module: lb_mod,
+      load_balancing_state: lb_mod.init(lb_opts),
       autodiscovered_nodes_port: Keyword.fetch!(cluster_opts, :autodiscovered_nodes_port),
       xandra_mod: Keyword.fetch!(cluster_opts, :xandra_module),
-      control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module)
+      control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module),
+      target_pools: Keyword.fetch!(cluster_opts, :target_pools),
+      registry: registry_name
     }
 
     # Start supervisor for the pools.
@@ -455,7 +560,10 @@ defmodule Xandra.Cluster do
         contact_points: nodes,
         connection_options: state.pool_options,
         autodiscovered_nodes_port: state.autodiscovered_nodes_port,
-        load_balancing_module: load_balancing_mod
+        load_balancing: {lb_mod, lb_opts},
+        refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval),
+        registry: registry_name,
+        name: Keyword.get(cluster_opts, :name)
       )
 
     state = %__MODULE__{state | pool_supervisor: pool_sup, control_connection: control_conn}
@@ -464,83 +572,64 @@ defmodule Xandra.Cluster do
 
   @impl true
   def handle_call(:checkout, _from, %__MODULE__{} = state) do
-    case state do
-      %__MODULE__{pools: pools} when map_size(pools) == 0 ->
-        {:reply, {:error, :empty}, state}
+    {hosts_plan, state} =
+      get_and_update_in(state.load_balancing_state, fn lb_state ->
+        state.load_balancing_module.hosts_plan(lb_state)
+      end)
 
-      %__MODULE__{} ->
-        {hosts_plan, state} =
-          get_and_update_in(state.load_balancing_state, fn lb_state ->
-            state.load_balancing_module.hosts_plan(lb_state)
-          end)
+    # Find the first host in the plan for which we have a pool.
+    reply =
+      hosts_plan
+      |> Stream.map(fn %Host{} = host -> Map.fetch(state.pools, Host.to_peername(host)) end)
+      |> Enum.find(_default = {:error, :empty}, &match?({:ok, _}, &1))
 
-        %Host{address: ip, port: port} = Enum.at(hosts_plan, 0)
-        pool = Map.fetch!(state.pools, {ip, port})
-        {:reply, {:ok, pool}, state}
-    end
+    {:reply, reply, state}
   end
 
   @impl true
   def handle_info(msg, state)
 
-  # The control connection discovered peers. The control connection doesn't keep track of
-  # which peers it already notified the cluster of.
-  def handle_info({:discovered_peers, peers}, %__MODULE__{} = state) do
-    Logger.debug("Discovered peers: #{Enum.map_join(peers, ", ", &format_host/1)}")
-
-    # Start a pool for each peer and add them to the load-balancing policy.
-    state =
-      Enum.reduce(peers, state, fn %Host{} = host, state ->
-        state =
-          update_in(state.load_balancing_state, fn lb_state ->
-            state.load_balancing_module.host_added(lb_state, host)
-          end)
-
-        start_pool(state, {host.address, host.port})
-      end)
-
-    {:noreply, state}
-  end
-
   def handle_info({:host_up, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host marked as UP: #{format_host(host)}")
-
+    Logger.debug("Host marked as UP: #{Host.format_address(host)}")
     state = update_in(state.load_balancing_state, &state.load_balancing_module.host_up(&1, host))
-
-    state = start_pool(state, {host.address, host.port})
+    state = maybe_start_pools(state)
     {:noreply, state}
   end
 
   def handle_info({:host_down, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host marked as DOWN: #{format_host(host)}")
-    _ = Supervisor.terminate_child(state.pool_supervisor, {host.address, host.port})
+    Logger.debug("Host marked as DOWN: #{Host.format_address(host)}")
 
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_down(&1, host))
 
-    state = update_in(state.pools, &Map.delete(&1, {host.address, host.port}))
+    state = stop_pool(state, host)
+    state = maybe_start_pools(state)
     {:noreply, state}
   end
 
   def handle_info({:host_added, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host added to the cluster: #{format_host(host)}")
+    Logger.debug("Host added to the cluster: #{Host.format_address(host)}")
 
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_added(&1, host))
 
-    state = start_pool(state, {host.address, host.port})
+    state = maybe_start_pools(state)
     {:noreply, state}
   end
 
   def handle_info({:host_removed, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host removed from the cluster: #{format_host(host)}")
-    _ = Supervisor.terminate_child(state.pool_supervisor, {host.address, host.port})
+    Logger.debug("Host removed from the cluster: #{Host.format_address(host)}")
+    state = stop_pool(state, host)
+
+    # Also delete the child from the supervisor altogether.
     _ = Supervisor.delete_child(state.pool_supervisor, {host.address, host.port})
 
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_removed(&1, host))
 
     state = update_in(state.pools, &Map.delete(&1, {host.address, host.port}))
+
+    state = maybe_start_pools(state)
     {:noreply, state}
   end
 
@@ -548,28 +637,38 @@ defmodule Xandra.Cluster do
 
   # This function is idempotent: you can call it as many times as you want with the same
   # peer, and it'll only start it once.
-  defp start_pool(state, {_ip, _port} = peer) when is_peername(peer) do
-    conn_options = Keyword.put(state.pool_options, :nodes, [peername_to_string(peer)])
+  defp start_pool(state, %Host{} = host) do
+    conn_options =
+      Keyword.merge(state.pool_options,
+        nodes: [Host.format_address(host)],
+        registry: state.registry,
+        connection_listeners: [state.control_connection]
+      )
+
+    peername = Host.to_peername(host)
 
     pool_spec =
-      Supervisor.child_spec({state.xandra_mod, conn_options}, id: peer, restart: :transient)
+      Supervisor.child_spec({state.xandra_mod, conn_options},
+        id: peername,
+        restart: :transient
+      )
 
     case Supervisor.start_child(state.pool_supervisor, pool_spec) do
       {:ok, pool} ->
-        Logger.debug("Started pool to: #{peername_to_string(peer)}")
-        put_in(state.pools[peer], pool)
+        Logger.debug("Started pool to: #{Host.format_address(host)}")
+        put_in(state.pools[peername], pool)
 
       {:error, :already_present} ->
-        case Supervisor.restart_child(state.pool_supervisor, _id = peer) do
+        case Supervisor.restart_child(state.pool_supervisor, _id = peername) do
           {:ok, pool} ->
-            Logger.debug("Restarted pool to: #{peername_to_string(peer)}")
-            put_in(state.pools[peer], pool)
+            Logger.debug("Restarted pool to: #{Host.format_address(host)}")
+            put_in(state.pools[peername], pool)
 
           {:error, reason} when reason in [:running, :restarting] ->
             state
 
           {:error, other} ->
-            raise "unexpected error when restarting pool for #{peername_to_string(peer)}: #{inspect(other)}"
+            raise "unexpected error when restarting pool for #{Host.format_address(host)}: #{inspect(other)}"
         end
 
       {:error, {:already_started, _pool}} ->
@@ -577,11 +676,37 @@ defmodule Xandra.Cluster do
     end
   end
 
-  defp peername_to_string({ip, port} = peername) when is_peername(peername) do
-    "#{:inet.ntoa(ip)}:#{port}"
+  defp stop_pool(state, %Host{} = host) do
+    _ = Supervisor.terminate_child(state.pool_supervisor, {host.address, host.port})
+    update_in(state.pools, &Map.delete(&1, {host.address, host.port}))
   end
 
-  defp format_host(%Host{address: address, port: port}) do
-    "#{:inet.ntoa(address)}:#{port}"
+  defp maybe_start_pools(%__MODULE__{target_pools: target, pools: pools} = state)
+       when map_size(pools) == target do
+    state
+  end
+
+  defp maybe_start_pools(%__MODULE__{target_pools: target, pools: pools} = state)
+       when map_size(pools) < target do
+    {hosts_plan, state} =
+      get_and_update_in(state.load_balancing_state, fn lb_state ->
+        state.load_balancing_module.hosts_plan(lb_state)
+      end)
+
+    Enum.reduce_while(hosts_plan, state, fn %Host{} = host, state ->
+      case Map.fetch(pools, Host.to_peername(host)) do
+        {:ok, _pool} ->
+          {:cont, state}
+
+        :error ->
+          state = start_pool(state, host)
+
+          if map_size(state.pools) == target do
+            {:halt, state}
+          else
+            {:cont, state}
+          end
+      end
+    end)
   end
 end

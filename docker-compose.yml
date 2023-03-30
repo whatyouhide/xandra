@@ -6,7 +6,7 @@ services:
       context: ./test/docker
       dockerfile: cassandra.dockerfile
       args:
-        CASSANDRA_VERSION: "${CASSANDRA_VERSION:-4}"
+        CASSANDRA_VERSION: "${CASSANDRA_VERSION:-4.1}"
     ports:
       - "9042:9042" # TCP connections
       - "9142:9142" # TLS/SSL connections
@@ -29,7 +29,7 @@ services:
       dockerfile: cassandra.dockerfile
       args:
         AUTHENTICATION: "true"
-        CASSANDRA_VERSION: "${CASSANDRA_VERSION:-4}"
+        CASSANDRA_VERSION: "${CASSANDRA_VERSION:-4.1}"
     ports:
       - "9043:9042"
     environment:

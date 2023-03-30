@@ -35,4 +35,48 @@ defmodule Xandra.Cluster.Host do
     :schema_version,
     :tokens
   ]
+
+  @doc """
+  Formats a host's address and port as a string.
+
+  ## Examples
+
+      iex> host = %Xandra.Cluster.Host{address: {127, 0, 0, 1}, port: 9042}
+      iex> Xandra.Cluster.Host.format_address(host)
+      "127.0.0.1:9042"
+
+  """
+  @doc since: "0.15.0"
+  @spec format_address(t()) :: String.t()
+  def format_address(host) do
+    host
+    |> to_peername()
+    |> format_peername()
+  end
+
+  @doc false
+  @doc since: "0.15.0"
+  @spec to_peername(t()) :: {:inet.ip_address() | :inet.hostname(), :inet.port_number()}
+  def to_peername(%__MODULE__{address: address, port: port}) do
+    {address, port}
+  end
+
+  @doc false
+  @doc since: "0.15.0"
+  @spec format_peername({:inet.ip_address() | :inet.hostname(), :inet.port_number()}) ::
+          String.t()
+  def format_peername({address, port}) do
+    if ip_address?(address) do
+      "#{:inet.ntoa(address)}:#{port}"
+    else
+      "#{address}:#{port}"
+    end
+  end
+
+  # TODO: remove the conditional once we depend on OTP 25+.
+  if function_exported?(:inet, :is_ip_address, 1) do
+    defp ip_address?(term), do: :inet.is_ip_address(term)
+  else
+    defp ip_address?(term), do: is_tuple(term)
+  end
 end
