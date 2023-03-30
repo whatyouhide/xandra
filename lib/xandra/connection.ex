@@ -162,7 +162,7 @@ defmodule Xandra.Connection do
   end
 
   @impl true
-  def handle_prepare(%Prepared{} = prepared, options, %__MODULE__{socket: socket} = state) do
+  def handle_prepare(%Prepared{} = prepared, options, %__MODULE__{} = state) do
     compressor = get_right_compressor(state, options[:compressor])
 
     prepared = %Prepared{
@@ -198,7 +198,7 @@ defmodule Xandra.Connection do
           [:xandra, :prepare_query],
           metadata,
           fn ->
-            case send_prepared(prepared, socket, options, state) do
+            case send_prepared(prepared, options, state) do
               {:ok, prepared, state} ->
                 reprepared = cache_status == :hit
                 {{:ok, prepared, state}, Map.put(metadata, :reprepared, reprepared)}
@@ -238,7 +238,7 @@ defmodule Xandra.Connection do
     {:ok, batch, state}
   end
 
-  defp send_prepared(%Prepared{compressor: compressor} = prepared, socket, options, state) do
+  defp send_prepared(%Prepared{compressor: compressor} = prepared, options, state) do
     transport = state.transport
 
     frame_options =
@@ -253,9 +253,9 @@ defmodule Xandra.Connection do
 
     protocol_format = Xandra.Protocol.frame_protocol_format(state.protocol_module)
 
-    with :ok <- transport.send(socket, payload),
+    with :ok <- transport.send(state.socket, payload),
          {:ok, %Frame{} = frame} <-
-           Utils.recv_frame(transport, socket, protocol_format, state.compressor) do
+           Utils.recv_frame(transport, state.socket, protocol_format, state.compressor) do
       frame = %Frame{frame | atom_keys?: state.atom_keys?}
 
       case state.protocol_module.decode_response(frame, prepared) do
