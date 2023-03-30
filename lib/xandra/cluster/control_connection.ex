@@ -149,7 +149,6 @@ defmodule Xandra.Cluster.ControlConnection do
 
     timeouts_to_cancel =
       for name <- [:refresh_topology, :delayed_topology_change] do
-        # TODO: replace with {{:timeout, name}, :cancel} when we depend on OTP 22.1+.
         {{:timeout, name}, :infinity, nil}
       end
 
@@ -214,7 +213,6 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  # TODO: should we just refresh the topology here?
   def handle_event(
         {:timeout, :delayed_topology_change},
         %TopologyChange{effect: "NEW_NODE", address: address},
@@ -244,7 +242,6 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  # If there's a socket error with the current node, we TODO.
   def handle_event(
         :info,
         {kind, socket, reason},
@@ -258,7 +255,6 @@ defmodule Xandra.Cluster.ControlConnection do
     {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
   end
 
-  # If the current node closes the socket, we TODO
   def handle_event(
         :info,
         {kind, socket},
