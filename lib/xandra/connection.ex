@@ -23,7 +23,7 @@ defmodule Xandra.Connection do
     :current_keyspace,
     :address,
     :port,
-    :connection_name
+    :connection_name,
     :registry,
     :pool_index,
     :peername
@@ -60,7 +60,7 @@ defmodule Xandra.Connection do
           current_keyspace: nil,
           address: address,
           port: port,
-          connection_name: connection_name
+          connection_name: connection_name,
           registry: Keyword.get(options, :registry),
           pool_index: Keyword.fetch!(options, :pool_index),
           peername: peername
@@ -349,12 +349,13 @@ defmodule Xandra.Connection do
     {:ok, query, state}
   end
 
-  def disconnect(_exception, %__MODULE__{transport: transport, socket: socket} = state) do
+  @impl true
+  def disconnect(exception, %__MODULE__{transport: transport, socket: socket} = state) do
     :telemetry.execute([:xandra, :disconnection], %{}, %{
       connection: self(),
-      connection_name: :xandra,
-      host: address,
-      port: port,
+      connection_name: state.connection_name,
+      host: state.address,
+      port: state.port,
       reason: exception
     })
 
