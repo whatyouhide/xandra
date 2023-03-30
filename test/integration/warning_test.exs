@@ -50,7 +50,7 @@ defmodule WarningTest do
     assert_receive {[:xandra, :server_warnings], ^ref, measurements, metadata}
     assert %{warnings: [warning]} = measurements
     assert warning =~ "Unlogged batch covering 11 partitions"
-    assert metadata.host == '127.0.0.1'
+    assert metadata.address == '127.0.0.1'
     assert metadata.port == 9042
     assert metadata.current_keyspace == keyspace
     assert inspect(metadata.query) == inspect(batch)
