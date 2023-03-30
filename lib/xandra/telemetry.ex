@@ -113,19 +113,14 @@ defmodule Xandra.Telemetry do
   def handle_event([:xandra | event], measurements, metadata, :no_config) do
     case event do
       [:connection] ->
-        Logger.info(
-          "Connection established to #{metadata.host}:#{metadata.port} with name: " <>
-            "#{metadata.connection_name}"
-        )
+        Logger.info("Connection established to #{metadata.host}:#{metadata.port}")
 
       [:disconnection] ->
         Logger.warn(
-          "Disconnected from #{metadata.host}:#{metadata.port} with name: " <>
-            "#{metadata.connection_name}. Reason: #{inspect(metadata.reason)}"
+          "Disconnected from #{metadata.host}:#{metadata.port}. Reason: #{inspect(metadata.reason)}"
         )
 
       [:server_warnings] ->
-        # TODO incompatible names
         Logger.warn(
           "Received warning from #{metadata.host}:#{metadata.port}, " <>
             "warnings: #{inspect(measurements.warnings)}"
