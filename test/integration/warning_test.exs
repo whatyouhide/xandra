@@ -1,8 +1,6 @@
 defmodule WarningTest do
   use XandraTest.IntegrationCase, async: true
 
-  import Xandra.TestHelper, only: [{:mirror_telemetry_event, 1}]
-
   alias Xandra.Batch
 
   @moduletag :skip_for_native_protocol_v3
@@ -43,13 +41,13 @@ defmodule WarningTest do
         Batch.add(acc, "INSERT INTO fruits (id, name) VALUES (#{index}, '#{name}')")
       end)
 
-    mirror_telemetry_event([:xandra, :server_warnings])
+    ref = :telemetry_test.attach_event_handlers(self(), [[:xandra, :server_warnings]])
     Xandra.execute!(conn, batch)
 
     result = for %{"name" => name} <- Xandra.execute!(conn, "SELECT name FROM fruits"), do: name
     assert Enum.sort(result) == fruit_names
 
-    assert_receive {:telemetry_event, [:xandra, :server_warnings], measurements, metadata}
+    assert_receive {[:xandra, :server_warnings], ^ref, measurements, metadata}
     assert %{warnings: [warning]} = measurements
     assert warning =~ "Unlogged batch covering 11 partitions"
     assert metadata.host == '127.0.0.1'

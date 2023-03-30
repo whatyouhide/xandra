@@ -1,8 +1,6 @@
 defmodule TelemetryTest do
   use XandraTest.IntegrationCase, async: false
 
-  import Xandra.TestHelper, only: [mirror_telemetry_event: 1]
-
   alias Xandra.Prepared
 
   setup_all %{setup_conn: conn, keyspace: keyspace} do
@@ -12,10 +10,10 @@ defmodule TelemetryTest do
 
   describe "connection" do
     test "sends event on connection/disconnection" do
-      mirror_telemetry_event([:xandra, :connected])
+      ref = :telemetry_test.attach_event_handlers(self(), [[:xandra, :connected]])
       start_supervised!({Xandra, [name: :telemetry_test_connection, pool_size: 1]})
 
-      assert_receive {:telemetry_event, [:xandra, :connected], measurements, metadata}
+      assert_receive {[:xandra, :connected], ^ref, measurements, metadata}
 
       assert measurements == %{}
       assert metadata.connection_name == :telemetry_test_connection
@@ -25,36 +23,39 @@ defmodule TelemetryTest do
   end
 
   test "prepared query cache", %{conn: conn} do
-    mirror_telemetry_event([:xandra, :prepared_cache, :hit])
-    mirror_telemetry_event([:xandra, :prepared_cache, :miss])
+    ref =
+      :telemetry_test.attach_event_handlers(self(), [
+        [:xandra, :prepared_cache, :hit],
+        [:xandra, :prepared_cache, :miss]
+      ])
 
     statement = "SELECT * FROM names"
     assert {:ok, prepared} = Xandra.prepare(conn, statement)
 
-    assert_receive {:telemetry_event, [:xandra, :prepared_cache, :miss], %{query: %Prepared{}},
-                    %{}}
+    assert_receive {[:xandra, :prepared_cache, :miss], ^ref, %{}, %{query: %Prepared{}}}
 
     # Successive call to prepare uses cache.
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement)
 
-    assert_receive {:telemetry_event, [:xandra, :prepared_cache, :hit], %{query: %Prepared{}},
-                    %{}}
+    assert_receive {[:xandra, :prepared_cache, :hit], ^ref, %{}, %{query: %Prepared{}}}
 
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement, force: true)
 
-    assert_receive {:telemetry_event, [:xandra, :prepared_cache, :hit], %{query: %Prepared{}},
-                    %{}}
+    assert_receive {[:xandra, :prepared_cache, :hit], ^ref, %{}, %{query: %Prepared{}}}
   end
 
   test "prepare query", %{conn: conn} do
-    mirror_telemetry_event([:xandra, :prepare_query, :start])
-    mirror_telemetry_event([:xandra, :prepare_query, :stop])
+    ref =
+      :telemetry_test.attach_event_handlers(self(), [
+        [:xandra, :prepare_query, :start],
+        [:xandra, :prepare_query, :stop]
+      ])
 
     statement = "SELECT name FROM names"
     assert {:ok, %Prepared{}} = Xandra.prepare(conn, statement, telemetry_metadata: %{foo: :bar})
 
-    assert_receive {:telemetry_event, [:xandra, :prepare_query, :start],
-                    %{system_time: system_time}, metadata}
+    assert_receive {[:xandra, :prepare_query, :start], ^ref, %{system_time: system_time},
+                    metadata}
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
@@ -63,8 +64,7 @@ defmodule TelemetryTest do
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(system_time)
 
-    assert_receive {:telemetry_event, [:xandra, :prepare_query, :stop], %{duration: duration},
-                    metadata}
+    assert_receive {[:xandra, :prepare_query, :stop], ^ref, %{duration: duration}, metadata}
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
@@ -77,8 +77,7 @@ defmodule TelemetryTest do
     assert {:ok, %Prepared{}} =
              Xandra.prepare(conn, statement, telemetry_metadata: %{foo: :bar}, force: true)
 
-    assert_receive {:telemetry_event, [:xandra, :prepare_query, :stop], %{duration: duration},
-                    metadata}
+    assert_receive {[:xandra, :prepare_query, :stop], ^ref, %{duration: duration}, metadata}
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
@@ -90,16 +89,18 @@ defmodule TelemetryTest do
   end
 
   test "execute_query", %{conn: conn} do
-    mirror_telemetry_event([:xandra, :execute_query, :start])
-    mirror_telemetry_event([:xandra, :execute_query, :stop])
+    ref =
+      :telemetry_test.attach_event_handlers(self(), [
+        [:xandra, :execute_query, :start],
+        [:xandra, :execute_query, :stop]
+      ])
 
     statement = "insert into names (name) values ('bob')"
 
     assert {:ok, %Xandra.Void{}} =
              Xandra.execute(conn, statement, [], telemetry_metadata: %{foo: :bar})
 
-    assert_receive {:telemetry_event, [:xandra, :execute_query, :start],
-                    %{system_time: system_time}, metadata}
+    assert_receive {[:xandra, :execute_query, :start], ^ref, %{system_time: system_time}, metadata}
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
@@ -108,8 +109,7 @@ defmodule TelemetryTest do
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(system_time)
 
-    assert_receive {:telemetry_event, [:xandra, :execute_query, :stop], %{duration: duration},
-                    metadata}
+    assert_receive {[:xandra, :execute_query, :stop], ^ref, %{duration: duration}, metadata}
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
