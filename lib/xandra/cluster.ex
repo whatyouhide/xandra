@@ -110,7 +110,33 @@ defmodule Xandra.Cluster do
       * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that went up or down.
       * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
       * `:cluster_name` - the name of the cluster executing the event, if provided
-        through the `:name` option in `start_link/1`.
+        through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+
+  * `[:xandra, :cluster, :control_connection, :connected]` — emitted when the control
+    connection for the cluster is established.
+
+    **Measurements**: *none*.
+
+    **Metadata**:
+      * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that the control connection is
+        connected to.
+      * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
+      * `:cluster_name` - the name of the cluster executing the event, if provided
+        through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+
+  * `[:xandra, :cluster, :control_connection, :disconnected]` — emitted when the control
+    connection for the cluster is established.
+
+    **Measurements**: *none*.
+
+    **Metadata**:
+      * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that the control connection is
+        connected to.
+      * `:reason` - the reason for the disconnection. For example, `:closed` if the connected
+        node closes the connection peacefully.
+      * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
+      * `:cluster_name` - the name of the cluster executing the event, if provided
+        through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
 
   """
 
