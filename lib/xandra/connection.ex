@@ -176,22 +176,23 @@ defmodule Xandra.Connection do
 
     force? = Keyword.fetch!(options, :force)
 
+    telemetry_metadata = Keyword.fetch!(options, :telemetry_metadata)
+
+    metadata = %{
+      query: prepared,
+      connection_name: state.connection_name,
+      address: state.address,
+      port: state.port,
+      extra_metadata: telemetry_metadata
+    }
+
     case prepared_cache_lookup(state, prepared, force?) do
       {:ok, prepared} ->
-        :telemetry.execute([:xandra, :prepared_cache, :hit], %{query: prepared})
+        :telemetry.execute([:xandra, :prepared_cache, :hit], %{}, metadata)
         {:ok, prepared, state}
 
       {:error, cache_status} ->
-        :telemetry.execute([:xandra, :prepared_cache, cache_status], %{query: prepared})
-        telemetry_metadata = Keyword.fetch!(options, :telemetry_metadata)
-
-        metadata = %{
-          query: prepared,
-          connection_name: state.connection_name,
-          address: state.address,
-          port: state.port,
-          extra_metadata: telemetry_metadata
-        }
+        :telemetry.execute([:xandra, :prepared_cache, cache_status], %{}, metadata)
 
         :telemetry.span(
           [:xandra, :prepare_query],
