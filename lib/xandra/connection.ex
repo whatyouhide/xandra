@@ -295,7 +295,7 @@ defmodule Xandra.Connection do
             {{:ok, query, response, state}, metadata}
 
           {:error, %Xandra.Error{} = error, state} ->
-            {{:ok, query, reason, state}, Map.put(metadata, :reason, reason)}
+            {{:ok, query, error, state}, Map.put(metadata, :reason, error)}
 
           {:disconnect, reason, state} ->
             {{:disconnect, reason, state}, Map.put(metadata, :reason, reason)}
