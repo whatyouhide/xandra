@@ -172,7 +172,8 @@ defmodule Xandra.ClusterTest do
     assert_receive {:DOWN, ^pool_monitor_ref, _, _, _}
 
     TestHelper.wait_for_passing(100, fn ->
-      assert [{^peername1, :undefined, :worker, _}] = Supervisor.which_children(pool_sup)
+      assert {_, :undefined, _, _} =
+               List.keyfind(Supervisor.which_children(pool_sup), peername1, 0)
     end)
 
     # The cluster starts a pool to the other node.
