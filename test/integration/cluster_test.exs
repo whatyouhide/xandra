@@ -170,7 +170,10 @@ defmodule Xandra.ClusterTest do
     # StatusChange DOWN:
     send(cluster, {:host_down, host1})
     assert_receive {:DOWN, ^pool_monitor_ref, _, _, _}
-    assert [{^peername1, :undefined, :worker, _}] = Supervisor.which_children(pool_sup)
+
+    TestHelper.wait_for_passing(100, fn ->
+      assert [{^peername1, :undefined, :worker, _}] = Supervisor.which_children(pool_sup)
+    end)
 
     # The cluster starts a pool to the other node.
     assert_pool_started(test_ref, host2)
@@ -179,8 +182,10 @@ defmodule Xandra.ClusterTest do
 
     # StatusChange UP, which doesn't change which host goes up.
     send(cluster, {:host_up, host1})
-    Process.sleep(50)
-    assert :sys.get_state(cluster).pools == %{peername2 => pool2}
+
+    TestHelper.wait_for_passing(100, fn ->
+      assert :sys.get_state(cluster).pools == %{peername2 => pool2}
+    end)
   end
 
   test "handles topology change events", %{test_ref: test_ref} do
