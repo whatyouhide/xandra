@@ -95,9 +95,7 @@ defmodule Xandra.Cluster do
 
   * `[:xandra, :cluster, :change_event]` — emitted when there is a change in the
     cluster, either as reported by Cassandra itself or as detected by Xandra.
-
     **Measurements**: *none*.
-
     **Metadata**:
       * `:event_type` - one of `:host_up` (a host went up), `:host_down` (a host went down),
         `:host_added` (a host was added to the cluster topology), or `:host_removed` (a host
@@ -114,9 +112,7 @@ defmodule Xandra.Cluster do
 
   * `[:xandra, :cluster, :control_connection, :connected]` — emitted when the control
     connection for the cluster is established.
-
     **Measurements**: *none*.
-
     **Metadata**:
       * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that the control connection is
         connected to.
@@ -126,9 +122,7 @@ defmodule Xandra.Cluster do
 
   * `[:xandra, :cluster, :control_connection, :disconnected]` — emitted when the control
     connection for the cluster is established.
-
     **Measurements**: *none*.
-
     **Metadata**:
       * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that the control connection is
         connected to.

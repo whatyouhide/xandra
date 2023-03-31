@@ -8,75 +8,136 @@ defmodule Xandra.Telemetry do
 
   Xandra emits telemetry events *since v0.15.0*.
 
-  ### Xandra Connection
+  ## Events
 
-  * `[:xandra, :connected]` and `[:xandra, :disconnected]`
+  Here is a comprehensive list of the Telemetry events that Xandra emits.
 
-    * Measurements:
+  ### Connection events
 
-    * Metadata:
-      * `:connection_name` - given name of the connection or `nil` if not set
-      * `:address` - the address of the node the connection is connected to
-      * `:port` - the port of the node the connection is connected to
-      * `:reason` - reason of disconnection
+    * `[:xandra, :connected]` — executed when a connection connects to its Cassandra node.
+      * **Measurements**: *none*.
+      * **Metadata**:
+        * `:connection_name` - given name of the connection or `nil` if not set
+        * `:address` - the address of the node the connection is connected to
+        * `:port` - the port of the node the connection is connected to
 
-  * `[:xandra, :prepare_query, :start]`, `[:xandra, :prepare_query, :exception]`
-    and `[:xandra, :prepare_query, :stop]` span
+    * `[:xandra, :disconnected]` — executed when a connection disconnects from its Cassandra node.
+      * **Measurements**: *none*.
+      * **Metadata**:
+        * `:connection_name` - given name of the connection or `nil` if not set
+        * `:address` - the address of the node the connection is connected to
+        * `:port` - the port of the node the connection is connected to
+        * `:reason` - the reason for the disconnection (usually a `DBConnection.ConnectionError`)
 
-    * Measurements:
-      * `:system_time` and `:monotonic_time` on `:start`
-      * `:duration` and `:monotonic_time` on `:stop` and `:exception`
+  ### Query events
 
-    * Metadata:
-      * `:query` - the `t:Xandra.Prepared.t/0` query
-      * `:connection_name` - given name of the connection or `nil` if not set
-      * `:address` - the address of the node the connection is connected to
-      * `:port` - the port of the node the connection is connected to
-      * `:reason` - if error, reason (only on `:stop` and `:exception`)
-      * `:kind` - kind on `:exception`
-      * `:stacktrace` - stacktrace on `:exception`
-      * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
+  The `[:xandra, :prepare_query, ...]` and `[:xandra, :execute_query, ...]` events are
+  Telemetry **spans**. See
+  [`telemetry:span/3`](https://hexdocs.pm/telemetry/telemetry.html#span/3). All the time
+  measurements are in *native* time unit, so you need to use `System.convert_time_unit/3`
+  to convert to the desired time unit.
 
-  * `[:xandra, :execute_query, :start]`, `[:xandra, :execute_query, :exception]`
-    and `[:xandra, :execute_query, :stop]` span
+    * `[:xandra, :prepare_query, :start]` — executed before a query is prepared.
+      * Measurements:
+        * `:system_time` (in `:native` time units)
+        * `:monotonic_time` (in `:native` time units)
+      * Metadata:
+        * `:query` (`t:Xandra.Prepared.t/0`) - the query being prepared
+        * `:connection_name` - given name of the connection or `nil` if not set
+        * `:address` - the address of the node the connection is connected to
+        * `:port` - the port of the node the connection is connected to
+        * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
 
-    * Measurements:
-      * `:system_time` and `:monotonic_time` on `:start`
-      * `:duration` and `:monotonic_time` on `:stop` and `:exception`
+    * `[:xandra, :prepare_query, :stop]` — executed after a query was prepared.
+      * Measurements:
+        * `:duration` (in `:native` time units)
+        * `:monotonic_time` (in `:native` time units)
+      * Metadata:
+        * `:query` (`t:Xandra.Prepared.t/0`) - the query being prepared
+        * `:connection_name` - given name of the connection or `nil` if not set
+        * `:address` - the address of the node the connection is connected to
+        * `:port` - the port of the node the connection is connected to
+        * `:reason` - if error, reason
+        * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
 
-    * Metadata:
-      * `:query` - the `t:Xandra.Simple.t/0` or `t:Xandra.Batch.t/0` query
-      * `:connection_name` - given name of the connection or `nil` if not set
-      * `:address` - the address of the node the connection is connected to
-      * `:port` - the port of the node the connection is connected to
-      * `:reason` - if error, reason (only on `:stop` and `:exception`)
-      * `:kind` - kind on `:exception`
-      * `:stacktrace` - stacktrace on `:exception`
-      * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
+    * `[:xandra, :prepare_query, :exception]` — executed if there was an exception
+      when preparing a query.
+      * Measurements:
+        * `:duration` (in `:native` time units)
+        * `:monotonic_time` (in `:native` time units)
+      * Metadata:
+        * `:query` (`t:Xandra.Prepared.t/0`) - the query being prepared
+        * `:connection_name` - given name of the connection or `nil` if not set
+        * `:address` - the address of the node the connection is connected to
+        * `:port` - the port of the node the connection is connected to
+        * `:reason` - if error, reason
+        * `:kind` - kind on `:exception`
+        * `:stacktrace` - stacktrace on `:exception`
+        * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
 
-  * `[:xandra, :prepared_cache, :hit]` and `[:xandra, :prepared_cache, :miss]`
+    * `[:xandra, :execute_query, :start]` — executed before a query is executed.
+      * Measurements:
+        * `:system_time` (in `:native` time units)
+        * `:monotonic_time` (in `:native` time units)
+      * Metadata:
+        * `:query` (`t:Xandra.Simple.t/0`, `t:Xandra.Batch.t/0`, or `t:Xandra.Prepared.t/0`) —
+          the query being executed
+        * `:connection_name` - given name of the connection or `nil` if not set
+        * `:address` - the address of the node the connection is connected to
+        * `:port` - the port of the node the connection is connected to
+        * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
 
-    * Measurements:
-      * `:query` - the `t:Xandra.Prepared.t/0` query
-      * `:connection_name` - given name of the connection or `nil` if not set
-      * `:address` - the address of the node the connection is connected to
-      * `:port` - the port of the node the connection is connected to
-      * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
+    * `[:xandra, :execute_query, :stop]` — executed after a query was executed.
+      * Measurements:
+        * `:duration` (in `:native` time units)
+        * `:monotonic_time` (in `:native` time units)
+      * Metadata:
+        * `:query` (`t:Xandra.Simple.t/0`, `t:Xandra.Batch.t/0`, or `t:Xandra.Prepared.t/0`) —
+          the query being executed
+        * `:connection_name` - given name of the connection or `nil` if not set
+        * `:address` - the address of the node the connection is connected to
+        * `:port` - the port of the node the connection is connected to
+        * `:reason` - if error, reason
+        * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
+
+    * `[:xandra, :execute_query, :exception]` — executed if there was an exception
+      when executing a query.
+      * Measurements:
+        * `:duration` (in `:native` time units)
+        * `:monotonic_time` (in `:native` time units)
+      * Metadata:
+        * `:query` (`t:Xandra.Simple.t/0`, `t:Xandra.Batch.t/0`, or `t:Xandra.Prepared.t/0`) —
+          the query being executed
+        * `:connection_name` - given name of the connection or `nil` if not set
+        * `:address` - the address of the node the connection is connected to
+        * `:port` - the port of the node the connection is connected to
+        * `:reason` - if error, reason
+        * `:kind` - kind on `:exception`
+        * `:stacktrace` - stacktrace on `:exception`
+        * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
+
+    * `[:xandra, :prepared_cache, :hit]` and `[:xandra, :prepared_cache, :miss]` — executed
+      when a query is executed and the prepared cache is checked.
+
+      * Measurements:
+        * `:query` (`t:Xandra.Prepared.t/0`) - the query being looked up in the cache
+        * `:connection_name` - given name of the connection or `nil` if not set
+        * `:address` - the address of the node the connection is connected to
+        * `:port` - the port of the node the connection is connected to
+        * `:extra_metadata` - extra metadata provided by `:telemetry_metadata` option
 
   ### Warnings
 
-    * Event name: `[:xandra, :server_warnings]`
-
-    * Measurements:
-      * `:warnings` - A list of warnings where each warning is a string. It contains at least
-        one element.
-
-    * Metadata:
-      * `:address` - the address of the node the connection is connected to
-      * `:port` - the port of the node the connection is connected to
-      * `:current_keyspace` - the current keyspace of the connection, or `nil` if not set
-      * `:query` - the query that caused the warning, of type `t:Xandra.Batch.t/0`,
-        `t:Xandra.Prepared.t/0`, or `t:Xandra.Simple.t/0`
+    * `[:xandra, :server_warnings]`
+      * Measurements:
+        * `:warnings` - A list of warnings where each warning is a string. It contains at least
+          one element.
+      * Metadata:
+        * `:address` - the address of the node the connection is connected to
+        * `:port` - the port of the node the connection is connected to
+        * `:current_keyspace` - the current keyspace of the connection, or `nil` if not set
+        * `:query` - the query that caused the warning, of type `t:Xandra.Batch.t/0`,
+          `t:Xandra.Prepared.t/0`, or `t:Xandra.Simple.t/0`
 
   ### Cluster events
 
@@ -84,21 +145,38 @@ defmodule Xandra.Telemetry do
   """
   @moduledoc since: "0.15.0"
 
+  alias Xandra.Cluster.Host
+
   require Logger
 
   @doc """
-  Attaches a handler that logs the given events:
+  Attaches a handler that **logs** Telemetry events.
 
-  `[:xandra, :connected]` - logged at info level
-  `[:xandra, :disconnected]` - logged at warn level
-  `[:xandra, :prepared_cache, :hit]` and `[:xandra, :prepared_cache, :miss]` - logged at debug level
-  `[:xandra, :prepare_query, :start]` and `[:xandra, :prepare_query, :stop]` - logged at debug level
-  `[:xandra, :prepare_query, :exception]` - logged at exception level
-  `[:xandra, :execute_query, :start]` and `[:xandra, :execute_query, :stop]` - logged at debug level
-  `[:xandra, :execute_query, :exception]` - logged at exception level
-  `[:xandra, :server_warnings]` - logged at warn level
+  This handler is useful when you want to see what's going on in Xandra without having to write a
+  Telemetry handler to handle all the events.
+
+  These are the events that get logged. This list might change in the future.
+
+  | **Event**                                                 | **Level** |
+  | --------------------------------------------------------- | --------- |
+  | `[:xandra, :connected]`                                   | info      |
+  | `[:xandra, :disconnected]`                                | warn      |
+  | `[:xandra, :prepared_cache, :hit]`                        | debug     |
+  | `[:xandra, :prepared_cache, :miss]`                       | debug     |
+  | `[:xandra, :prepare_query, :start]`                       | debug     |
+  | `[:xandra, :prepare_query, :stop]`                        | debug     |
+  | `[:xandra, :prepare_query, :exception]`                   | error     |
+  | `[:xandra, :execute_query, :start]`                       | debug     |
+  | `[:xandra, :execute_query, :stop]`                        | debug     |
+  | `[:xandra, :execute_query, :exception]`                   | error     |
+  | `[:xandra, :server_warnings]`                             | warn      |
+  | `[:xandra, :cluster, :change_event]`                      | debug     |
+  | `[:xandra, :cluster, :control_connection, :connected]`    | debug     |
+  | `[:xandra, :cluster, :control_connection, :disconnected]` | debug     |
+
   """
-  def attach_default_handler() do
+  @spec attach_default_handler() :: :ok
+  def attach_default_handler do
     events = [
       [:xandra, :connected],
       [:xandra, :disconnected],
@@ -110,7 +188,10 @@ defmodule Xandra.Telemetry do
       [:xandra, :execute_query, :start],
       [:xandra, :execute_query, :stop],
       [:xandra, :execute_query, :exception],
-      [:xandra, :server_warnings]
+      [:xandra, :server_warnings],
+      [:xandra, :cluster, :change_event],
+      [:xandra, :cluster, :control_connection, :connected],
+      [:xandra, :cluster, :control_connection, :disconnected]
     ]
 
     :telemetry.attach_many(
@@ -119,8 +200,11 @@ defmodule Xandra.Telemetry do
       &__MODULE__.handle_event/4,
       :no_config
     )
+
+    :ok
   end
 
+  @doc false
   @spec handle_event(nonempty_maybe_improper_list, any, any, :no_config) :: :ok
   def handle_event([:xandra | event], measurements, metadata, :no_config) do
     case event do
@@ -184,6 +268,17 @@ defmodule Xandra.Telemetry do
           "An exception occcured while executing #{inspect(metadata.query)}, kind: #{metadata.kind}" <>
             "reason: #{inspect(metadata.reason)}, stacktrace: #{metadata.stacktrace}"
         )
+
+      [:cluster, :change_event] ->
+        Logger.debug(
+          "Received change event of type #{metadata.event_type}: #{inspect(measurements.event)}"
+        )
+
+      [:cluster, :control_connection, :connected] ->
+        Logger.debug("Control connection established to #{Host.format_address(metadata.host)}")
+
+      [:cluster, :control_connection, :disconnected] ->
+        Logger.debug("Control connection disconnected from #{Host.format_address(metadata.host)}")
     end
   end
 end
