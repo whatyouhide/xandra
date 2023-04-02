@@ -145,8 +145,6 @@ defmodule Xandra.Telemetry do
   """
   @moduledoc since: "0.15.0"
 
-  alias Xandra.Cluster.Host
-
   require Logger
 
   @doc """
@@ -174,6 +172,12 @@ defmodule Xandra.Telemetry do
   | `[:xandra, :cluster, :control_connection, :connected]`    | debug     |
   | `[:xandra, :cluster, :control_connection, :disconnected]` | debug     |
 
+  Events have the following logger metadata:
+
+    * `:xandra_address` - the address of the node the connection is connected to
+    * `:xandra_port` - the port of the node the connection is connected to
+    * `:xandra_protocol_module` - the protocol module for the Cassandra native protocol
+
   """
   @spec attach_default_handler() :: :ok
   def attach_default_handler do
@@ -182,12 +186,8 @@ defmodule Xandra.Telemetry do
       [:xandra, :disconnected],
       [:xandra, :prepared_cache, :hit],
       [:xandra, :prepared_cache, :miss],
-      [:xandra, :prepare_query, :start],
       [:xandra, :prepare_query, :stop],
-      [:xandra, :prepare_query, :exception],
-      [:xandra, :execute_query, :start],
       [:xandra, :execute_query, :stop],
-      [:xandra, :execute_query, :exception],
       [:xandra, :server_warnings],
       [:xandra, :cluster, :change_event],
       [:xandra, :cluster, :control_connection, :connected],
@@ -205,80 +205,46 @@ defmodule Xandra.Telemetry do
   end
 
   @doc false
-  @spec handle_event(nonempty_maybe_improper_list, any, any, :no_config) :: :ok
+  @spec handle_event(
+          :telemetry.event_name(),
+          :telemetry.event_measurements(),
+          :telemetry.event_metadata(),
+          :no_config
+        ) :: :ok
   def handle_event([:xandra | event], measurements, metadata, :no_config) do
+    %{address: address, port: port} = metadata
+    logger_meta = [xandra_address: address, xandra_port: port]
+
     case event do
       [:connected] ->
-        Logger.info("Connection established to #{metadata.address}:#{metadata.port}")
+        Logger.info("Connection established", logger_meta)
 
       [:disconnected] ->
-        Logger.warn(
-          "Disconnected from #{metadata.address}:#{metadata.port}. Reason: #{inspect(metadata.reason)}"
-        )
+        Logger.warn("Disconnected with reason: #{inspect(metadata.reason)}", logger_meta)
 
       [:server_warnings] ->
-        Logger.warn(
-          "Received warning from #{metadata.address}:#{metadata.port}, " <>
-            "warnings: #{inspect(measurements.warnings)}"
-        )
+        Logger.warn("Received warnings: #{inspect(measurements.warnings)}", logger_meta)
 
       [:prepared_cache, status] ->
-        Logger.debug("Prepared cache #{status} for query: #{inspect(measurements.query)}")
-
-      [:prepare_query, :start] ->
-        start = DateTime.from_unix!(measurements.system_time, :native)
-
-        Logger.debug(
-          "Started preparing query #{inspect(metadata.query)} at system_time: #{DateTime.to_string(start)}," <>
-            " ref: #{inspect(metadata.telemetry_span_context)}"
-        )
+        query = inspect(measurements.query)
+        Logger.debug("Prepared cache #{status} for query: #{query}", logger_meta)
 
       [:prepare_query, :stop] ->
         duration = System.convert_time_unit(measurements.duration, :native, :millisecond)
-
-        Logger.debug(
-          "Finished preparing query  #{inspect(metadata.query)} in #{duration}ms" <>
-            " ref: #{inspect(metadata.telemetry_span_context)}"
-        )
-
-      [:prepare_query, :exception] ->
-        Logger.error(
-          "An exception occcured while preparing #{inspect(metadata.query)}, kind: #{metadata.kind}" <>
-            "reason: #{inspect(metadata.reason)}, stacktrace: #{metadata.stacktrace}"
-        )
-
-      [:execute_query, :start] ->
-        start = DateTime.from_unix!(measurements.system_time, :native)
-
-        Logger.debug(
-          "Started executing query #{inspect(metadata.query)} at system_time: #{DateTime.to_string(start)}," <>
-            " ref: #{inspect(metadata.telemetry_span_context)}"
-        )
+        Logger.debug("Prepared query in #{duration}ms: #{inspect(metadata.query)}", logger_meta)
 
       [:execute_query, :stop] ->
         duration = System.convert_time_unit(measurements.duration, :native, :millisecond)
-
-        Logger.debug(
-          "Finished executing query #{inspect(metadata.query)} in #{duration}ms" <>
-            " ref: #{inspect(metadata.telemetry_span_context)}"
-        )
-
-      [:execute_query, :exception] ->
-        Logger.error(
-          "An exception occcured while executing #{inspect(metadata.query)}, kind: #{metadata.kind}" <>
-            "reason: #{inspect(metadata.reason)}, stacktrace: #{metadata.stacktrace}"
-        )
+        Logger.debug("Executed query in #{duration}ms: #{inspect(metadata.query)}", logger_meta)
 
       [:cluster, :change_event] ->
-        Logger.debug(
-          "Received change event of type #{metadata.event_type}: #{inspect(measurements.event)}"
-        )
+        Logger.debug("Received change event: #{inspect(measurements.event)}", logger_meta)
 
       [:cluster, :control_connection, :connected] ->
-        Logger.debug("Control connection established to #{Host.format_address(metadata.host)}")
+        Logger.debug("Control connection established", logger_meta)
 
       [:cluster, :control_connection, :disconnected] ->
-        Logger.debug("Control connection disconnected from #{Host.format_address(metadata.host)}")
+        Logger.debug("Control connection disconnected", logger_meta)
     end
   end
 end
