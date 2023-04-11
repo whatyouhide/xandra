@@ -439,6 +439,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
 
     assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 1}}}}
+
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
                     %{
                       event_type: :host_added,
@@ -451,6 +452,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       ctrl_conn,
       {:healthcheck, %Host{address: {127, 0, 0, 1}, port: 9042, data_center: "datacenter1"}}
     )
+
     send(
       ctrl_conn,
       {:healthcheck, %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"}}
@@ -460,12 +462,12 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {^mirror_ref, {:host_down, %Host{address: {192, 168, 1, 1}}}}
 
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
-      %{
-        event_type: :host_down,
-        changed: true,
-        source: :xandra,
-        host: %Host{address: {192, 168, 1, 1}}
-      }}
+                    %{
+                      event_type: :host_down,
+                      changed: true,
+                      source: :xandra,
+                      host: %Host{address: {192, 168, 1, 1}}
+                    }}
   end
 
   defp start_control_connection!(start_options, overrides \\ []) do
