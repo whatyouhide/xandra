@@ -456,7 +456,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       {:healthcheck, %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"}}
     )
 
-    refute_receive {^mirror_ref, {:host_down, %Host{address: {127, 0, 0, 1}}}}, 500
+    refute_receive {^mirror_ref, {:host_down, %Host{address: {127, 0, 0, 1}}}}, 600
     assert_receive {^mirror_ref, {:host_down, %Host{address: {192, 168, 1, 1}}}}
 
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
