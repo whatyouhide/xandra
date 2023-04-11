@@ -30,6 +30,7 @@ defmodule Xandra.ClusterTest do
       {:ok, {test_pid, test_ref}}
     end
 
+    @impl true
     def handle_info({:healthcheck, %Host{}}, state) do
       {:noreply, state}
     end
