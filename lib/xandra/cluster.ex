@@ -650,12 +650,14 @@ defmodule Xandra.Cluster do
     case Supervisor.start_child(state.pool_supervisor, pool_spec) do
       {:ok, pool} ->
         Logger.debug("Started pool to: #{Host.format_address(host)}")
+        send(state.control_connection, {:healthcheck, host})
         put_in(state.pools[peername], pool)
 
       {:error, :already_present} ->
         case Supervisor.restart_child(state.pool_supervisor, _id = peername) do
           {:ok, pool} ->
             Logger.debug("Restarted pool to: #{Host.format_address(host)}")
+            send(state.control_connection, {:healthcheck, host})
             put_in(state.pools[peername], pool)
 
           {:error, reason} when reason in [:running, :restarting] ->

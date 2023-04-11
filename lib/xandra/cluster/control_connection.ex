@@ -10,6 +10,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   @default_backoff 5_000
   @default_timeout 5_000
+  @healthcheck_timeout 1_000
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
   @delay_after_topology_change 5_000
 
@@ -180,6 +181,19 @@ defmodule Xandra.Cluster.ControlConnection do
     :keep_state_and_data
   end
 
+  # Postpone healthcheck for after control connection is established
+  def handle_event(:info, {:healthcheck, _host}, :disconnected, _data) do
+    {:keep_state_and_data, :postpone}
+  end
+
+  def handle_event({:timeout, {:check_host_health, host}}, nil, {:connected, _node}, _data) do
+    {:keep_state_and_data, {:next_event, :internal, {:healhcheck, host}}}
+  end
+
+  def handle_event(:internal, {:healthcheck, _host}, :disconnected, _data) do
+    {:keep_state_and_data, :postpone}
+  end
+
   # Postpone these messages for when the connection is connected.
   def handle_event(:info, {event, pid}, :disconnected, %__MODULE__{} = _data)
       when event in [:connected, :disconnected] and is_pid(pid) do
@@ -289,14 +303,54 @@ defmodule Xandra.Cluster.ControlConnection do
     :keep_state_and_data
   end
 
-  # A DBConnection single connection process disconnected. We check the registry to see if there
-  # are any "up" connections to the same node. If there aren't, we mark the node as down.
-  # Eventually, the control connection is going to refresh the cluster topology and we'll
-  # know for sure whether the node is permanently down or not. If it isn't and it shows up
-  # in the cluster topology, we'll add it again and the cycle continues.
+  # A DBConnection single connection process disconnected. See `handle_host_health_check_event/3`
+  # for details.
   def handle_event(:info, {:disconnected, pid}, {:connected, _node}, %__MODULE__{} = data)
       when is_pid(pid) do
     [{{address, port}, _pool_index}] = Registry.keys(data.registry, pid)
+    handle_host_health_check_event(data, address, port)
+  end
+
+  # We wait for the pool to register itself before healthcheck
+  def handle_event(:info, {:healthcheck, host}, _state, %__MODULE__{}) do
+    {:keep_state_and_data, {{:timeout, {:check_host_health, host}}, @healthcheck_timeout, nil}}
+  end
+
+  # We wait for the pool to register itself before healthcheck
+  def handle_event(:internal, {:healthcheck, host}, _state, %__MODULE__{}) do
+    {:keep_state_and_data, {{:timeout, {:check_host_health, host}}, @healthcheck_timeout, nil}}
+  end
+
+  # Healthcheck whether a node that we tried to connect is actually up and
+  # registered itself. See `handle_host_health_check_event/3` for details
+  def handle_event(
+        {:timeout, {:check_host_health, %Host{address: address, port: port}}},
+        nil,
+        {:connected, _node},
+        %__MODULE__{} = data
+      ) do
+    handle_host_health_check_event(data, address, port)
+  end
+
+  # Used only for testing.
+  def handle_event(:cast, {:change_event, %_{} = event}, {:connected, node}, %__MODULE__{} = data) do
+    {data, actions} = handle_change_event(data, node, event)
+    {:keep_state, data, actions}
+  end
+
+  # Used only for testing.
+  def handle_event(:cast, {:refresh_topology, peers}, {:connected, _node}, %__MODULE__{} = data) do
+    {:keep_state, refresh_topology(data, peers)}
+  end
+
+  ## Helper functions
+
+  # We check the registry to see if there are any "up" connections to the same node.
+  # If there aren't, we mark the node as down.
+  # Eventually, the control connection is going to refresh the cluster topology, if the
+  # node is still down but it shows up in the cluster topology, we would be considering
+  # it up first and perform another healthcheck, and the cycle continues.
+  defp handle_host_health_check_event(data = %__MODULE__{}, address, port) do
     host_info = Map.fetch!(data.peers, {address, port})
 
     # This match spec was built in IEx using:
@@ -320,19 +374,6 @@ defmodule Xandra.Cluster.ControlConnection do
       :keep_state_and_data
     end
   end
-
-  # Used only for testing.
-  def handle_event(:cast, {:change_event, %_{} = event}, {:connected, node}, %__MODULE__{} = data) do
-    {data, actions} = handle_change_event(data, node, event)
-    {:keep_state, data, actions}
-  end
-
-  # Used only for testing.
-  def handle_event(:cast, {:refresh_topology, peers}, {:connected, _node}, %__MODULE__{} = data) do
-    {:keep_state, refresh_topology(data, peers)}
-  end
-
-  ## Helper functions
 
   defp connect_to_first_available_node(%__MODULE__{} = data) do
     {nodes_to_try, data} = nodes_to_try(data)
