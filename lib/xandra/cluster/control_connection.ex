@@ -10,7 +10,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   @default_backoff 5_000
   @default_timeout 5_000
-  @healthcheck_timeout 1_000
+  @healthcheck_timeout 500
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
   @delay_after_topology_change 5_000
 
@@ -186,11 +186,7 @@ defmodule Xandra.Cluster.ControlConnection do
     {:keep_state_and_data, :postpone}
   end
 
-  def handle_event({:timeout, {:check_host_health, host}}, nil, {:connected, _node}, _data) do
-    {:keep_state_and_data, {:next_event, :internal, {:healhcheck, host}}}
-  end
-
-  def handle_event(:internal, {:healthcheck, _host}, :disconnected, _data) do
+  def handle_event({:timeout, {:check_host_health, _host}}, nil, :disconnected, _data) do
     {:keep_state_and_data, :postpone}
   end
 
@@ -312,19 +308,15 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   # We wait for the pool to register itself before healthcheck
-  def handle_event(:info, {:healthcheck, host}, _state, %__MODULE__{}) do
-    {:keep_state_and_data, {{:timeout, {:check_host_health, host}}, @healthcheck_timeout, nil}}
-  end
-
-  # We wait for the pool to register itself before healthcheck
-  def handle_event(:internal, {:healthcheck, host}, _state, %__MODULE__{}) do
-    {:keep_state_and_data, {{:timeout, {:check_host_health, host}}, @healthcheck_timeout, nil}}
+  def handle_event(:info, {:healthcheck, %Host{} = host}, {:connected, _host}, %__MODULE__{}) do
+    {:keep_state_and_data,
+     {{:timeout, {:check_host_health, Host.to_peername(host)}}, @healthcheck_timeout, nil}}
   end
 
   # Healthcheck whether a node that we tried to connect is actually up and
   # registered itself. See `handle_host_health_check_event/3` for details
   def handle_event(
-        {:timeout, {:check_host_health, %Host{address: address, port: port}}},
+        {:timeout, {:check_host_health, {address, port}}},
         nil,
         {:connected, _node},
         %__MODULE__{} = data
