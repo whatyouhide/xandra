@@ -29,6 +29,10 @@ defmodule Xandra.ClusterTest do
       send(test_pid, {test_ref, __MODULE__, :init_called, args})
       {:ok, {test_pid, test_ref}}
     end
+
+    def handle_info({:healthcheck, %Host{}}, state) do
+      {:noreply, state}
+    end
   end
 
   setup do

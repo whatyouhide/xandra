@@ -409,6 +409,65 @@ defmodule Xandra.Cluster.ControlConnectionTest do
                     }}
   end
 
+  test "performs healthcheck and sends node down message if not registered",
+       %{mirror_ref: mirror_ref, registry: registry, start_options: start_options} do
+    telemetry_ref =
+      :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
+
+    ctrl_conn = start_control_connection!(start_options)
+
+    assert_receive {^mirror_ref, {:host_added, %Host{address: {127, 0, 0, 1}}}}
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
+
+    parent = self()
+
+    {:ok, task_pid} =
+      Task.start_link(fn ->
+        key = {{{127, 0, 0, 1}, 9042}, 1}
+        {:ok, _} = Registry.register(registry, key, :up)
+        send(parent, {:ready, self()})
+        Process.sleep(:infinity)
+      end)
+
+    assert_receive {:ready, ^task_pid}
+
+    new_peers = [
+      %Host{address: {127, 0, 0, 1}, port: 9042, data_center: "datacenter1"},
+      %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"}
+    ]
+
+    :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
+
+    assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 1}}}}
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
+                    %{
+                      event_type: :host_added,
+                      changed: true,
+                      source: :xandra,
+                      host: %Host{address: {192, 168, 1, 1}}
+                    }}
+
+    send(
+      ctrl_conn,
+      {:healthcheck, %Host{address: {127, 0, 0, 1}, port: 9042, data_center: "datacenter1"}}
+    )
+    send(
+      ctrl_conn,
+      {:healthcheck, %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"}}
+    )
+
+    refute_receive {^mirror_ref, {:host_down, %Host{address: {127, 0, 0, 1}}}}, 500
+    assert_receive {^mirror_ref, {:host_down, %Host{address: {192, 168, 1, 1}}}}
+
+    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
+      %{
+        event_type: :host_down,
+        changed: true,
+        source: :xandra,
+        host: %Host{address: {192, 168, 1, 1}}
+      }}
+  end
+
   defp start_control_connection!(start_options, overrides \\ []) do
     options = Keyword.merge(start_options, overrides)
     TestHelper.start_link_supervised!({ControlConnection, options})
