@@ -40,7 +40,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   test "reporting data upon successful connection",
        %{mirror_ref: mirror_ref, start_options: start_options} do
     start_control_connection!(start_options)
-    assert_receive {^mirror_ref, {:host_added, local_peer}}
+    assert_receive {^mirror_ref, {:discovered_hosts, [local_peer]}}
     assert %Host{address: {127, 0, 0, 1}, data_center: "datacenter1", rack: "rack1"} = local_peer
   end
 
@@ -49,7 +49,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     log =
       capture_log(fn ->
         start_control_connection!(start_options, contact_points: ["bad-domain", "127.0.0.1"])
-        assert_receive {^mirror_ref, {:host_added, local_peer}}
+        assert_receive {^mirror_ref, {:discovered_hosts, [local_peer]}}
         assert %Host{address: {127, 0, 0, 1}} = local_peer
       end)
 
@@ -94,7 +94,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     ctrl_conn = start_control_connection!(start_options)
 
-    assert_receive {^mirror_ref, {:host_added, _peer}}
+    assert_receive {^mirror_ref, {:discovered_hosts, _peers}}
 
     assert %{cluster_name: nil, cluster_pid: ^mirror, host: %Host{address: {127, 0, 0, 1}}} =
              assert_telemetry.(:connected)
@@ -140,7 +140,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     ctrl_conn = start_control_connection!(start_options)
 
-    assert_receive {^mirror_ref, {:host_added, _peer}}
+    assert_receive {^mirror_ref, {:discovered_hosts, _peers}}
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
     # No-op: sending a UP event for a node that is already up.
@@ -238,7 +238,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     ctrl_conn = start_control_connection!(start_options)
 
-    assert_receive {^mirror_ref, {:host_added, _peer}}
+    assert_receive {^mirror_ref, {:discovered_hosts, _peers}}
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
     :gen_statem.cast(
@@ -262,7 +262,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
        %{mirror_ref: mirror_ref, start_options: start_options} do
     ctrl_conn = start_control_connection!(start_options)
 
-    assert_receive {^mirror_ref, {:host_added, _peer}}
+    assert_receive {^mirror_ref, {:discovered_hosts, _peers}}
     assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
 
     log =
@@ -284,7 +284,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
 
     ctrl_conn = start_control_connection!(start_options)
-    assert_receive {^mirror_ref, {:host_added, %Host{address: {127, 0, 0, 1}}}}
+    assert_receive {^mirror_ref, {:discovered_hosts, [%Host{address: {127, 0, 0, 1}}]}}
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
     new_peers = [
@@ -295,8 +295,10 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
 
     assert_receive {^mirror_ref, {:host_removed, %Host{address: {127, 0, 0, 1}}}}
-    assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 1}}}}
-    assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 2}}}}
+
+    assert_receive {^mirror_ref,
+                    {:discovered_hosts,
+                     [%Host{address: {192, 168, 1, 1}}, %Host{address: {192, 168, 1, 2}}]}}
 
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
                     %{
@@ -330,7 +332,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
 
     assert_receive {^mirror_ref, {:host_removed, %Host{address: {192, 168, 1, 1}}}}
-    assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 3}}}}
+    assert_receive {^mirror_ref, {:discovered_hosts, [%Host{address: {192, 168, 1, 3}}]}}
 
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
                     %{
@@ -392,7 +394,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {:ready, ^task2_pid}
 
     ctrl_conn = start_control_connection!(start_options)
-    assert_receive {^mirror_ref, {:host_added, %Host{address: {127, 0, 0, 1}}}}
+    assert_receive {^mirror_ref, {:discovered_hosts, [%Host{address: {127, 0, 0, 1}}]}}
 
     send(task1_pid, {:disconnect, ctrl_conn})
     refute_receive {^mirror_ref, {:host_down, %Host{address: {127, 0, 0, 1}}}}, 100
