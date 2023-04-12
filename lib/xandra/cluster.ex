@@ -632,9 +632,10 @@ defmodule Xandra.Cluster do
       "Discovered hosts: #{Enum.map(hosts, &Host.format_address/1) |> Enum.join(", ")}"
     )
 
-    state = Enum.reduce(hosts, state, fn %Host{} = host, acc ->
-      update_in(acc.load_balancing_state, &state.load_balancing_module.host_added(&1, host))
-    end)
+    state =
+      Enum.reduce(hosts, state, fn %Host{} = host, acc ->
+        update_in(acc.load_balancing_state, &state.load_balancing_module.host_added(&1, host))
+      end)
 
     state = maybe_start_pools(state)
     {:noreply, state}

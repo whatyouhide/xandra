@@ -449,7 +449,9 @@ defmodule Xandra.Cluster.ControlConnection do
         end
       end)
 
-    discovered_hosts = Map.values(discovered_peers) |> Enum.map(fn %{host: %Host{} = host} -> host end)
+    discovered_hosts =
+      Map.values(discovered_peers) |> Enum.map(fn %{host: %Host{} = host} -> host end)
+
     send(data.cluster, {:discovered_hosts, discovered_hosts})
 
     final_peers = Map.merge(existing_peers, discovered_peers)
