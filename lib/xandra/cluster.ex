@@ -628,9 +628,7 @@ defmodule Xandra.Cluster do
   end
 
   def handle_info({:discovered_hosts, hosts}, %__MODULE__{} = state) when is_list(hosts) do
-    Logger.debug(
-      "Discovered hosts: #{Enum.map_join(hosts, ", ", &Host.format_address/1)}"
-    )
+    Logger.debug("Discovered hosts: #{Enum.map_join(hosts, ", ", &Host.format_address/1)}")
 
     state =
       Enum.reduce(hosts, state, fn %Host{} = host, acc ->
