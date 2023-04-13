@@ -418,13 +418,13 @@ defmodule Xandra.Cluster.ControlConnection do
       })
     end)
 
-    {existing_peers, discovered_peers} =
-      Enum.reduce(new_peers, {%{}, %{}}, fn %Host{} = host, {existing_acc, discovered_acc} ->
+    {existing_hosts, discovered_hosts} =
+      Enum.reduce(new_peers, {[], []}, fn %Host{} = host, {existing_acc, discovered_acc} ->
         peername = Host.to_peername(host)
 
         case Map.fetch(old_peers, peername) do
           {:ok, %{status: :up}} ->
-            {Map.put(existing_acc, peername, %{host: host, status: :up}), discovered_acc}
+            {existing_acc ++ [host], discovered_acc}
 
           {:ok, %{status: :down}} ->
             execute_telemetry(data, [:change_event], %{}, %{
@@ -435,7 +435,7 @@ defmodule Xandra.Cluster.ControlConnection do
             })
 
             send(data.cluster, {:host_up, host})
-            {Map.put(existing_acc, peername, %{host: host, status: :up}), discovered_acc}
+            {existing_acc ++ [host], discovered_acc}
 
           :error ->
             execute_telemetry(data, [:change_event], %{}, %{
@@ -445,16 +445,16 @@ defmodule Xandra.Cluster.ControlConnection do
               source: :xandra
             })
 
-            {existing_acc, Map.put(discovered_acc, peername, %{host: host, status: :up})}
+            {existing_acc, discovered_acc ++ [host]}
         end
       end)
 
-    discovered_hosts =
-      Map.values(discovered_peers) |> Enum.map(fn %{host: %Host{} = host} -> host end)
-
     send(data.cluster, {:discovered_hosts, discovered_hosts})
 
-    final_peers = Map.merge(existing_peers, discovered_peers)
+    final_peers =
+      Enum.reduce(existing_hosts ++ discovered_hosts, %{}, fn host, acc ->
+        Map.put(acc, Host.to_peername(host), %{host: host, status: :up})
+      end)
 
     data =
       if final_peers != old_peers do
