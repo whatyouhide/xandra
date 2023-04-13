@@ -482,7 +482,9 @@ defmodule Xandra.Cluster.ControlConnection do
         end
       end)
 
-    send(data.cluster, {:discovered_hosts, discovered_hosts})
+    if discovered_hosts != [] do
+      send(data.cluster, {:discovered_hosts, discovered_hosts})
+    end
 
     final_peers =
       Enum.reduce(existing_hosts ++ discovered_hosts, %{}, fn host, acc ->
