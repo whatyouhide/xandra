@@ -418,7 +418,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     ctrl_conn = start_control_connection!(start_options)
 
-    assert_receive {^mirror_ref, {:host_added, %Host{address: {127, 0, 0, 1}}}}
+    assert_receive {^mirror_ref, {:discovered_hosts, [%Host{address: {127, 0, 0, 1}}]}}
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
     parent = self()
@@ -440,7 +440,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
 
-    assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 1}}}}
+    assert_receive {^mirror_ref, {:discovered_hosts, [%Host{address: {192, 168, 1, 1}}]}}
 
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
                     %{
