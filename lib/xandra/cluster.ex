@@ -627,6 +627,18 @@ defmodule Xandra.Cluster do
     {:noreply, state}
   end
 
+  def handle_info({:discovered_hosts, hosts}, %__MODULE__{} = state) when is_list(hosts) do
+    Logger.debug("Discovered hosts: #{Enum.map_join(hosts, ", ", &Host.format_address/1)}")
+
+    state =
+      Enum.reduce(hosts, state, fn %Host{} = host, acc ->
+        update_in(acc.load_balancing_state, &state.load_balancing_module.host_added(&1, host))
+      end)
+
+    state = maybe_start_pools(state)
+    {:noreply, state}
+  end
+
   ## Helpers
 
   # This function is idempotent: you can call it as many times as you want with the same
