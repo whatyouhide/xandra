@@ -661,7 +661,7 @@ defmodule Xandra.Cluster.ControlConnection do
   defp consume_new_data(%__MODULE__{} = data, %ConnectedNode{} = connected_node, actions) do
     case decode_frame(data.buffer) do
       {frame, rest} ->
-        {change_event, _warnings} = connected_node.protocol_module.decode_response(frame)
+        change_event = connected_node.protocol_module.decode_response(frame)
         Logger.debug("Received event: #{inspect(change_event)}")
         {data, new_actions} = handle_change_event(data, connected_node, change_event)
         consume_new_data(%__MODULE__{data | buffer: rest}, connected_node, actions ++ new_actions)
