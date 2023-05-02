@@ -685,9 +685,9 @@ defmodule Xandra.Cluster.ControlConnection do
   defp inet_mod(:ssl), do: :ssl
 
   defp recv_frame(transport, socket, protocol_format) do
-    with {:ok, frame, ""} <-
-           Utils.recv_frame(transport, socket, protocol_format, _compressor = nil) do
-      {:ok, frame}
+    case Utils.recv_frame(transport, socket, protocol_format, _compressor = nil) do
+      {:ok, frame, ""} -> {:ok, frame}
+      {:error, reason} -> {:error, reason}
     end
   end
 
