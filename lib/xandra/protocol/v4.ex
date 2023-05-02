@@ -4,7 +4,7 @@ defmodule Xandra.Protocol.V4 do
   import Bitwise
 
   import Xandra.Protocol,
-    only: [decode_from_proto_type: 2, decode_from_proto_type: 3, encode_to_type: 2]
+    only: [decode_from_proto_type: 2, decode_from_proto_type: 3, encode_to_type: 2, is_decimal: 1]
 
   alias Xandra.{
     Batch,
@@ -1137,13 +1137,5 @@ defmodule Xandra.Protocol.V4 do
   defp decode_type_tuple(<<buffer::bits>>, count, acc) do
     {type, buffer} = decode_type(buffer)
     decode_type_tuple(buffer, count - 1, [type | acc])
-  end
-
-  # Remove once we depend on Decimal 1.9+
-  if macro_exported?(Decimal, :is_decimal, 1) do
-    require Decimal
-    defp is_decimal(term), do: Decimal.is_decimal(term)
-  else
-    defp is_decimal(term), do: Decimal.decimal?(term)
   end
 end

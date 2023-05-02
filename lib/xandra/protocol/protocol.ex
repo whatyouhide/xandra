@@ -377,4 +377,13 @@ defmodule Xandra.Protocol do
   def new_page(%Xandra.Simple{}), do: %Xandra.Page{}
   def new_page(%Xandra.Batch{}), do: %Xandra.Page{}
   def new_page(%Xandra.Prepared{result_columns: cols}), do: %Xandra.Page{columns: cols}
+
+  # TODO: Remove once we depend on Decimal 1.9+
+  @spec is_decimal(term()) :: boolean()
+  if macro_exported?(Decimal, :is_decimal, 1) do
+    require Decimal
+    def is_decimal(term), do: Decimal.is_decimal(term)
+  else
+    def is_decimal(term), do: Decimal.decimal?(term)
+  end
 end
