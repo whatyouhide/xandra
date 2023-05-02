@@ -16,6 +16,11 @@ defmodule XandraTest do
       assert_raise ArgumentError, ~r{cannot use multiple nodes in the :nodes option}, fn ->
         Xandra.start_link(nodes: ["foo", "bar"])
       end
+
+      # Empty list of nodes.
+      assert_raise ArgumentError, ~r{the :nodes option can't be an empty list}, fn ->
+        Xandra.start_link(nodes: [])
+      end
     end
 
     test "with invalid :authentication" do
