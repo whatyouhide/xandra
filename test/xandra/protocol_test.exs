@@ -95,4 +95,32 @@ defmodule Xandra.ProtocolTest do
       end
     end
   end
+
+  describe "set_query_values_flag/2" do
+    test "with empty values" do
+      assert set_query_values_flag(0x00, []) == 0x00
+      assert set_query_values_flag(0x00, %{}) == 0x00
+    end
+
+    test "with list values" do
+      assert set_query_values_flag(0x00, [1, 2, 3]) == 0x01
+    end
+
+    test "with map values" do
+      assert set_query_values_flag(0x00, %{foo: :bar}) == 0x41
+    end
+  end
+
+  describe "encode_serial_consistency/1" do
+    test "returns the correct encoded value" do
+      assert IO.iodata_to_binary(encode_serial_consistency(nil)) == ""
+      assert IO.iodata_to_binary(encode_serial_consistency(:serial)) == <<0x00, 0x08>>
+    end
+
+    test "raises for invalid serial consistency" do
+      assert_raise ArgumentError, ~r/the :serial_consistency option must be/, fn ->
+        encode_serial_consistency(:quorum)
+      end
+    end
+  end
 end

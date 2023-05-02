@@ -3,6 +3,8 @@ defmodule Xandra.Protocol do
 
   import Bitwise
 
+  alias Xandra.Cluster.{StatusChange, TopologyChange}
+
   @valid_flag_bits for shift <- 0..7, do: 1 <<< shift
   @flag_mask_range 0x00..0xFF
 
@@ -342,6 +344,22 @@ defmodule Xandra.Protocol do
     def encode_to_type(unquote(level), "[consistency]"), do: <<unquote(spec)::16>>
   end
 
+  @spec encode_serial_consistency(nil | :serial | :local_serial) :: iodata()
+  def encode_serial_consistency(consistency) do
+    cond do
+      is_nil(consistency) ->
+        []
+
+      consistency in [:serial, :local_serial] ->
+        encode_to_type(consistency, "[consistency]")
+
+      true ->
+        raise ArgumentError,
+              "the :serial_consistency option must be either :serial or :local_serial, " <>
+                "got: #{inspect(consistency)}"
+    end
+  end
+
   @spec date_from_unix_days(integer()) :: Calendar.date()
   def date_from_unix_days(days) when is_integer(days) do
     Date.add(~D[1970-01-01], days)
@@ -373,6 +391,13 @@ defmodule Xandra.Protocol do
     end
   end
 
+  @spec set_query_values_flag(flag_mask(), map() | list()) :: flag_mask()
+  def set_query_values_flag(mask, values) when values in [[], %{}], do: mask
+  def set_query_values_flag(mask, values) when is_list(values), do: set_flag(mask, 0x01, true)
+
+  def set_query_values_flag(mask, values) when is_map(values),
+    do: mask |> set_flag(0x01, true) |> set_flag(0x40, true)
+
   @spec new_page(Xandra.Simple.t() | Xandra.Batch.t() | Xandra.Prepared.t()) :: Xandra.Page.t()
   def new_page(%Xandra.Simple{}), do: %Xandra.Page{}
   def new_page(%Xandra.Batch{}), do: %Xandra.Page{}
@@ -386,4 +411,23 @@ defmodule Xandra.Protocol do
   else
     def is_decimal(term), do: Decimal.decimal?(term)
   end
+
+  @spec encode_event(StatusChange.t() | TopologyChange.t()) :: iodata()
+  def encode_event(%type{} = event) when type in [StatusChange, TopologyChange] do
+    string_type =
+      case type do
+        StatusChange -> "STATUS_CHANGE"
+        TopologyChange -> "TOPOLOGY_CHANGE"
+      end
+
+    [
+      encode_to_type(string_type, "[string]"),
+      encode_to_type(event.effect, "[string]"),
+      encode_to_type({event.address, event.port}, "[inet]")
+    ]
+  end
+
+  @spec encode_paging_state(binary() | nil) :: iodata()
+  def encode_paging_state(value) when is_binary(value), do: [<<byte_size(value)::32>>, value]
+  def encode_paging_state(nil), do: []
 end
