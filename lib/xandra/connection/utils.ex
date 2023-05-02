@@ -9,7 +9,7 @@ defmodule Xandra.Connection.Utils do
   @typep socket :: :gen_tcp.socket() | :ssl.sslsocket()
 
   @spec recv_frame(transport, socket, protocol_format :: :v4_or_less | :v5_or_more, module | nil) ::
-          {:ok, Frame.t()} | {:error, :closed | :inet.posix()}
+          {:ok, Frame.t(), rest :: binary()} | {:error, :closed | :inet.posix()}
   def recv_frame(transport, socket, protocol_format, compressor)
       when transport in [:gen_tcp, :ssl] and protocol_format in [:v4_or_less, :v5_or_more] and
              is_atom(compressor) do
@@ -40,7 +40,9 @@ defmodule Xandra.Connection.Utils do
       |> Frame.encode_v4(tentative_protocol_module)
 
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- recv_frame(transport, socket, :v4_or_less, compressor) do
+         {:ok, %Frame{} = frame, rest} <- recv_frame(transport, socket, :v4_or_less, compressor) do
+      "" = rest
+
       case tentative_protocol_module.decode_response(frame) do
         # If a protocol version is forced, we should not gracefully downgrade.
         %Error{} = error when not is_nil(protocol_version) ->
@@ -89,7 +91,10 @@ defmodule Xandra.Connection.Utils do
     protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
 
     with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame} <- recv_frame(transport, socket, protocol_format, compressor) do
+         {:ok, %Frame{} = frame, rest} <-
+           recv_frame(transport, socket, protocol_format, compressor) do
+      "" = rest
+
       case protocol_module.decode_response(frame) do
         %Error{} = error -> {:error, error}
         %{} = _options -> :ok
@@ -127,7 +132,8 @@ defmodule Xandra.Connection.Utils do
     # receive the response to this frame because if we said we want to use
     # compression, this response is already compressed.
     with :ok <- transport.send(socket, payload),
-         {:ok, frame} <- recv_frame(transport, socket, :v4_or_less, compressor) do
+         {:ok, frame, rest} <- recv_frame(transport, socket, :v4_or_less, compressor) do
+      "" = rest
       # TODO: handle :error frames for things like :protocol_violation.
       case frame do
         %Frame{kind: :ready, body: <<>>} ->
@@ -171,7 +177,9 @@ defmodule Xandra.Connection.Utils do
     protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
 
     with :ok <- transport.send(socket, payload),
-         {:ok, frame} <- recv_frame(transport, socket, protocol_format, compressor) do
+         {:ok, frame, rest} <- recv_frame(transport, socket, protocol_format, compressor) do
+      "" = rest
+
       case frame do
         %Frame{kind: :auth_success} -> :ok
         %Frame{kind: :error} -> {:error, protocol_module.decode_response(frame)}

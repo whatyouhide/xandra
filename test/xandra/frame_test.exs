@@ -54,7 +54,7 @@ defmodule Xandra.FrameTest do
         encoded =
           inner_payload |> Frame.encode_v5_wrappers(_compressor = nil) |> IO.iodata_to_binary()
 
-        assert {:ok, redecoded} =
+        assert {:ok, redecoded, _rest = ""} =
                  Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
 
         assert IO.iodata_to_binary(inner_payload) == IO.iodata_to_binary(redecoded)
@@ -71,7 +71,7 @@ defmodule Xandra.FrameTest do
           |> Frame.encode_v5_wrappers(_compressor = LZ4Compressor)
           |> IO.iodata_to_binary()
 
-        assert {:ok, redecoded} =
+        assert {:ok, redecoded, _rest = ""} =
                  Frame.decode_v5_wrapper(
                    &fetch_bytes_from_binary/2,
                    encoded,
@@ -89,7 +89,7 @@ defmodule Xandra.FrameTest do
         |> Frame.encode_v5_wrappers(_compressor = LZ4Compressor)
         |> IO.iodata_to_binary()
 
-      assert {:ok, redecoded} =
+      assert {:ok, redecoded, _rest = ""} =
                Frame.decode_v5_wrapper(
                  &fetch_bytes_from_binary/2,
                  encoded,
@@ -111,7 +111,7 @@ defmodule Xandra.FrameTest do
         encoded =
           inner_frame |> Frame.encode_v5_wrappers(_compressor = nil) |> IO.iodata_to_binary()
 
-        assert {:ok, redecoded} =
+        assert {:ok, redecoded, _rest = ""} =
                  Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
 
         assert inner_frame == IO.iodata_to_binary(redecoded)
@@ -139,7 +139,7 @@ defmodule Xandra.FrameTest do
           |> Frame.encode(protocol_module)
           |> IO.iodata_to_binary()
 
-        assert {:ok, redecoded_frame} =
+        assert {:ok, redecoded_frame, _rest = ""} =
                  Frame.decode_v5(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
 
         assert redecoded_frame == frame

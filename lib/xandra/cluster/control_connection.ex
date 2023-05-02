@@ -325,12 +325,6 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   # Used only for testing.
-  def handle_event(:cast, {:change_event, %_{} = event}, {:connected, node}, %__MODULE__{} = data) do
-    {data, actions} = handle_change_event(data, node, event)
-    {:keep_state, data, actions}
-  end
-
-  # Used only for testing.
   def handle_event(:cast, {:refresh_topology, peers}, {:connected, _node}, %__MODULE__{} = data) do
     {:keep_state, refresh_topology(data, peers)}
   end
@@ -659,32 +653,31 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp consume_new_data(%__MODULE__{} = data, %ConnectedNode{} = connected_node, actions) do
-    case decode_frame(data.buffer) do
-      {frame, rest} ->
-        {change_event, _warnings} = connected_node.protocol_module.decode_response(frame)
+    fetch_bytes_fun = fn binary, byte_count ->
+      case binary do
+        <<part::binary-size(byte_count), rest::binary>> -> {:ok, part, rest}
+        _other -> {:error, :not_enough_data}
+      end
+    end
+
+    rest_fun = & &1
+
+    function =
+      case connected_node.protocol_module do
+        Xandra.Protocol.V5 -> :decode_v5
+        Xandra.Protocol.V4 -> :decode_v4
+        Xandra.Protocol.V3 -> :decode_v4
+      end
+
+    case apply(Xandra.Frame, function, [fetch_bytes_fun, data.buffer, _compressor = nil, rest_fun]) do
+      {:ok, frame, rest} ->
+        change_event = connected_node.protocol_module.decode_response(frame)
         Logger.debug("Received event: #{inspect(change_event)}")
         {data, new_actions} = handle_change_event(data, connected_node, change_event)
         consume_new_data(%__MODULE__{data | buffer: rest}, connected_node, actions ++ new_actions)
 
-      :error ->
+      {:error, _reason} ->
         {data, actions}
-    end
-  end
-
-  defp decode_frame(buffer) do
-    header_length = Frame.header_length()
-
-    case buffer do
-      <<header::size(header_length)-bytes, rest::binary>> ->
-        body_length = Frame.body_length(header)
-
-        case rest do
-          <<body::size(body_length)-bytes, rest::binary>> -> {Frame.decode(header, body), rest}
-          _ -> :error
-        end
-
-      _ ->
-        :error
     end
   end
 
@@ -692,7 +685,10 @@ defmodule Xandra.Cluster.ControlConnection do
   defp inet_mod(:ssl), do: :ssl
 
   defp recv_frame(transport, socket, protocol_format) do
-    Utils.recv_frame(transport, socket, protocol_format, _compressor = nil)
+    case Utils.recv_frame(transport, socket, protocol_format, _compressor = nil) do
+      {:ok, frame, ""} -> {:ok, frame}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp query(%__MODULE__{} = data, %ConnectedNode{} = node, statement) do

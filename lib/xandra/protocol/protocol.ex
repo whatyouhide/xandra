@@ -283,6 +283,35 @@ defmodule Xandra.Protocol do
     [<<length(list)::16>>] ++ parts
   end
 
+  def encode_to_type(string, "[string]") when is_binary(string) do
+    [<<byte_size(string)::16>>, string]
+  end
+
+  def encode_to_type(byte, "[byte]") when is_integer(byte) and byte in 0..255 do
+    <<byte::8>>
+  end
+
+  def encode_to_type(int, "[int]") when is_integer(int) do
+    <<int::32-signed>>
+  end
+
+  def encode_to_type({address, port}, "[inet]") do
+    encoded_address =
+      case address do
+        {n1, n2, n3, n4} ->
+          <<n1, n2, n3, n4>>
+
+        {n1, n2, n3, n4, n5, n6, n7, n8} ->
+          <<n1::16, n2::16, n3::16, n4::16, n5::16, n6::16, n7::16, n8::16>>
+      end
+
+    [
+      encode_to_type(byte_size(encoded_address), "[byte]"),
+      encoded_address,
+      encode_to_type(port, "[int]")
+    ]
+  end
+
   # A [short] n, followed by n pair <k><v> where <k> and <v> are [string].
   def encode_to_type(map, "[string map]") when is_map(map) do
     parts =

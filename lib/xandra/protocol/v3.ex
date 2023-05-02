@@ -111,6 +111,28 @@ defmodule Xandra.Protocol.V3 do
     %{frame | body: body}
   end
 
+  ## Server payloads
+  # We want to have the code for encoding some payloads even if they're payloads that are
+  # only server to client. This is pretty easy to write, but all-in-all very useful for
+  # debugging and testing.
+
+  def encode_request(%Frame{kind: :event} = frame, %type{} = event, _options)
+      when type in [StatusChange, TopologyChange] do
+    string_type =
+      case type do
+        StatusChange -> "STATUS_CHANGE"
+        TopologyChange -> "TOPOLOGY_CHANGE"
+      end
+
+    body = [
+      encode_to_type(string_type, "[string]"),
+      encode_to_type(event.effect, "[string]"),
+      encode_to_type({event.address, event.port}, "[inet]")
+    ]
+
+    %Frame{frame | body: body}
+  end
+
   defp encode_batch_type(:logged), do: 0
   defp encode_batch_type(:unlogged), do: 1
   defp encode_batch_type(:counter), do: 2
