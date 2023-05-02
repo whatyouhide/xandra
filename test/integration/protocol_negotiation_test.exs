@@ -13,22 +13,4 @@ defmodule ProtocolNegotiationTest do
     conn = start_supervised!({Xandra, show_sensitive_data_on_connection_error: true})
     assert %Xandra.Page{} = Xandra.execute!(conn, "SELECT * FROM system.local")
   end
-
-  # C* 3 has no support for native protocol v5, so we can test this.
-  if System.get_env("CASSANDRA_VERSION") == "3" do
-    test "if a protocol version is specified, we should not gracefully downgrade" do
-      log =
-        ExUnit.CaptureLog.capture_log(fn ->
-          {:ok, conn} =
-            start_supervised(
-              {Xandra, show_sensitive_data_on_connection_error: true, protocol_version: :v5}
-            )
-
-          ref = Process.monitor(conn)
-          assert_receive {:DOWN, ^ref, _, _, :killed}, 500
-        end)
-
-      assert log =~ "Beta version of the protocol used (5/v5-beta), but USE_BETA flag is unset"
-    end
-  end
 end

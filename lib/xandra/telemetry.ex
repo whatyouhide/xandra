@@ -245,8 +245,8 @@ defmodule Xandra.Telemetry do
       [:server_warnings] ->
         Logger.warn("Received warnings: #{inspect(measurements.warnings)}", logger_meta)
 
-      [:prepared_cache, status] ->
-        query = inspect(measurements.query)
+      [:prepared_cache, status] when status in [:hit, :miss] ->
+        query = inspect(metadata.query)
         Logger.debug("Prepared cache #{status} for query: #{query}", logger_meta)
 
       [:prepare_query, :stop] ->

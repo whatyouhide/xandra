@@ -16,10 +16,6 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
   @protocol_version XandraTest.IntegrationCase.protocol_version()
 
-  setup_all do
-    Xandra.Telemetry.attach_default_handler()
-  end
-
   setup context do
     parent = self()
     mirror_ref = make_ref()
