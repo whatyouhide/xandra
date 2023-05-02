@@ -13,6 +13,13 @@ defmodule Xandra.FrameTest do
     end
   end
 
+  describe "previous_protocol/1" do
+    test "returns the previous version of each protocol (for downgrading)" do
+      assert Frame.previous_protocol(:v5) == :v4
+      assert Frame.previous_protocol(:v4) == :v3
+    end
+  end
+
   describe "supported_protocols/0" do
     test "returns a list of supported protocols" do
       assert Enum.sort(Frame.supported_protocols()) == [:v3, :v4, :v5]

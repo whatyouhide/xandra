@@ -12,6 +12,14 @@ defmodule Xandra.ProtocolTest do
     end
   end
 
+  describe "supports_custom_payload?/1" do
+    test "returns true or false based on the protocol" do
+      assert supports_custom_payload?(Xandra.Protocol.V3) == false
+      assert supports_custom_payload?(Xandra.Protocol.V4) == true
+      assert supports_custom_payload?(Xandra.Protocol.V5) == true
+    end
+  end
+
   describe "decode_from_proto_type/2 with [string]" do
     test "decodes a string and rebinds variables" do
       encoded = <<3::16, "foo"::binary, "rest"::binary>>
