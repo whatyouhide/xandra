@@ -461,13 +461,13 @@ defmodule Xandra.Cluster.ControlConnection do
 
           {:ok, %{status: :down}} ->
             execute_telemetry(data, [:change_event], %{}, %{
-              event_type: :host_up,
+              event_type: :host_reported_up,
               host: host,
               changed: true,
               source: :xandra
             })
 
-            send(data.cluster, {:host_up, host})
+            send(data.cluster, {:host_reported_up, host})
             {existing_acc ++ [host], discovered_acc}
 
           :error ->
@@ -566,7 +566,7 @@ defmodule Xandra.Cluster.ControlConnection do
        }) do
     peer = {address, port}
     %{host: host, status: status} = Map.fetch!(data.peers, peer)
-    telemetry_meta = %{event_type: :host_up, source: :cassandra, host: host}
+    telemetry_meta = %{event_type: :host_reported_up, source: :cassandra, host: host}
 
     case status do
       # We already know this peer and we already think it's up, nothing to do.
@@ -579,7 +579,7 @@ defmodule Xandra.Cluster.ControlConnection do
       :down ->
         execute_telemetry(data, [:change_event], %{}, Map.put(telemetry_meta, :changed, true))
         data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :up))
-        send(data.cluster, {:host_up, host})
+        send(data.cluster, {:host_reported_up, host})
         {put_in(data.peers[peer].status, :up), _actions = []}
     end
   end
