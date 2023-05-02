@@ -396,7 +396,23 @@ defmodule Xandra do
 
   @start_link_opts_keys Keyword.keys(@start_link_opts_schema)
 
-  @doc false
+  @doc """
+  Returns the `NimbleOptions` schema used for validating the options for `start_link/1`.
+
+  This function is meant to be used by other libraries that want to extend Xandra's
+  functionality, and that rely on `start_link/1` at some point. The keys in the returned
+  schema are not all public, so you should always refer to the documentation for
+  `start_link/1`.
+
+  ## Examples
+
+      iex> schema = Xandra.start_link_opts_schema()
+      iex> schema[:encryption][:type]
+      :boolean
+
+  """
+  @doc since: "0.15.0"
+  @spec start_link_opts_schema() :: keyword()
   def start_link_opts_schema do
     @start_link_opts_schema
   end

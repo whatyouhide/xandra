@@ -1,6 +1,8 @@
 defmodule XandraTest do
   use ExUnit.Case, async: true
 
+  doctest Xandra
+
   describe "options validation in Xandra.start_link/1" do
     test "with invalid nodes" do
       assert_raise NimbleOptions.ValidationError, ~r{invalid node: "foo:bar"}, fn ->
@@ -15,26 +17,26 @@ defmodule XandraTest do
         Xandra.start_link(nodes: ["foo", "bar"])
       end
     end
-  end
 
-  test "with invalid :authentication" do
-    assert_raise NimbleOptions.ValidationError, ~r{invalid value for :authentication}, fn ->
-      Xandra.start_link(authentication: :nope)
-    end
-  end
-
-  test "with invalid :compressor" do
-    message =
-      "invalid value for :compressor option: compressor module :nonexisting_module is not loaded"
-
-    assert_raise NimbleOptions.ValidationError, message, fn ->
-      Xandra.start_link(compressor: :nonexisting_module)
+    test "with invalid :authentication" do
+      assert_raise NimbleOptions.ValidationError, ~r{invalid value for :authentication}, fn ->
+        Xandra.start_link(authentication: :nope)
+      end
     end
 
-    message = ~r/expected compressor module to be a module/
+    test "with invalid :compressor" do
+      message =
+        "invalid value for :compressor option: compressor module :nonexisting_module is not loaded"
 
-    assert_raise NimbleOptions.ValidationError, message, fn ->
-      Xandra.start_link(compressor: "not even an atom")
+      assert_raise NimbleOptions.ValidationError, message, fn ->
+        Xandra.start_link(compressor: :nonexisting_module)
+      end
+
+      message = ~r/expected compressor module to be a module/
+
+      assert_raise NimbleOptions.ValidationError, message, fn ->
+        Xandra.start_link(compressor: "not even an atom")
+      end
     end
   end
 
