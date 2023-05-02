@@ -71,4 +71,28 @@ defmodule Xandra.ProtocolTest do
       assert list == ["foo", "ab"]
     end
   end
+
+  describe "circular encoding/decoding" do
+    property "with [inet] and an IPv4 address" do
+      check all ipv4 <- {byte(), byte(), byte(), byte()},
+                port <- integer(0..65535) do
+        buffer = {ipv4, port} |> encode_to_type("[inet]") |> IO.iodata_to_binary()
+
+        decode_from_proto_type(inet <- buffer, "[inet]")
+        assert buffer == ""
+        assert inet == {ipv4, port}
+      end
+    end
+
+    property "with [inet] and an IPv6 address" do
+      check all ipv6 <- {byte(), byte(), byte(), byte(), byte(), byte(), byte(), byte()},
+                port <- integer(0..65535) do
+        buffer = {ipv6, port} |> encode_to_type("[inet]") |> IO.iodata_to_binary()
+
+        decode_from_proto_type(inet <- buffer, "[inet]")
+        assert buffer == ""
+        assert inet == {ipv6, port}
+      end
+    end
+  end
 end

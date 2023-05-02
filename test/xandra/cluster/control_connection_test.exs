@@ -3,6 +3,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
   import ExUnit.CaptureLog
 
+  alias Xandra.Frame
   alias Xandra.TestHelper
 
   alias Xandra.Cluster.{
@@ -144,11 +145,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
     # No-op: sending a UP event for a node that is already up.
-    :gen_statem.cast(
-      ctrl_conn,
-      {:change_event, %StatusChange{effect: "UP", address: {127, 0, 0, 1}, port: 9042}}
-    )
-
+    send_change_event(ctrl_conn, %StatusChange{effect: "UP", address: {127, 0, 0, 1}, port: 9042})
     refute_receive {:host_up, _host}, 100
 
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, measurements, meta}
@@ -158,10 +155,11 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert %Host{address: {127, 0, 0, 1}} = meta.host
 
     # With StatusChange DOWN it notifies the cluster of the host being down.
-    :gen_statem.cast(
-      ctrl_conn,
-      {:change_event, %StatusChange{effect: "DOWN", address: {127, 0, 0, 1}, port: 9042}}
-    )
+    send_change_event(ctrl_conn, %StatusChange{
+      effect: "DOWN",
+      address: {127, 0, 0, 1},
+      port: 9042
+    })
 
     assert_receive {^mirror_ref, {:host_down, %Host{} = host}}
     assert host.address == {127, 0, 0, 1}
@@ -175,10 +173,11 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert %Host{address: {127, 0, 0, 1}} = meta.host
 
     # Getting the same DOWN event once more doesn't do anything, the host is already down.
-    :gen_statem.cast(
-      ctrl_conn,
-      {:change_event, %StatusChange{effect: "DOWN", address: {127, 0, 0, 1}, port: 9042}}
-    )
+    send_change_event(ctrl_conn, %StatusChange{
+      effect: "DOWN",
+      address: {127, 0, 0, 1},
+      port: 9042
+    })
 
     refute_receive {:host_down, _host}, 100
 
@@ -189,10 +188,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert %Host{address: {127, 0, 0, 1}} = meta.host
 
     # Getting StatusChange UP for the node brings it back up and notifies the cluster.
-    :gen_statem.cast(
-      ctrl_conn,
-      {:change_event, %StatusChange{effect: "UP", address: {127, 0, 0, 1}, port: 9042}}
-    )
+    send_change_event(ctrl_conn, %StatusChange{effect: "UP", address: {127, 0, 0, 1}, port: 9042})
 
     assert_receive {^mirror_ref, {:host_up, %Host{} = host}}
     assert host.address == {127, 0, 0, 1}
@@ -221,12 +217,12 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
 
     assert_receive {^mirror_ref, {:host_added, _peer}}
-    assert {{:connected, _connected_node}, _data} = :sys.get_state(ctrl_conn)
 
-    :gen_statem.cast(
-      ctrl_conn,
-      {:change_event, %TopologyChange{effect: "NEW_NODE", address: {127, 0, 0, 2}}}
-    )
+    send_change_event(ctrl_conn, %TopologyChange{
+      effect: "NEW_NODE",
+      address: {127, 0, 0, 2},
+      port: 9042
+    })
 
     flunk("TODO: we need to run this in the cluster")
   end
@@ -241,11 +237,11 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {^mirror_ref, {:discovered_hosts, _peers}}
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
-    :gen_statem.cast(
-      ctrl_conn,
-      {:change_event,
-       %TopologyChange{effect: "REMOVED_NODE", address: {127, 0, 0, 1}, port: 9042}}
-    )
+    send_change_event(ctrl_conn, %TopologyChange{
+      effect: "REMOVED_NODE",
+      address: {127, 0, 0, 1},
+      port: 9042
+    })
 
     assert_receive {^mirror_ref, {:host_removed, %Host{} = host}}
     assert host.address == {127, 0, 0, 1}
@@ -267,10 +263,11 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     log =
       capture_log(fn ->
-        :gen_statem.cast(
-          ctrl_conn,
-          {:change_event, %TopologyChange{effect: "MOVED_NODE", address: {127, 0, 0, 2}}}
-        )
+        send_change_event(ctrl_conn, %TopologyChange{
+          effect: "MOVED_NODE",
+          address: {127, 0, 0, 2},
+          port: 9042
+        })
 
         Process.sleep(100)
       end)
@@ -483,5 +480,17 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     end
 
     mirror(parent, ref)
+  end
+
+  defp send_change_event(ctrl_conn, change_event) do
+    assert {{:connected, connected_node}, _data} = :sys.get_state(ctrl_conn)
+
+    data =
+      Frame.new(:event, _options = [])
+      |> connected_node.protocol_module.encode_request(change_event)
+      |> Frame.encode(connected_node.protocol_module)
+      |> IO.iodata_to_binary()
+
+    send(ctrl_conn, {:tcp, connected_node.socket, data})
   end
 end
