@@ -27,8 +27,10 @@ defmodule Xandra.Cluster.LoadBalancingPolicy do
   """
   @callback init(options :: term()) :: state()
 
+  @callback host_reported_up(state(), host :: Host.t()) :: state
+
   @doc """
-  Called when the Cassandra cluster marks `host` as "up".
+  Called when the Connection passes healthcheck in Control Connection.
   """
   @callback host_up(state(), host :: Host.t()) :: state()
 
@@ -56,6 +58,17 @@ defmodule Xandra.Cluster.LoadBalancingPolicy do
     @callback hosts_plan(state()) :: {Enumerable.t(Host.t()), state()}
   else
     @callback hosts_plan(state()) :: {Enumerable.t(), state()}
+  end
+
+  @doc """
+  Called to return a "plan", which is an enumerable of hosts to query in order.
+  """
+  # TODO: remove the check once we depend on Elixir 1.14+. Enumerable.t/1 was
+  # introduced in 1.14.
+  if Version.match?(System.version(), ">= 1.14.0") do
+    @callback reported_up_hosts_plan(state()) :: {Enumerable.t(Host.t()), state()}
+  else
+    @callback reported_up_hosts_plan(state()) :: {Enumerable.t(), state()}
   end
 
   ## Private helpers

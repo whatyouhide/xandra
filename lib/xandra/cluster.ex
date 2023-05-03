@@ -76,6 +76,8 @@ defmodule Xandra.Cluster do
 
     * `Xandra.Cluster.LoadBalancingPolicy.Random` - it will choose one of the
       connected nodes at random and execute the query on that node.
+    * `Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin` - it will execute the
+      queries on the nodes in a round robin manner, prioritizing the current DC.
 
   ## Disconnections and reconnections
 
@@ -583,6 +585,13 @@ defmodule Xandra.Cluster do
   @impl true
   def handle_info(msg, state)
 
+  def handle_info({:host_reported_up, %Host{} = host}, %__MODULE__{} = state) do
+    Logger.debug("Host reported as up: #{Host.format_address((host))}")
+    state = update_in(state.load_balancing_state, &state.load_balancing_module.host_reported_up(&1, host))
+    state = maybe_start_pools(state)
+    {:noreply, state}
+  end
+
   def handle_info({:host_up, %Host{} = host}, %__MODULE__{} = state) do
     Logger.debug("Host marked as UP: #{Host.format_address(host)}")
     state = update_in(state.load_balancing_state, &state.load_balancing_module.host_up(&1, host))
@@ -644,6 +653,7 @@ defmodule Xandra.Cluster do
   # This function is idempotent: you can call it as many times as you want with the same
   # peer, and it'll only start it once.
   defp start_pool(state, %Host{} = host) do
+    IO.inspect(host, label: "starting pool")
     conn_options =
       Keyword.merge(state.pool_options,
         nodes: [Host.format_address(host)],
@@ -698,7 +708,7 @@ defmodule Xandra.Cluster do
        when map_size(pools) < target do
     {hosts_plan, state} =
       get_and_update_in(state.load_balancing_state, fn lb_state ->
-        state.load_balancing_module.hosts_plan(lb_state)
+        state.load_balancing_module.reported_up_hosts_plan(lb_state)
       end)
 
     Enum.reduce_while(hosts_plan, state, fn %Host{} = host, state ->

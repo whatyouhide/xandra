@@ -57,19 +57,30 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin do
   end
 
   @impl true
+  def host_reported_up(%__MODULE__{} = state, %Host{} = host) do
+    key = if state.local_dc == host.data_center, do: :local_hosts, else: :remote_hosts
+
+    update_in(state, [Access.key!(key)], fn hosts ->
+      Enum.map(hosts, fn {existing_host, status} ->
+        if host_match?(existing_host, host), do: {host, :reported_up}, else: {existing_host, status}
+      end)
+    end)
+  end
+
+  @impl true
   def host_added(hosts, new_host)
 
   def host_added(%__MODULE__{local_dc: nil, local_hosts: []} = state, %Host{} = host) do
-    %__MODULE__{state | local_dc: host.data_center, local_hosts: [{host, :up}]}
+    %__MODULE__{state | local_dc: host.data_center, local_hosts: [{host, :reported_up}]}
   end
 
   def host_added(%__MODULE__{local_dc: local_dc} = state, %Host{data_center: local_dc} = host)
       when is_binary(local_dc) do
-    update_in(state.local_hosts, &(&1 ++ [{host, :up}]))
+    update_in(state.local_hosts, &(&1 ++ [{host, :reported_up}]))
   end
 
   def host_added(%__MODULE__{} = state, %Host{} = host) do
-    update_in(state.remote_hosts, &(&1 ++ [{host, :up}]))
+    update_in(state.remote_hosts, &(&1 ++ [{host, :reported_up}]))
   end
 
   @impl true
@@ -101,6 +112,16 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin do
         if host_match?(existing_host, host), do: {host, :down}, else: {existing_host, status}
       end)
     end)
+  end
+
+  @impl true
+  def reported_up_hosts_plan(%__MODULE__{} = state) do
+    {local_hosts, state} = get_and_update_in(state.local_hosts, &slide/1)
+    {remote_hosts, state} = get_and_update_in(state.remote_hosts, &slide/1)
+
+    hosts = for {host, status} when status in [:up, :reported_up] <- local_hosts ++ remote_hosts, do: host
+
+    {hosts, state}
   end
 
   @impl true
