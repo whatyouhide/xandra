@@ -19,6 +19,9 @@ defmodule Xandra.Void do
 
   defstruct [:tracing_id, :custom_payload]
 
+  @typedoc """
+  The type for a "void" result.
+  """
   @type t :: %__MODULE__{
           tracing_id: binary | nil,
           custom_payload: Xandra.custom_payload() | nil

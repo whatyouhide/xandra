@@ -2,6 +2,12 @@ defmodule Xandra.SchemaChange do
   @moduledoc """
   A struct that represents the result of a query that modifies the schema.
 
+  See [`%Xandra.SchemaChange{}`](`__struct__/0`) for information on the fields of this struct.
+  """
+
+  @doc """
+  The struct for the "schema change" result.
+
   This struct has the following fields:
 
     * `:effect` - the type of change involved. It's one of `"CREATED"`,
@@ -25,11 +31,14 @@ defmodule Xandra.SchemaChange do
       If the server doesn't send a custom payload, this field is `nil`. Otherwise,
       it's of type `t:Xandra.custom_payload/0`. See the "Custom payloads" section
       in the documentation for the `Xandra` module.
-
   """
-
   defstruct [:effect, :target, :options, :tracing_id, :custom_payload]
 
+  @typedoc """
+  The type for a schema change result.
+
+  See [`%Xandra.SchemaChange{}`](`__struct__/0`) for information.
+  """
   @type t :: %__MODULE__{
           effect: String.t(),
           target: String.t(),

@@ -15,14 +15,22 @@ defmodule Xandra.Error do
   example, for logging purposes), it is possible to use `Exception.message/1` to
   get a formatted version of the error.
   """
+
+  @doc """
+  The exception struct for a Cassandra error.
+  """
   defexception [:reason, :message, warnings: []]
 
+  @typedoc """
+  The type for a Cassandra error exception.
+  """
   @type t :: %__MODULE__{
           reason: atom,
           message: String.t(),
           warnings: [String.t()]
         }
 
+  @doc false
   @spec new(atom, String.t(), [String.t()]) :: t
   def new(reason, message, warnings)
       when is_atom(reason) and is_binary(message) and is_list(warnings) do
