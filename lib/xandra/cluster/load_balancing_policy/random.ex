@@ -20,7 +20,7 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.Random do
 
   @impl true
   def host_added(hosts, new_host) do
-    Enum.uniq_by([{new_host, :reported_up}] ++ hosts, fn {host, _status} -> Host.to_peername(host) end)
+    Enum.uniq_by([{new_host, :up}] ++ hosts, fn {host, _status} -> Host.to_peername(host) end)
   end
 
   @impl true
@@ -51,14 +51,14 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.Random do
 
   @impl true
   def query_plan(hosts) do
-    up_hosts = for {host, :connected} <- hosts, do: host
-    {Enum.shuffle(up_hosts), hosts}
+    connected_hosts = for {host, :connected} <- hosts, do: host
+    {Enum.shuffle(connected_hosts), hosts}
   end
 
   @impl true
   def hosts_plan(hosts) do
-    reported_up_hosts = for {host, status} when status in [:up, :connected] <- hosts, do: host
-    {Enum.shuffle(reported_up_hosts), hosts}
+    up_hosts = for {host, status} when status in [:up, :connected] <- hosts, do: host
+    {Enum.shuffle(up_hosts), hosts}
   end
 
   defp host_match?(%Host{} = host1, %Host{} = host2) do
