@@ -13,15 +13,7 @@ defmodule Xandra.Page do
   emitted when streaming out of a `Xandra.Page` struct is a map of string column
   names to their corresponding value.
 
-  The following fields are public and can be accessed or relied on:
-
-    * `:paging_state` - the current paging state. Its value can be used to check
-      whether more pages are available to fetch after the given page.
-      This is useful when implementing manual paging.
-      See also the documentation for `Xandra.execute/4`.
-
-    * `:tracing_id` - the tracing ID (as a UUID binary) if tracing was enabled,
-      or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
+  See [`%Xandra.Page{}`](`__struct__/0`) for information about which fields are public.
 
   ## Examples
 
@@ -33,14 +25,40 @@ defmodule Xandra.Page do
 
   """
 
+  @doc """
+  The page struct.
+
+  The following fields are public and can be accessed or relied on:
+
+    * `:paging_state` - the current paging state, or `nil` if no paging is occurring.
+      Its value can be used to check whether more pages are available to fetch
+      after the given page. This is useful when implementing manual paging.
+      See also the documentation for `Xandra.execute/4`.
+
+    * `:tracing_id` - the tracing ID (as a UUID binary) if tracing was enabled,
+      or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
+
+  """
   defstruct [:content, :columns, :paging_state, :tracing_id, :custom_payload]
 
-  @type paging_state :: binary | nil
+  @typedoc """
+  The paging state of a page.
 
+  This is intended to be an "opaque" binary value that you can use for further
+  pagination. See `Xandra.execute/4`.
+  """
+  @type paging_state :: binary
+
+  @typedoc """
+  The type for the page struct.
+
+  The only public fields here are `:paging_state` and `:tracing_id`.
+  See [`%Xandra.Page{}`](`__struct__/0`).
+  """
   @type t :: %__MODULE__{
           content: list,
           columns: nonempty_list,
-          paging_state: paging_state,
+          paging_state: paging_state | nil,
           tracing_id: binary | nil,
           custom_payload: Xandra.custom_payload() | nil
         }
