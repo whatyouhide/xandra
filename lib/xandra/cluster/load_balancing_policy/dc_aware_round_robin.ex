@@ -27,8 +27,8 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin do
   This policy uses a **round-robin strategy** to pick hosts, giving precedence to hosts
   in a "local" data center. The local data center is determined by the
   `:local_data_center` option (see below). "Giving precedence" means that
-  `hosts_plan/1` will return a list of hosts where first there are all the local
-  hosts that are *up*, and then all the remote hosts that are *up*.
+  `hosts_plan/1` and `query_plan/1` will return a list of hosts where first there are all
+  the local hosts that are *up*, and then all the remote hosts that are *up*.
 
   The round-robin strategy is applied to local and remote hosts separately. For example,
   say the local hosts are `LH1`, `LH2`, `LH3`, and the remote hosts are `RH1`, `RH2`, `RH3`.
@@ -57,30 +57,19 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin do
   end
 
   @impl true
-  def host_reported_up(%__MODULE__{} = state, %Host{} = host) do
-    key = if state.local_dc == host.data_center, do: :local_hosts, else: :remote_hosts
-
-    update_in(state, [Access.key!(key)], fn hosts ->
-      Enum.map(hosts, fn {existing_host, status} ->
-        if host_match?(existing_host, host), do: {host, :reported_up}, else: {existing_host, status}
-      end)
-    end)
-  end
-
-  @impl true
   def host_added(hosts, new_host)
 
   def host_added(%__MODULE__{local_dc: nil, local_hosts: []} = state, %Host{} = host) do
-    %__MODULE__{state | local_dc: host.data_center, local_hosts: [{host, :reported_up}]}
+    %__MODULE__{state | local_dc: host.data_center, local_hosts: [{host, :up}]}
   end
 
   def host_added(%__MODULE__{local_dc: local_dc} = state, %Host{data_center: local_dc} = host)
       when is_binary(local_dc) do
-    update_in(state.local_hosts, &(&1 ++ [{host, :reported_up}]))
+    update_in(state.local_hosts, &(&1 ++ [{host, :up}]))
   end
 
   def host_added(%__MODULE__{} = state, %Host{} = host) do
-    update_in(state.remote_hosts, &(&1 ++ [{host, :reported_up}]))
+    update_in(state.remote_hosts, &(&1 ++ [{host, :up}]))
   end
 
   @impl true
@@ -104,6 +93,17 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin do
   end
 
   @impl true
+  def host_connected(%__MODULE__{} = state, %Host{} = host) do
+    key = if state.local_dc == host.data_center, do: :local_hosts, else: :remote_hosts
+
+    update_in(state, [Access.key!(key)], fn hosts ->
+      Enum.map(hosts, fn {existing_host, status} ->
+        if host_match?(existing_host, host), do: {host, :connected}, else: {existing_host, status}
+      end)
+    end)
+  end
+
+  @impl true
   def host_down(%__MODULE__{} = state, %Host{} = host) do
     key = if state.local_dc == host.data_center, do: :local_hosts, else: :remote_hosts
 
@@ -115,7 +115,7 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin do
   end
 
   @impl true
-  def reported_up_hosts_plan(%__MODULE__{} = state) do
+  def hosts_plan(%__MODULE__{} = state) do
     {local_hosts, state} = get_and_update_in(state.local_hosts, &slide/1)
     {remote_hosts, state} = get_and_update_in(state.remote_hosts, &slide/1)
 
@@ -125,7 +125,7 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin do
   end
 
   @impl true
-  def hosts_plan(%__MODULE__{} = state) do
+  def query_plan(%__MODULE__{} = state) do
     {local_hosts, state} = get_and_update_in(state.local_hosts, &slide/1)
     {remote_hosts, state} = get_and_update_in(state.remote_hosts, &slide/1)
 

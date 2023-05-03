@@ -568,14 +568,14 @@ defmodule Xandra.Cluster do
 
   @impl true
   def handle_call(:checkout, _from, %__MODULE__{} = state) do
-    {hosts_plan, state} =
+    {query_plan, state} =
       get_and_update_in(state.load_balancing_state, fn lb_state ->
-        state.load_balancing_module.hosts_plan(lb_state)
+        state.load_balancing_module.query_plan(lb_state)
       end)
 
     # Find the first host in the plan for which we have a pool.
     reply =
-      hosts_plan
+      query_plan
       |> Stream.map(fn %Host{} = host -> Map.fetch(state.pools, Host.to_peername(host)) end)
       |> Enum.find(_default = {:error, :empty}, &match?({:ok, _}, &1))
 
@@ -585,16 +585,16 @@ defmodule Xandra.Cluster do
   @impl true
   def handle_info(msg, state)
 
-  def handle_info({:host_reported_up, %Host{} = host}, %__MODULE__{} = state) do
+  def handle_info({:host_up, %Host{} = host}, %__MODULE__{} = state) do
     Logger.debug("Host reported as up: #{Host.format_address((host))}")
-    state = update_in(state.load_balancing_state, &state.load_balancing_module.host_reported_up(&1, host))
+    state = update_in(state.load_balancing_state, &state.load_balancing_module.host_up(&1, host))
     state = maybe_start_pools(state)
     {:noreply, state}
   end
 
-  def handle_info({:host_up, %Host{} = host}, %__MODULE__{} = state) do
+  def handle_info({:host_connected, %Host{} = host}, %__MODULE__{} = state) do
     Logger.debug("Host marked as UP: #{Host.format_address(host)}")
-    state = update_in(state.load_balancing_state, &state.load_balancing_module.host_up(&1, host))
+    state = update_in(state.load_balancing_state, &state.load_balancing_module.host_connected(&1, host))
     state = maybe_start_pools(state)
     {:noreply, state}
   end
@@ -708,7 +708,7 @@ defmodule Xandra.Cluster do
        when map_size(pools) < target do
     {hosts_plan, state} =
       get_and_update_in(state.load_balancing_state, fn lb_state ->
-        state.load_balancing_module.reported_up_hosts_plan(lb_state)
+        state.load_balancing_module.hosts_plan(lb_state)
       end)
 
     Enum.reduce_while(hosts_plan, state, fn %Host{} = host, state ->
