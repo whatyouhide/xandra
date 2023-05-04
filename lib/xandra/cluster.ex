@@ -586,14 +586,14 @@ defmodule Xandra.Cluster do
   def handle_info(msg, state)
 
   def handle_info({:host_up, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host reported as up: #{Host.format_address((host))}")
+    Logger.debug("Host reported as UP: #{Host.format_address((host))}")
     state = update_in(state.load_balancing_state, &state.load_balancing_module.host_up(&1, host))
     state = maybe_start_pools(state)
     {:noreply, state}
   end
 
   def handle_info({:host_connected, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host marked as UP: #{Host.format_address(host)}")
+    Logger.debug("Host marked as connected: #{Host.format_address(host)}")
     state = update_in(state.load_balancing_state, &state.load_balancing_module.host_connected(&1, host))
     state = maybe_start_pools(state)
     {:noreply, state}
@@ -653,7 +653,6 @@ defmodule Xandra.Cluster do
   # This function is idempotent: you can call it as many times as you want with the same
   # peer, and it'll only start it once.
   defp start_pool(state, %Host{} = host) do
-    IO.inspect(host, label: "starting pool")
     conn_options =
       Keyword.merge(state.pool_options,
         nodes: [Host.format_address(host)],
