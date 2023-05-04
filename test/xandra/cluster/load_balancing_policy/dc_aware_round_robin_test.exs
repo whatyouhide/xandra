@@ -93,6 +93,90 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobinTest do
     end
   end
 
+  describe "query_plan/1" do
+    test "with no hosts" do
+      lbp = DCAwareRoundRobin.init(local_data_center: "dc1")
+      assert {[], _lbo} = DCAwareRoundRobin.query_plan(lbp)
+    end
+
+    test "with mixed local and remote hosts, round-robins through them" do
+      lbp = DCAwareRoundRobin.init(local_data_center: "dc1")
+      local_host1 = host("127.0.0.1:9042", "dc1")
+      local_host2 = host("127.0.0.2:9042", "dc1")
+      local_host3 = host("127.0.0.3:9042", "dc1")
+      remote_host1 = host("128.0.0.1:9042", "dc2")
+      remote_host2 = host("128.0.0.2:9042", "dc2")
+      remote_host3 = host("128.0.0.3:9042", "dc2")
+
+      lbp =
+        Enum.reduce(
+          [local_host1, local_host2, local_host3, remote_host1, remote_host2, remote_host3],
+          lbp,
+          &DCAwareRoundRobin.host_added(&2, &1)
+        )
+
+      assert %DCAwareRoundRobin{local_dc: "dc1", local_hosts: local_hosts, remote_hosts: remote_hosts} = lbp
+      assert local_hosts == Enum.map([local_host1, local_host2, local_host3], fn host -> {host, :up} end)
+      assert remote_hosts == Enum.map([remote_host1, remote_host2, remote_host3], fn host -> {host, :up} end)
+
+      assert {hosts, lbp} = DCAwareRoundRobin.query_plan(lbp)
+
+      # Doesn't return any host when none is connected
+      assert hosts == []
+
+      lbp =
+        Enum.reduce(
+          [local_host1, remote_host1],
+          lbp,
+          &DCAwareRoundRobin.host_connected(&2, &1)
+        )
+
+      assert {hosts, lbp} = DCAwareRoundRobin.query_plan(lbp)
+
+      # Only returns hosts that are connected
+      assert hosts == [
+               local_host1,
+               remote_host1
+             ]
+
+      lbp =
+        Enum.reduce(
+          [local_host2, local_host3, remote_host2, remote_host3],
+          lbp,
+          &DCAwareRoundRobin.host_connected(&2, &1)
+        )
+
+      assert {hosts, lbp} = DCAwareRoundRobin.query_plan(lbp)
+
+      assert hosts == [
+               local_host3,
+               local_host1,
+               local_host2,
+               remote_host3,
+               remote_host1,
+               remote_host2
+             ]
+
+      assert {hosts, lbp} = DCAwareRoundRobin.query_plan(lbp)
+
+      assert hosts == [
+              local_host1,
+              local_host2,
+              local_host3,
+              remote_host1,
+              remote_host2,
+              remote_host3
+            ]
+
+      # Removes node when node is down.
+      lbp = DCAwareRoundRobin.host_down(lbp, local_host2)
+      lbp = DCAwareRoundRobin.host_down(lbp, remote_host3)
+
+      assert {hosts, _lbp} = DCAwareRoundRobin.hosts_plan(lbp)
+      assert hosts == [local_host3, local_host1, remote_host2, remote_host1]
+    end
+  end
+
   describe "hosts_plan/1" do
     test "with no hosts" do
       lbp = DCAwareRoundRobin.init(local_data_center: "dc1")
@@ -115,34 +199,24 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobinTest do
           &DCAwareRoundRobin.host_added(&2, &1)
         )
 
-      assert {hosts, lbp} = DCAwareRoundRobin.hosts_plan(lbp)
-
-      assert hosts == [
-               local_host1,
-               local_host2,
-               local_host3,
-               remote_host1,
-               remote_host2,
-               remote_host3
-             ]
+      lbp =
+        Enum.reduce(
+          [local_host2, local_host3, remote_host2],
+          lbp,
+          &DCAwareRoundRobin.host_connected(&2, &1)
+        )
 
       assert {hosts, lbp} = DCAwareRoundRobin.hosts_plan(lbp)
 
+      # Returns all :up and :connected nodes
       assert hosts == [
-               local_host2,
-               local_host3,
-               local_host1,
-               remote_host2,
-               remote_host3,
-               remote_host1
-             ]
-
-      # Only returns :up hosts.
-      lbp = DCAwareRoundRobin.host_down(lbp, local_host2)
-      lbp = DCAwareRoundRobin.host_down(lbp, remote_host3)
-
-      assert {hosts, _lbp} = DCAwareRoundRobin.hosts_plan(lbp)
-      assert hosts == [local_host3, local_host1, remote_host1, remote_host2]
+        local_host1,
+        local_host2,
+        local_host3,
+        remote_host1,
+        remote_host2,
+        remote_host3
+      ]
     end
   end
 
