@@ -295,6 +295,14 @@ defmodule Xandra.ClusterTest do
       assert_pool_started(test_ref, host1)
       assert_pool_started(test_ref, host2)
 
+      lbs = :sys.get_state(cluster) |> Map.get(:load_balancing_state)
+      assert MapSet.new(lbs) == MapSet.new([{host1, :up}, {host2, :up}])
+
+      connected_peers(cluster, [host1, host2])
+
+      lbs = :sys.get_state(cluster) |> Map.get(:load_balancing_state)
+      assert MapSet.new(lbs) == MapSet.new([{host1, :connected}, {host2, :connected}])
+
       pool_pids =
         TestHelper.wait_for_passing(500, fn ->
           pools = :sys.get_state(cluster).pools
@@ -387,5 +395,9 @@ defmodule Xandra.ClusterTest do
 
   defp discovered_peers(cluster, hosts) do
     Enum.each(hosts, &send(cluster, {:host_added, &1}))
+  end
+
+  defp connected_peers(cluster, hosts) do
+    Enum.each(hosts, &send(cluster, {:host_connected, &1}))
   end
 end
