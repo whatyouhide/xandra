@@ -119,7 +119,8 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin do
     {local_hosts, state} = get_and_update_in(state.local_hosts, &slide/1)
     {remote_hosts, state} = get_and_update_in(state.remote_hosts, &slide/1)
 
-    hosts = for {host, status} when status in [:up, :connected] <- local_hosts ++ remote_hosts, do: host
+    hosts =
+      for {host, status} when status in [:up, :connected] <- local_hosts ++ remote_hosts, do: host
 
     {hosts, state}
   end
