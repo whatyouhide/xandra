@@ -115,9 +115,17 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobinTest do
           &DCAwareRoundRobin.host_added(&2, &1)
         )
 
-      assert %DCAwareRoundRobin{local_dc: "dc1", local_hosts: local_hosts, remote_hosts: remote_hosts} = lbp
-      assert local_hosts == Enum.map([local_host1, local_host2, local_host3], fn host -> {host, :up} end)
-      assert remote_hosts == Enum.map([remote_host1, remote_host2, remote_host3], fn host -> {host, :up} end)
+      assert %DCAwareRoundRobin{
+               local_dc: "dc1",
+               local_hosts: local_hosts,
+               remote_hosts: remote_hosts
+             } = lbp
+
+      assert local_hosts ==
+               Enum.map([local_host1, local_host2, local_host3], fn host -> {host, :up} end)
+
+      assert remote_hosts ==
+               Enum.map([remote_host1, remote_host2, remote_host3], fn host -> {host, :up} end)
 
       assert {hosts, lbp} = DCAwareRoundRobin.query_plan(lbp)
 
@@ -160,13 +168,13 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobinTest do
       assert {hosts, lbp} = DCAwareRoundRobin.query_plan(lbp)
 
       assert hosts == [
-              local_host1,
-              local_host2,
-              local_host3,
-              remote_host1,
-              remote_host2,
-              remote_host3
-            ]
+               local_host1,
+               local_host2,
+               local_host3,
+               remote_host1,
+               remote_host2,
+               remote_host3
+             ]
 
       # Removes node when node is down.
       lbp = DCAwareRoundRobin.host_down(lbp, local_host2)
@@ -210,13 +218,13 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobinTest do
 
       # Returns all :up and :connected nodes
       assert hosts == [
-        local_host1,
-        local_host2,
-        local_host3,
-        remote_host1,
-        remote_host2,
-        remote_host3
-      ]
+               local_host1,
+               local_host2,
+               local_host3,
+               remote_host1,
+               remote_host2,
+               remote_host3
+             ]
     end
   end
 
