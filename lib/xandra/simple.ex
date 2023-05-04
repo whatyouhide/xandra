@@ -12,6 +12,12 @@ defmodule Xandra.Simple do
     :custom_payload
   ]
 
+  @typedoc """
+  The type for a simple query.
+
+  The fields of this are not meant to be used, but are documented to avoid
+  Dialyzer warnings.
+  """
   @type t :: %__MODULE__{
           statement: Xandra.statement(),
           values: Xandra.values() | nil,

@@ -4,7 +4,7 @@ defmodule Xandra.Protocol.V4 do
   import Bitwise
 
   import Xandra.Protocol,
-    only: [decode_from_proto_type: 2, decode_from_proto_type: 3, encode_to_type: 2]
+    only: [decode_from_proto_type: 2, decode_from_proto_type: 3, encode_to_type: 2, is_decimal: 1]
 
   alias Xandra.{
     Batch,
@@ -120,11 +120,20 @@ defmodule Xandra.Protocol.V4 do
       encoded_queries,
       encode_to_type(consistency, "[consistency]"),
       flags,
-      encode_serial_consistency(serial_consistency),
+      Proto.encode_serial_consistency(serial_consistency),
       if(timestamp, do: <<timestamp::64>>, else: [])
     ]
 
     %Frame{frame | body: body}
+  end
+
+  ## Server payloads
+  # We want to have the code for encoding some payloads even if they're payloads that are
+  # only server to client. This is pretty easy to write, but all-in-all very useful for
+  # debugging and testing.
+
+  def encode_request(%Frame{kind: :event} = frame, %_{} = event, _options) do
+    %Frame{frame | body: Proto.encode_event(event)}
   end
 
   defp encode_custom_payload(nil) do
@@ -144,14 +153,6 @@ defmodule Xandra.Protocol.V4 do
   defp encode_batch_type(:unlogged), do: 1
   defp encode_batch_type(:counter), do: 2
 
-  defp set_query_values_flag(mask, values) do
-    cond do
-      values == [] or values == %{} -> mask
-      is_list(values) -> Proto.set_flag(mask, 0x01, true)
-      is_map(values) -> mask |> Proto.set_flag(0x01, true) |> Proto.set_flag(0x40, true)
-    end
-  end
-
   defp encode_params(columns, values, options, default_consistency, skip_metadata?) do
     consistency = Keyword.get(options, :consistency, default_consistency)
     page_size = Keyword.get(options, :page_size, 10_000)
@@ -161,7 +162,7 @@ defmodule Xandra.Protocol.V4 do
 
     flags =
       0x00
-      |> set_query_values_flag(values)
+      |> Proto.set_query_values_flag(values)
       |> Proto.set_flag(_page_size = 0x04, true)
       |> Proto.set_flag(_metadata_presence = 0x02, skip_metadata?)
       |> Proto.set_flag(_paging_state = 0x08, paging_state)
@@ -180,32 +181,10 @@ defmodule Xandra.Protocol.V4 do
       flags,
       encoded_values,
       <<page_size::32>>,
-      encode_paging_state(paging_state),
-      encode_serial_consistency(serial_consistency),
+      Proto.encode_paging_state(paging_state),
+      Proto.encode_serial_consistency(serial_consistency),
       if(timestamp, do: <<timestamp::64>>, else: [])
     ]
-  end
-
-  defp encode_paging_state(value) do
-    if value do
-      [<<byte_size(value)::32>>, value]
-    else
-      []
-    end
-  end
-
-  defp encode_serial_consistency(nil) do
-    []
-  end
-
-  defp encode_serial_consistency(consistency) when consistency in [:serial, :local_serial] do
-    encode_to_type(consistency, "[consistency]")
-  end
-
-  defp encode_serial_consistency(other) do
-    raise ArgumentError,
-          "the :serial_consistency option must be either :serial or :local_serial, " <>
-            "got: #{inspect(other)}"
   end
 
   defp encode_query_in_batch(%Simple{statement: statement, values: values}) do
@@ -1115,13 +1094,5 @@ defmodule Xandra.Protocol.V4 do
   defp decode_type_tuple(<<buffer::bits>>, count, acc) do
     {type, buffer} = decode_type(buffer)
     decode_type_tuple(buffer, count - 1, [type | acc])
-  end
-
-  # Remove once we depend on Decimal 1.9+
-  if macro_exported?(Decimal, :is_decimal, 1) do
-    require Decimal
-    defp is_decimal(term), do: Decimal.is_decimal(term)
-  else
-    defp is_decimal(term), do: Decimal.decimal?(term)
   end
 end

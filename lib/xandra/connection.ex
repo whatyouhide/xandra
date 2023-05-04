@@ -254,8 +254,9 @@ defmodule Xandra.Connection do
     protocol_format = Xandra.Protocol.frame_protocol_format(state.protocol_module)
 
     with :ok <- transport.send(state.socket, payload),
-         {:ok, %Frame{} = frame} <-
+         {:ok, %Frame{} = frame, rest} <-
            Utils.recv_frame(transport, state.socket, protocol_format, state.compressor) do
+      "" = rest
       frame = %Frame{frame | atom_keys?: state.atom_keys?}
 
       case state.protocol_module.decode_response(frame, prepared) do
@@ -309,8 +310,9 @@ defmodule Xandra.Connection do
     protocol_format = Xandra.Protocol.frame_protocol_format(state.protocol_module)
 
     with :ok <- state.transport.send(state.socket, payload),
-         {:ok, %Frame{} = frame} <-
+         {:ok, %Frame{} = frame, rest} <-
            Utils.recv_frame(state.transport, state.socket, protocol_format, state.compressor) do
+      "" = rest
       frame = %Frame{frame | atom_keys?: state.atom_keys?}
 
       case state.protocol_module.decode_response(frame, query, options) do

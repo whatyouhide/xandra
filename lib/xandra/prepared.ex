@@ -2,7 +2,15 @@ defmodule Xandra.Prepared do
   @moduledoc """
   A data structure used to internally represent prepared queries.
 
-  These are the publicly accessible fields of this struct:
+  See [`%Xandra.Prepared{}`](`__struct__/0`) for information about which fields are
+  public. All other fields are documented in `t:t/0` to avoid Dialyzer warnings,
+  but are not meant to be used by users.
+  """
+
+  @doc """
+  A struct that represents a prepared query.
+
+  These are the publicly-accessible fields of this struct:
 
     * `:tracing_id` - the tracing ID (as a UUID binary) if tracing was enabled,
       or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
@@ -12,10 +20,7 @@ defmodule Xandra.Prepared do
       it's of type `t:Xandra.custom_payload/0`. See the "Custom payloads" section
       in the documentation for the `Xandra` module.
 
-  All other fields are documented in `t:t/0` to avoid Dialyzer warnings,
-  but are not meant to be used by users.
   """
-
   defstruct [
     :statement,
     :values,
@@ -32,6 +37,12 @@ defmodule Xandra.Prepared do
     :result_metadata_id
   ]
 
+  @typedoc """
+  The type for a prepared query.
+
+  The only public fields here are `:tracing_id` and `:response_custom_payload`.
+  See [`%Xandra.Prepared{}`](`__struct__/0`).
+  """
   @type t :: %__MODULE__{
           statement: Xandra.statement(),
           values: Xandra.values() | nil,

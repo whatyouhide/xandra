@@ -290,21 +290,22 @@ defmodule Xandra.Frame do
   @spec decode_v4(
           (fetch_state, pos_integer() -> {:ok, binary(), fetch_state} | {:error, reason}),
           fetch_state,
-          module() | nil
-        ) :: {:ok, t()} | {:error, reason}
+          module() | nil,
+          (fetch_state -> binary())
+        ) :: {:ok, t(), binary()} | {:error, reason}
         when fetch_state: term(), reason: term()
-  def decode_v4(fetch_bytes_fun, fetch_state, compressor)
+  def decode_v4(fetch_bytes_fun, fetch_state, compressor, rest_fun \\ fn _ -> "" end)
       when is_function(fetch_bytes_fun, 2) and is_atom(compressor) do
     length = header_length()
 
     with {:ok, header, fetch_state} <- fetch_bytes_fun.(fetch_state, length) do
       case body_length(header) do
         0 ->
-          {:ok, decode(header)}
+          {:ok, decode(header), rest_fun.(fetch_state)}
 
         body_length ->
-          with {:ok, body, _bytes_state} <- fetch_bytes_fun.(fetch_state, body_length),
-               do: {:ok, decode(header, body, compressor)}
+          with {:ok, body, bytes_state} <- fetch_bytes_fun.(fetch_state, body_length),
+               do: {:ok, decode(header, body, compressor), rest_fun.(bytes_state)}
       end
     end
   end
@@ -312,23 +313,25 @@ defmodule Xandra.Frame do
   @spec decode_v5(
           (fetch_state, pos_integer() -> {:ok, binary(), fetch_state} | {:error, reason}),
           fetch_state,
-          module() | nil
+          module() | nil,
+          (fetch_state -> binary())
         ) :: {:ok, t()} | {:error, reason}
         when fetch_state: term(), reason: term()
-  def decode_v5(fetch_bytes_fun, fetch_state, compressor)
+  def decode_v5(fetch_bytes_fun, fetch_state, compressor, rest_fun \\ fn _ -> "" end)
       when is_function(fetch_bytes_fun, 2) and is_atom(compressor) do
-    with {:ok, envelope} <- decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor) do
+    with {:ok, envelope, rest} <-
+           decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor, rest_fun) do
       {frame, ""} = decode_from_binary(envelope, compressor)
-      {:ok, frame}
+      {:ok, frame, rest}
     end
   end
 
   # Made public for testing.
   @doc false
-  def decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor) do
+  def decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor, rest_fun \\ fn _ -> "" end) do
     case decode_next_v5_wrapper(fetch_bytes_fun, fetch_state, compressor) do
-      {:done, payload, _fetch_state} ->
-        {:ok, payload}
+      {:done, payload, fetch_state} ->
+        {:ok, payload, rest_fun.(fetch_state)}
 
       {:not_self_contained, payload, fetch_state} ->
         v4_header_length = header_length()
@@ -340,7 +343,8 @@ defmodule Xandra.Frame do
           compressor,
           _v4_frame_length = body_length(v4_header),
           _v4_fetched_body_bytes = byte_size(v4_payload_start),
-          _payload_acc = payload
+          _payload_acc = payload,
+          rest_fun
         )
 
       {:error, reason} ->
@@ -354,7 +358,8 @@ defmodule Xandra.Frame do
          compressor,
          v4_frame_length,
          v4_fetched_body_bytes,
-         payload_acc
+         payload_acc,
+         rest_fun
        ) do
     if v4_fetched_body_bytes >= v4_frame_length do
       {:ok, IO.iodata_to_binary(payload_acc)}
@@ -363,9 +368,9 @@ defmodule Xandra.Frame do
         {:error, reason} ->
           {:error, reason}
 
-        {:not_self_contained, chunk, _fetch_state}
+        {:not_self_contained, chunk, fetch_state}
         when byte_size(chunk) + v4_fetched_body_bytes >= v4_frame_length ->
-          {:ok, IO.iodata_to_binary([payload_acc | chunk])}
+          {:ok, IO.iodata_to_binary([payload_acc | chunk]), rest_fun.(fetch_state)}
 
         {:not_self_contained, chunk, fetch_state} ->
           decode_v5_wrapper_not_self_contained(
@@ -374,7 +379,8 @@ defmodule Xandra.Frame do
             compressor,
             v4_frame_length,
             v4_fetched_body_bytes + byte_size(chunk),
-            [payload_acc | chunk]
+            [payload_acc | chunk],
+            rest_fun
           )
       end
     end

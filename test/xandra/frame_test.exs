@@ -13,6 +13,13 @@ defmodule Xandra.FrameTest do
     end
   end
 
+  describe "previous_protocol/1" do
+    test "returns the previous version of each protocol (for downgrading)" do
+      assert Frame.previous_protocol(:v5) == :v4
+      assert Frame.previous_protocol(:v4) == :v3
+    end
+  end
+
   describe "supported_protocols/0" do
     test "returns a list of supported protocols" do
       assert Enum.sort(Frame.supported_protocols()) == [:v3, :v4, :v5]
@@ -54,7 +61,7 @@ defmodule Xandra.FrameTest do
         encoded =
           inner_payload |> Frame.encode_v5_wrappers(_compressor = nil) |> IO.iodata_to_binary()
 
-        assert {:ok, redecoded} =
+        assert {:ok, redecoded, _rest = ""} =
                  Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
 
         assert IO.iodata_to_binary(inner_payload) == IO.iodata_to_binary(redecoded)
@@ -71,7 +78,7 @@ defmodule Xandra.FrameTest do
           |> Frame.encode_v5_wrappers(_compressor = LZ4Compressor)
           |> IO.iodata_to_binary()
 
-        assert {:ok, redecoded} =
+        assert {:ok, redecoded, _rest = ""} =
                  Frame.decode_v5_wrapper(
                    &fetch_bytes_from_binary/2,
                    encoded,
@@ -89,7 +96,7 @@ defmodule Xandra.FrameTest do
         |> Frame.encode_v5_wrappers(_compressor = LZ4Compressor)
         |> IO.iodata_to_binary()
 
-      assert {:ok, redecoded} =
+      assert {:ok, redecoded, _rest = ""} =
                Frame.decode_v5_wrapper(
                  &fetch_bytes_from_binary/2,
                  encoded,
@@ -111,7 +118,7 @@ defmodule Xandra.FrameTest do
         encoded =
           inner_frame |> Frame.encode_v5_wrappers(_compressor = nil) |> IO.iodata_to_binary()
 
-        assert {:ok, redecoded} =
+        assert {:ok, redecoded, _rest = ""} =
                  Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
 
         assert inner_frame == IO.iodata_to_binary(redecoded)
@@ -139,7 +146,7 @@ defmodule Xandra.FrameTest do
           |> Frame.encode(protocol_module)
           |> IO.iodata_to_binary()
 
-        assert {:ok, redecoded_frame} =
+        assert {:ok, redecoded_frame, _rest = ""} =
                  Frame.decode_v5(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
 
         assert redecoded_frame == frame

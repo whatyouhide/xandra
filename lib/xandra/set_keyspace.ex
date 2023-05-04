@@ -19,6 +19,9 @@ defmodule Xandra.SetKeyspace do
 
   defstruct [:keyspace, :tracing_id, :custom_payload]
 
+  @typedoc """
+  The type for a "set keyspace" result.
+  """
   @type t :: %__MODULE__{
           keyspace: String.t(),
           tracing_id: binary() | nil,

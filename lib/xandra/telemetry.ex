@@ -145,6 +145,8 @@ defmodule Xandra.Telemetry do
   """
   @moduledoc since: "0.15.0"
 
+  alias Xandra.Cluster.Host
+
   require Logger
 
   @doc """
@@ -211,6 +213,24 @@ defmodule Xandra.Telemetry do
           :telemetry.event_metadata(),
           :no_config
         ) :: :ok
+  def handle_event(event, measurements, metadata, config)
+
+  def handle_event([:xandra, :cluster | event], measurements, metadata, :no_config) do
+    %Host{address: address, port: port} = metadata.host
+    logger_meta = [xandra_address: address, xandra_port: port]
+
+    case event do
+      [:change_event] ->
+        Logger.debug("Received change event: #{inspect(measurements.event)}", logger_meta)
+
+      [:control_connection, :connected] ->
+        Logger.debug("Control connection established", logger_meta)
+
+      [:control_connection, :disconnected] ->
+        Logger.debug("Control connection disconnected", logger_meta)
+    end
+  end
+
   def handle_event([:xandra | event], measurements, metadata, :no_config) do
     %{address: address, port: port} = metadata
     logger_meta = [xandra_address: address, xandra_port: port]
@@ -225,8 +245,8 @@ defmodule Xandra.Telemetry do
       [:server_warnings] ->
         Logger.warn("Received warnings: #{inspect(measurements.warnings)}", logger_meta)
 
-      [:prepared_cache, status] ->
-        query = inspect(measurements.query)
+      [:prepared_cache, status] when status in [:hit, :miss] ->
+        query = inspect(metadata.query)
         Logger.debug("Prepared cache #{status} for query: #{query}", logger_meta)
 
       [:prepare_query, :stop] ->
@@ -236,15 +256,6 @@ defmodule Xandra.Telemetry do
       [:execute_query, :stop] ->
         duration = System.convert_time_unit(measurements.duration, :native, :millisecond)
         Logger.debug("Executed query in #{duration}ms: #{inspect(metadata.query)}", logger_meta)
-
-      [:cluster, :change_event] ->
-        Logger.debug("Received change event: #{inspect(measurements.event)}", logger_meta)
-
-      [:cluster, :control_connection, :connected] ->
-        Logger.debug("Control connection established", logger_meta)
-
-      [:cluster, :control_connection, :disconnected] ->
-        Logger.debug("Control connection disconnected", logger_meta)
     end
   end
 end

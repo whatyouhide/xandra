@@ -12,6 +12,14 @@ defmodule Xandra.ProtocolTest do
     end
   end
 
+  describe "supports_custom_payload?/1" do
+    test "returns true or false based on the protocol" do
+      assert supports_custom_payload?(Xandra.Protocol.V3) == false
+      assert supports_custom_payload?(Xandra.Protocol.V4) == true
+      assert supports_custom_payload?(Xandra.Protocol.V5) == true
+    end
+  end
+
   describe "decode_from_proto_type/2 with [string]" do
     test "decodes a string and rebinds variables" do
       encoded = <<3::16, "foo"::binary, "rest"::binary>>
@@ -69,6 +77,58 @@ defmodule Xandra.ProtocolTest do
       decode_from_proto_type(list <- buffer, "[string list]")
       assert buffer == <<1::1>>
       assert list == ["foo", "ab"]
+    end
+  end
+
+  describe "circular encoding/decoding" do
+    property "with [inet] and an IPv4 address" do
+      check all ipv4 <- {byte(), byte(), byte(), byte()},
+                port <- integer(0..65535) do
+        buffer = {ipv4, port} |> encode_to_type("[inet]") |> IO.iodata_to_binary()
+
+        decode_from_proto_type(inet <- buffer, "[inet]")
+        assert buffer == ""
+        assert inet == {ipv4, port}
+      end
+    end
+
+    property "with [inet] and an IPv6 address" do
+      check all ipv6 <- {byte(), byte(), byte(), byte(), byte(), byte(), byte(), byte()},
+                port <- integer(0..65535) do
+        buffer = {ipv6, port} |> encode_to_type("[inet]") |> IO.iodata_to_binary()
+
+        decode_from_proto_type(inet <- buffer, "[inet]")
+        assert buffer == ""
+        assert inet == {ipv6, port}
+      end
+    end
+  end
+
+  describe "set_query_values_flag/2" do
+    test "with empty values" do
+      assert set_query_values_flag(0x00, []) == 0x00
+      assert set_query_values_flag(0x00, %{}) == 0x00
+    end
+
+    test "with list values" do
+      assert set_query_values_flag(0x00, [1, 2, 3]) == 0x01
+    end
+
+    test "with map values" do
+      assert set_query_values_flag(0x00, %{foo: :bar}) == 0x41
+    end
+  end
+
+  describe "encode_serial_consistency/1" do
+    test "returns the correct encoded value" do
+      assert IO.iodata_to_binary(encode_serial_consistency(nil)) == ""
+      assert IO.iodata_to_binary(encode_serial_consistency(:serial)) == <<0x00, 0x08>>
+    end
+
+    test "raises for invalid serial consistency" do
+      assert_raise ArgumentError, ~r/the :serial_consistency option must be/, fn ->
+        encode_serial_consistency(:quorum)
+      end
     end
   end
 end
