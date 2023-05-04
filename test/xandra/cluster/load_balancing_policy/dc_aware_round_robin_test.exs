@@ -214,7 +214,7 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobinTest do
           &DCAwareRoundRobin.host_connected(&2, &1)
         )
 
-      assert {hosts, lbp} = DCAwareRoundRobin.hosts_plan(lbp)
+      assert {hosts, _lbp} = DCAwareRoundRobin.hosts_plan(lbp)
 
       # Returns all :up and :connected nodes
       assert hosts == [
