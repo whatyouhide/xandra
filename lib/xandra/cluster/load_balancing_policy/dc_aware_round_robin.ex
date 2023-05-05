@@ -96,10 +96,8 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin do
   def host_connected(%__MODULE__{} = state, %Host{} = host) do
     key = if state.local_dc == host.data_center, do: :local_hosts, else: :remote_hosts
 
-    update_in(state, [Access.key!(key)], fn hosts ->
-      Enum.map(hosts, fn {existing_host, status} ->
-        if host_match?(existing_host, host), do: {host, :connected}, else: {existing_host, status}
-      end)
+    update_in(state, [Access.key!(key), Access.all()], fn {existing_host, status} ->
+      if host_match?(existing_host, host), do: {host, :connected}, else: {existing_host, status}
     end)
   end
 

@@ -28,12 +28,12 @@ defmodule Xandra.Cluster.LoadBalancingPolicy do
   @callback init(options :: term()) :: state()
 
   @doc """
-  Called when cassandra gossip tells us the node is up.
+  Called when the Cassandra gossip marks `host` as "up".
   """
   @callback host_up(state(), host :: Host.t()) :: state
 
   @doc """
-  Called when the Connection passes healthcheck in Control Connection.
+  Called when Xandra successfully connects to `host`.
   """
   @callback host_connected(state(), host :: Host.t()) :: state()
 

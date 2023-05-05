@@ -188,7 +188,7 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobinTest do
   describe "hosts_plan/1" do
     test "with no hosts" do
       lbp = DCAwareRoundRobin.init(local_data_center: "dc1")
-      assert {[], _lbo} = DCAwareRoundRobin.hosts_plan(lbp)
+      assert {[], _lbp} = DCAwareRoundRobin.hosts_plan(lbp)
     end
 
     test "with mixed local and remote hosts, round-robins through them" do
