@@ -28,9 +28,14 @@ defmodule Xandra.Cluster.LoadBalancingPolicy do
   @callback init(options :: term()) :: state()
 
   @doc """
-  Called when the Cassandra cluster marks `host` as "up".
+  Called when the Cassandra gossip marks `host` as "up".
   """
-  @callback host_up(state(), host :: Host.t()) :: state()
+  @callback host_up(state(), host :: Host.t()) :: state
+
+  @doc """
+  Called when Xandra successfully connects to `host`.
+  """
+  @callback host_connected(state(), host :: Host.t()) :: state()
 
   @doc """
   Called when the Cassandra cluster marks `host` as "down".
@@ -49,6 +54,17 @@ defmodule Xandra.Cluster.LoadBalancingPolicy do
 
   @doc """
   Called to return a "plan", which is an enumerable of hosts to query in order.
+  """
+  # TODO: remove the check once we depend on Elixir 1.14+. Enumerable.t/1 was
+  # introduced in 1.14.
+  if Version.match?(System.version(), ">= 1.14.0") do
+    @callback query_plan(state()) :: {Enumerable.t(Host.t()), state()}
+  else
+    @callback query_plan(state()) :: {Enumerable.t(), state()}
+  end
+
+  @doc """
+  Called to return a "plan", which is an enumerable of hosts to start connections in order.
   """
   # TODO: remove the check once we depend on Elixir 1.14+. Enumerable.t/1 was
   # introduced in 1.14.

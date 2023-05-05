@@ -24,14 +24,21 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.Random do
   end
 
   @impl true
+  def host_up(hosts, new_host) do
+    Enum.map(hosts, fn {host, status} ->
+      if host_match?(host, new_host), do: {host, :up}, else: {host, status}
+    end)
+  end
+
+  @impl true
   def host_removed(hosts, host) do
     Enum.reject(hosts, fn {existing_host, _status} -> host_match?(existing_host, host) end)
   end
 
   @impl true
-  def host_up(hosts, new_host) do
+  def host_connected(hosts, new_host) do
     Enum.map(hosts, fn {host, status} ->
-      if host_match?(host, new_host), do: {host, :up}, else: {host, status}
+      if host_match?(host, new_host), do: {host, :connected}, else: {host, status}
     end)
   end
 
@@ -43,8 +50,14 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.Random do
   end
 
   @impl true
+  def query_plan(hosts) do
+    connected_hosts = for {host, :connected} <- hosts, do: host
+    {Enum.shuffle(connected_hosts), hosts}
+  end
+
+  @impl true
   def hosts_plan(hosts) do
-    up_hosts = for {host, :up} <- hosts, do: host
+    up_hosts = for {host, status} when status in [:up, :connected] <- hosts, do: host
     {Enum.shuffle(up_hosts), hosts}
   end
 

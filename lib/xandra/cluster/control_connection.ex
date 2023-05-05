@@ -357,6 +357,7 @@ defmodule Xandra.Cluster.ControlConnection do
       send(data.cluster, {:host_down, host_info.host})
       {:keep_state, data}
     else
+      send(data.cluster, {:host_connected, host_info.host})
       :keep_state_and_data
     end
   end
