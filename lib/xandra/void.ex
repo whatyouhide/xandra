@@ -3,7 +3,11 @@ defmodule Xandra.Void do
   A struct that represents an empty Cassandra result.
 
   This struct is returned as the result of queries such as `INSERT`, `UPDATE`, or
-  `DELETE`.
+  `DELETE`. See [`%Xandra.Void{}`](`__struct__/0`) for information about the fields.
+  """
+
+  @doc """
+  The struct for "void" results.
 
   These are the public fields it contains:
 
@@ -16,7 +20,6 @@ defmodule Xandra.Void do
       in the documentation for the `Xandra` module.
 
   """
-
   defstruct [:tracing_id, :custom_payload]
 
   @typedoc """
