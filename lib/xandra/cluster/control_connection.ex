@@ -798,5 +798,4 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defp format_address(address) when is_tuple(address), do: List.to_string(:inet.ntoa(address))
   defp format_address(address) when is_list(address), do: List.to_string(address)
-  defp format_address(address) when is_binary(address), do: address
 end
