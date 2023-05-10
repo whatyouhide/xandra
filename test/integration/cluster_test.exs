@@ -65,8 +65,7 @@ defmodule Xandra.ClusterTest do
     end
 
     test "validates the :load_balancing option" do
-      message =
-        ~r/invalid value for :load_balancing option: expected one of \[:priority, :random\]/
+      message = ~r/expected :load_balancing option to match at least one given type/
 
       assert_raise NimbleOptions.ValidationError, message, fn ->
         Xandra.Cluster.start_link(nodes: ["example.com:9042"], load_balancing: :inverse)
