@@ -11,7 +11,7 @@ defmodule Xandra.Mixfile do
     [
       app: :xandra,
       version: @version,
-      elixir: "~> 1.10",
+      elixir: "~> 1.11",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
@@ -87,13 +87,8 @@ defmodule Xandra.Mixfile do
       {:ex_doc, "~> 0.28", only: :dev},
       {:dialyxir, "~> 1.3", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.16.0", only: :test},
-      {:stream_data, "~> 0.5.0", only: [:dev, :test]}
-    ] ++
-      if Version.match?(System.version(), "~> 1.11") do
-        # TODO: remove this conditional once we require Elixir 1.11+
-        [{:nimble_lz4, "~> 0.1.2", only: [:dev, :test]}]
-      else
-        []
-      end
+      {:stream_data, "~> 0.5.0", only: [:dev, :test]},
+      {:nimble_lz4, "~> 0.1.2", only: [:dev, :test]}
+    ]
   end
 end

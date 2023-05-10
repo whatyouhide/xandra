@@ -379,7 +379,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
       {:error, reason} ->
         logger_meta = [xandra_address: format_address(host.address), xandra_port: host.port]
-        log_warn("Error connecting: #{:inet.format_error(reason)}", logger_meta)
+        Logger.warning("Error connecting: #{:inet.format_error(reason)}", logger_meta)
         connect_to_first_available_node(nodes, data)
     end
   end
@@ -743,13 +743,6 @@ defmodule Xandra.Cluster.ControlConnection do
         {:ok, {host, port}} = Xandra.OptionsValidators.validate_node(contact_point)
         %Host{address: host, port: port}
     end)
-  end
-
-  # TODO: use Logger.warning/2 directly when we depend on Elixir 1.11+.
-  if macro_exported?(Logger, :warning, 2) do
-    defp log_warn(message, metadata), do: Logger.log(:warning, message, metadata)
-  else
-    defp log_warn(message, metadata), do: Logger.log(:warn, message, metadata)
   end
 
   # If we have no hosts from the load-balancing policy, we fall back to the contact
