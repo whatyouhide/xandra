@@ -191,6 +191,7 @@ defmodule Xandra.Cluster do
     nodes: [
       type: {:list, {:custom, Xandra.OptionsValidators, :validate_node, []}},
       default: ["127.0.0.1"],
+      type_doc: "list of `t:String.t/0`",
       doc: """
       A list of nodes to use as *contact points* when setting up the cluster. Each node in this
       list must be a hostname (`"cassandra.example.net"`), IPv4 (`"192.168.0.100"`),
@@ -201,7 +202,8 @@ defmodule Xandra.Cluster do
       """
     ],
     load_balancing: [
-      type: {:or, [{:in, [:priority, :random]}, :mod_arg]},
+      type: {:or, [{:in, [:random]}, :mod_arg]},
+      type_doc: "`{module(), term()}` or `:random`",
       default: :random,
       doc: """
       Load balancing "policy". See the [*Load balancing policies*
@@ -229,7 +231,7 @@ defmodule Xandra.Cluster do
     autodiscovered_nodes_port: [
       type: {:in, 0..65535},
       default: @default_port,
-      # TODO: use type_doc: "`t::inet.port_number/0`" when we depend on nimble_options 1.0.
+      type_doc: "`t::inet.port_number/0`",
       doc: """
       The port to use when connecting to autodiscovered nodes. Cassandra does not advertise
       the port of nodes when discovering them, so you'll need to specify one explicitly.

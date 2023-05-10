@@ -302,6 +302,7 @@ defmodule Xandra do
     ],
     authentication: [
       type: {:custom, Xandra.OptionsValidators, :validate_authentication, []},
+      type_doc: "`{module(), term()}`",
       doc: """
       Two-element tuple: the authenticator module to use for authentication
       and its supported options. See the "Authentication" section in the
@@ -310,6 +311,7 @@ defmodule Xandra do
     ],
     compressor: [
       type: {:custom, Xandra.OptionsValidators, :validate_module, ["compressor"]},
+      type_doc: "`t:module/0`",
       doc: """
       The compressor module to use for compressing and decompressing data.
       See the ["Compression" section](#module-compression) in the module documentation. By default
@@ -345,6 +347,7 @@ defmodule Xandra do
     nodes: [
       type: {:list, {:custom, Xandra.OptionsValidators, :validate_node, []}},
       default: ["127.0.0.1"],
+      type_doc: "list of `t:String.t/0`",
       doc: """
       The Cassandra node to connect to. This option is a list for consistency with
       `Xandra.Cluster`, but if using `Xandra` directly, it can only contain a single node.
@@ -366,7 +369,8 @@ defmodule Xandra do
       doc: """
       The enforced version of the Cassandra native protocol to use. If this option
       is not present, Xandra will negotiate the protocol with the server, starting
-      with the most recent one and falling back to older ones if needed. See
+      with the most recent one and falling back to older ones if needed. Must be one
+      of #{Enum.map_join(Frame.supported_protocols(), ", ", &"`#{inspect(&1)}`")}. See
       the [relevant section](#module-native-protocol) in the module documentation.
       """
     ],
