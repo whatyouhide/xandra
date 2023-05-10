@@ -87,7 +87,7 @@ jobs:
             cassandra_native_protocols: "v3,v4"
           # Oldest supported Elixir/OTP matrix.
           - otp: "21.3"
-            elixir: "1.10"
+            elixir: "1.11"
             cassandra_version: "3"
             cassandra_native_protocols: "v3"
     env:
@@ -157,7 +157,7 @@ jobs:
             cassandra_native_protocol: "v4"
           # Oldest supported Elixir/OTP matrix.
           - otp: "21.3"
-            elixir: "1.10"
+            elixir: "1.11"
             cassandra_version: "3"
             cassandra_native_protocol: "v3"
     env:
