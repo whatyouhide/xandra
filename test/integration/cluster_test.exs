@@ -148,33 +148,36 @@ defmodule Xandra.ClusterTest do
       refute_other_pools_started(test_ref)
     end
 
-    test "waits for any node to be up if :sync_connect is a timeout", %{test_ref: test_ref} do
-      opts = [
-        xandra_module: PoolMock,
-        control_connection_module: ControlConnectionMock,
-        nodes: ["node1.example.com"],
-        target_pools: 1,
-        load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []},
-        sync_connect: 1000,
-        test_discovered_hosts: [host1 = %Host{address: {127, 0, 0, 1}, port: 9042}]
-      ]
+    # TODO: remove this conditional once we depend on Elixir 1.15+, which depends on OTP 24+.
+    if System.otp_release() >= "24" do
+      test "waits for any node to be up if :sync_connect is a timeout", %{test_ref: test_ref} do
+        opts = [
+          xandra_module: PoolMock,
+          control_connection_module: ControlConnectionMock,
+          nodes: ["node1.example.com"],
+          target_pools: 1,
+          load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []},
+          sync_connect: 1000,
+          test_discovered_hosts: [host1 = %Host{address: {127, 0, 0, 1}, port: 9042}]
+        ]
 
-      TestHelper.start_link_supervised!({Xandra.Cluster, opts})
-      assert_control_connection_started(test_ref)
-      assert_pool_started(test_ref, host1)
-    end
+        TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+        assert_control_connection_started(test_ref)
+        assert_pool_started(test_ref, host1)
+      end
 
-    test "returns {:error, :sync_connect_timeout} if no nodes connect within the timeout" do
-      opts = [
-        xandra_module: PoolMock,
-        control_connection_module: ControlConnectionMock,
-        nodes: ["node1.example.com"],
-        target_pools: 1,
-        load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []},
-        sync_connect: 0
-      ]
+      test "returns {:error, :sync_connect_timeout} if no nodes connect within the timeout" do
+        opts = [
+          xandra_module: PoolMock,
+          control_connection_module: ControlConnectionMock,
+          nodes: ["node1.example.com"],
+          target_pools: 1,
+          load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []},
+          sync_connect: 0
+        ]
 
-      assert {:error, {:sync_connect_timeout, _}} = start_supervised({Xandra.Cluster, opts})
+        assert {:error, {:sync_connect_timeout, _}} = start_supervised({Xandra.Cluster, opts})
+      end
     end
   end
 
