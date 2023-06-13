@@ -87,6 +87,14 @@ defmodule Xandra.ClusterTest do
         Xandra.Cluster.start_link(nodes: ["example.com:9042"], target_pools: -1)
       end
     end
+
+    test "validates the :sync_connect option" do
+      message = ~r/invalid value for :sync_connect option/
+
+      assert_raise NimbleOptions.ValidationError, message, fn ->
+        Xandra.Cluster.start_link(nodes: ["example.com:9042"], sync_connect: :foo)
+      end
+    end
   end
 
   describe "child_spec/1" do
@@ -138,6 +146,35 @@ defmodule Xandra.ClusterTest do
       assert_pool_started(test_ref, host1)
       assert_pool_started(test_ref, host2)
       refute_other_pools_started(test_ref)
+    end
+
+    test "waits for any node to be up if :sync_connect is a timeout", %{test_ref: test_ref} do
+      opts = [
+        xandra_module: PoolMock,
+        control_connection_module: ControlConnectionMock,
+        nodes: ["node1.example.com"],
+        target_pools: 1,
+        load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []},
+        sync_connect: 1000,
+        test_discovered_hosts: [host1 = %Host{address: {127, 0, 0, 1}, port: 9042}]
+      ]
+
+      TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+      assert_control_connection_started(test_ref)
+      assert_pool_started(test_ref, host1)
+    end
+
+    test "returns {:error, :sync_connect_timeout} if no nodes connect within the timeout" do
+      opts = [
+        xandra_module: PoolMock,
+        control_connection_module: ControlConnectionMock,
+        nodes: ["node1.example.com"],
+        target_pools: 1,
+        load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []},
+        sync_connect: 0
+      ]
+
+      assert {:error, {:sync_connect_timeout, _}} = start_supervised({Xandra.Cluster, opts})
     end
   end
 

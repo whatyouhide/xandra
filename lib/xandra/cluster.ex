@@ -179,6 +179,11 @@ defmodule Xandra.Cluster do
     # The number of target pools.
     :target_pools,
 
+    # A process alias if the :sync_connect is true. This process alias is the
+    # destination for the :connected message. If the :sync_connect is false,
+    # this is nil.
+    :sync_connect_alias,
+
     # A map of peername to pool PID pairs.
     pools: %{},
 
@@ -265,10 +270,24 @@ defmodule Xandra.Cluster do
       The name to register this cluster under. Follows the name registration rules of `GenServer`.
       """
     ],
+    sync_connect: [
+      type: {:or, [:timeout, {:in, [false]}]},
+      default: false,
+      doc: """
+      Whether to wait for at least one connection to a node in the cluster to be established
+      before returning from `start_link/1`. If `false`, connecting is async, which means that
+      even if `start_link/1` returns `{:ok, pid}`, that's the PID of the cluster process,
+      which has not necessarily established any connections yet. If this option is
+      an integer or `:infinity` (that is, a term of type `t:timeout/0`), then this function
+      only returns when at least one node connection is established. If the timeout expires,
+      this function returns `{:error, :sync_connect_timeout}`. Available since v0.16.0.
+      """
+    ],
 
     # Internal for testing, not exposed.
     xandra_module: [type: :atom, default: Xandra, doc: false],
-    control_connection_module: [type: :atom, default: ControlConnection, doc: false]
+    control_connection_module: [type: :atom, default: ControlConnection, doc: false],
+    test_discovered_hosts: [type: :any, default: [], doc: false]
   ]
 
   @start_link_opts_schema_keys Keyword.keys(@start_link_opts_schema)
@@ -328,11 +347,50 @@ defmodule Xandra.Cluster do
     {cluster_opts, pool_opts} = Keyword.split(options, @start_link_opts_schema_keys)
     cluster_opts = NimbleOptions.validate!(cluster_opts, @start_link_opts_schema)
 
-    GenServer.start_link(
-      __MODULE__,
-      {cluster_opts, pool_opts},
-      Keyword.take(cluster_opts, [:name])
-    )
+    {sync_connect_timeout, cluster_opts} = Keyword.pop!(cluster_opts, :sync_connect)
+
+    alias_or_nil = if sync_connect_timeout, do: alias()
+
+    result =
+      GenServer.start_link(
+        __MODULE__,
+        {cluster_opts, pool_opts, alias_or_nil},
+        Keyword.take(cluster_opts, [:name])
+      )
+
+    case result do
+      {:ok, pid} when sync_connect_timeout == false ->
+        {:ok, pid}
+
+      {:ok, pid} ->
+        ref = Process.monitor(pid)
+
+        receive do
+          :connected -> {:ok, pid}
+          {:DOWN, ^ref, _, _, reason} -> {:error, reason}
+        after
+          sync_connect_timeout ->
+            Process.demonitor(ref, [:flush])
+            unalias(alias_or_nil)
+            {:error, :sync_connect_timeout}
+        end
+
+      other ->
+        other
+    end
+  end
+
+  # TODO: remove this check once we depend on Elixir 1.15+, which requires OTP 24+,
+  # where aliases were introduced.
+  if function_exported?(:erlang, :alias, 1) do
+    defp alias, do: :erlang.alias([:reply])
+    defp unalias(alias), do: :erlang.unalias(alias)
+  else
+    defp alias do
+      raise ArgumentError, "the :sync_connect option is only supported on Erlang/OTP 24+"
+    end
+
+    defp unalias(alias), do: raise(ArgumentError, "should never reach this")
   end
 
   @doc """
@@ -523,7 +581,7 @@ defmodule Xandra.Cluster do
   ## Callbacks and implementation stuff
 
   @impl true
-  def init({cluster_opts, pool_opts}) do
+  def init({cluster_opts, pool_opts, sync_connect_alias_or_nil}) do
     {nodes, cluster_opts} = Keyword.pop!(cluster_opts, :nodes)
 
     registry_name =
@@ -546,6 +604,7 @@ defmodule Xandra.Cluster do
       xandra_mod: Keyword.fetch!(cluster_opts, :xandra_module),
       control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module),
       target_pools: Keyword.fetch!(cluster_opts, :target_pools),
+      sync_connect_alias: sync_connect_alias_or_nil,
       registry: registry_name
     }
 
@@ -565,6 +624,12 @@ defmodule Xandra.Cluster do
       )
 
     state = %__MODULE__{state | pool_supervisor: pool_sup, control_connection: control_conn}
+
+    if hosts = cluster_opts[:test_discovered_hosts] do
+      send(self(), {:discovered_hosts, hosts})
+      Enum.each(hosts, &send(self(), {:host_connected, &1}))
+    end
+
     {:ok, state}
   end
 
@@ -601,6 +666,15 @@ defmodule Xandra.Cluster do
       update_in(state.load_balancing_state, &state.load_balancing_module.host_connected(&1, host))
 
     state = maybe_start_pools(state)
+
+    state =
+      if alias = state.sync_connect_alias do
+        send(alias, :connected)
+        %__MODULE__{state | sync_connect_alias: nil}
+      else
+        state
+      end
+
     {:noreply, state}
   end
 
