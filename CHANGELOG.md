@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.16.0
+
+  * Add the `:sync_connect` option to `Xandra.Cluster.start_link/1`.
+
 ## v0.15.0
 
 This is a bigger release than usual. Part of it is that the previous release happened quite a long time before this one.
