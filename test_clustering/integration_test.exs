@@ -43,6 +43,34 @@ defmodule Xandra.TestClustering.IntegrationTest do
     :ok
   end
 
+  test "nodes that go unreachable but still addressable should be removed from the pool" do
+    conn_count_in_cluster = 4
+
+    {:ok, cluster} =
+      Xandra.Cluster.start_link(
+        autodiscovery: true,
+        nodes: ["node1", "seed"],
+        protocol_version: @protocol_version
+      )
+
+    TestHelper.wait_for_passing(60_000, fn ->
+      assert %Xandra.Cluster{} = cluster_state = :sys.get_state(cluster)
+      assert length(cluster_state.node_refs) == conn_count_in_cluster
+    end)
+
+    # Wait for all pools to be started.
+    TestHelper.wait_for_passing(60_000, fn ->
+      assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster
+    end)
+
+    docker_compose!(["pause", "node2"])
+
+    # Wait for the pool for the stopped node to be stopped.
+    TestHelper.wait_for_passing(60_000, fn ->
+      assert map_size(:sys.get_state(cluster).pools) == conn_count_in_cluster - 1
+    end)
+  end
+
   test "if a node goes down, the cluster removes its control connection and pool" do
     conn_count_in_cluster = 4
 

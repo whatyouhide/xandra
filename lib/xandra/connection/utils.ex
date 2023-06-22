@@ -137,6 +137,7 @@ defmodule Xandra.Connection.Utils do
       # TODO: handle :error frames for things like :protocol_violation.
       case frame do
         %Frame{kind: :ready, body: <<>>} ->
+          Logger.debug("FRAME READY #{inspect(frame)}, #{inspect(rest)}, #{inspect(socket)}}")
           Logger.debug("Received READY frame")
           :ok
 

@@ -396,6 +396,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
     case transport.connect(address, port, data.transport_options, @default_timeout) do
       {:ok, socket} ->
+        Logger.debug("Connected to #{inspect(node)}")
         with {:ok, supported_opts, proto_mod} <- request_options(transport, socket, proto_vsn),
              Logger.debug("Supported options: #{inspect(supported_opts)}"),
              {:ok, {ip, port}} <- inet_mod(transport).peername(socket),
@@ -410,7 +411,10 @@ defmodule Xandra.Cluster.ControlConnection do
              :ok <- register_to_events(data, connected_node),
              :ok <- inet_mod(transport).setopts(socket, active: :once) do
           [local_host | _] = peers
-          {:ok, %ConnectedNode{connected_node | host: local_host}, peers}
+
+          res = {:ok, %ConnectedNode{connected_node | host: local_host}, peers}
+          Logger.debug("#{inspect(res)}")
+          res
         else
           {:error, {:use_this_protocol_instead, _failed_protocol_version, proto_vsn}} ->
             Logger.debug("Cassandra said to use protocol #{inspect(proto_vsn)}, reconnecting")
@@ -539,6 +543,9 @@ defmodule Xandra.Cluster.ControlConnection do
       local_peer = queried_peer_to_host(local_node_info)
       local_peer = %Host{local_peer | address: node.ip, port: node.port}
 
+      Logger.debug("Local peer: #{inspect(local_peer)}")
+      Logger.debug("Peers: #{inspect(peers)}")
+
       # We filter out the peers with null host_id because they seem to be nodes that are down or
       # decommissioned but not removed from the cluster. See
       # https://github.com/lexhide/xandra/pull/196 and
@@ -549,6 +556,9 @@ defmodule Xandra.Cluster.ControlConnection do
             peer = %Host{peer | port: data.autodiscovered_nodes_port},
             not is_nil(peer.host_id),
             do: peer
+
+
+       Logger.debug("Peers after filtering: #{inspect(peers)}")
 
       {:ok, [local_peer | peers]}
     end
