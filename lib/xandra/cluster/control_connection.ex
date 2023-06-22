@@ -546,6 +546,9 @@ defmodule Xandra.Cluster.ControlConnection do
       Logger.debug("Local peer: #{inspect(local_peer)}")
       Logger.debug("Peers: #{inspect(peers)}")
 
+      Logger.debug("Cluster: #{inspect(data.cluster)}")
+      downed_nodes =  GenServer.call(data.cluster, :downed_nodes)
+      Logger.debug("Downed nodes: #{inspect(downed_nodes)}")
       # We filter out the peers with null host_id because they seem to be nodes that are down or
       # decommissioned but not removed from the cluster. See
       # https://github.com/lexhide/xandra/pull/196 and
@@ -554,7 +557,7 @@ defmodule Xandra.Cluster.ControlConnection do
         for peer_attrs <- peers,
             peer = queried_peer_to_host(peer_attrs),
             peer = %Host{peer | port: data.autodiscovered_nodes_port},
-            not is_nil(peer.host_id),
+            not is_nil(peer.host_id) and peer.host_id not in downed_nodes,
             do: peer
 
 
