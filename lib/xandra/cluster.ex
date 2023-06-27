@@ -187,9 +187,6 @@ defmodule Xandra.Cluster do
     # A map of peername to pool PID pairs.
     pools: %{},
 
-    # A map of recently downed peers, using a tuple of {address, time}
-    downed_nodes: MapSet.new(),
-
     # Modules to swap processes when testing.
     xandra_mod: nil,
     control_conn_mod: nil
@@ -653,17 +650,11 @@ defmodule Xandra.Cluster do
   end
 
   @impl true
-  def handle_call(:downed_nodes, _from, %__MODULE__{} = state) do
-    {:reply, state.downed_nodes, state}
-  end
-
-  @impl true
   def handle_info(msg, state)
 
   def handle_info({:host_up, %Host{} = host}, %__MODULE__{} = state) do
     Logger.debug("Host reported as UP: #{Host.format_address(host)}")
     state = update_in(state.load_balancing_state, &state.load_balancing_module.host_up(&1, host))
-    state = update_in(state.downed_nodes, &MapSet.delete(&1, host.host_id))
     state = maybe_start_pools(state)
     {:noreply, state}
   end
@@ -692,10 +683,6 @@ defmodule Xandra.Cluster do
 
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_down(&1, host))
-
-    Logger.debug("Host is #{inspect(host)}")
-    state =
-      update_in(state.downed_nodes, &MapSet.put(&1, host.host_id))
 
     state = stop_pool(state, host)
     state = maybe_start_pools(state)
