@@ -9,7 +9,7 @@ ENV MIX_ENV=test
 # Install Docker and Docker Compose to control sibling containers, and Git for installing
 # Git dependencies if necessary.
 RUN apt-get update && \
-    apt-get install -y git openssl curl python3-pip python3-dev openjdk-8-jdk
+    apt-get install -y git openssl curl python3-pip python3-dev openjdk-8-jdk socat
 
 RUN pip3 install ccm
 RUN ccm create test -v 3.11.0 && ccm populate -n 4

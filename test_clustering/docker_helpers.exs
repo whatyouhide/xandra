@@ -59,8 +59,6 @@ defmodule Xandra.TestClustering.DockerHelpers do
         container_id
       ])
 
-    IO.inspect(String.trim(output), label: "Got IP address:")
-
     assert exit_status == 0, "'docker inspect' failed with exit status #{exit_status}: #{output}"
 
     ip = String.trim(output)
@@ -68,7 +66,6 @@ defmodule Xandra.TestClustering.DockerHelpers do
     {output, exit_status} =
       docker_compose(["exec", "-T", name, "nodetool", "-h", "::FFFF:127.0.0.1", "status"])
 
-    IO.inspect(output, label: "Nodetool output")
     cond do
       exit_status == 0 ->
         if output

@@ -505,7 +505,7 @@ defmodule Xandra.Cluster.ControlConnection do
                 {existing_acc ++ [host], discovered_acc, downed_acc}
               _ ->
                 send(data.cluster, {:host_down, host})
-                {existing_acc, discovered_acc, MapSet.put(downed_acc, peername)}
+                {existing_acc ++ [host], discovered_acc, MapSet.put(downed_acc, peername)}
             end
           :error ->
             execute_telemetry(data, [:change_event], %{}, %{
