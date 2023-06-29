@@ -305,8 +305,7 @@ defmodule Xandra do
       type_doc: "`{module(), term()}`",
       doc: """
       Two-element tuple: the authenticator module to use for authentication
-      and its supported options. See the "Authentication" section in the
-      module documentation.
+      and its supported options. See `Xandra.Authenticator`.
       """
     ],
     compressor: [
