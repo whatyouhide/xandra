@@ -12,7 +12,7 @@ defmodule Xandra.Telemetry do
 
   Here is a comprehensive list of the Telemetry events that Xandra emits.
 
-  ### Connection events
+  ### Connection Events
 
     * `[:xandra, :connected]` — executed when a connection connects to its Cassandra node.
       * **Measurements**: *none*.
@@ -20,6 +20,9 @@ defmodule Xandra.Telemetry do
         * `:connection_name` - given name of the connection or `nil` if not set
         * `:address` - the address of the node the connection is connected to
         * `:port` - the port of the node the connection is connected to
+        * `:protocol_module` - the protocol module used by the connection
+        * `:supported_options` - Cassandra supported options as a map (mostly useful for
+          internal debugging)
 
     * `[:xandra, :disconnected]` — executed when a connection disconnects from its Cassandra node.
       * **Measurements**: *none*.
@@ -29,7 +32,7 @@ defmodule Xandra.Telemetry do
         * `:port` - the port of the node the connection is connected to
         * `:reason` - the reason for the disconnection (usually a `DBConnection.ConnectionError`)
 
-  ### Query events
+  ### Query Events
 
   The `[:xandra, :prepare_query, ...]` and `[:xandra, :execute_query, ...]` events are
   Telemetry **spans**. See
@@ -139,9 +142,36 @@ defmodule Xandra.Telemetry do
         * `:query` - the query that caused the warning, of type `t:Xandra.Batch.t/0`,
           `t:Xandra.Prepared.t/0`, or `t:Xandra.Simple.t/0`
 
-  ### Cluster events
+  ### Cluster Events
 
   See the "Telemetry" section in the documentation for `Xandra.Cluster`.
+
+  ### Debugging Events
+
+  These events are mostly meant for *debugging* Xandra itself and its internals.
+  You can use these events to monitor exchanges of *Cassandra Native Protocol* frames
+  between Xandra and the Cassandra server, for example.
+
+    * `[:xandra, :debug, :received_frame]`
+      * Measurements: none
+      * Metadata:
+        * `:frame_type` - the type of the frame, for example `:READY` or `:AUTHENTICATE`
+
+    * `[:xandra, :debug, :sent_frame]`
+      * Measurements:
+        * `:requested_options` - only for `STARTUP` frames
+        * `:protocol_module` - only for `STARTUP` frames
+      * Metadata:
+        * `:frame_type` - the type of the frame, for example `:STARTUP`
+
+    * `[:xandra, :debug, :downgrading_protocol]`
+      * Measurements: none
+      * Metadata:
+        * `:failed_version` - the protocol version that failed
+        * `:new_version` - the protocol that we're downgrading to
+        * `:address` - the address of the node the connection is connecting to
+        * `:port` - the port of the node the connection is connecting to
+
   """
   @moduledoc since: "0.15.0"
 
@@ -206,6 +236,22 @@ defmodule Xandra.Telemetry do
     :ok
   end
 
+  @spec attach_debug_handler() :: :ok
+  def attach_debug_handler do
+    events = [
+      [:xandra, :debug, :received_frame],
+      [:xandra, :debug, :sent_frame],
+      [:xandra, :connected]
+    ]
+
+    :telemetry.attach_many(
+      "xandra-debug-telemetry-handler",
+      events,
+      &__MODULE__.handle_debug_event/4,
+      :no_config
+    )
+  end
+
   @doc false
   @spec handle_event(
           :telemetry.event_name(),
@@ -257,5 +303,45 @@ defmodule Xandra.Telemetry do
         duration = System.convert_time_unit(measurements.duration, :native, :millisecond)
         Logger.debug("Executed query in #{duration}ms: #{inspect(metadata.query)}", logger_meta)
     end
+  end
+
+  @doc false
+  def handle_debug_event(event, measurements, metadata, config)
+
+  def handle_debug_event([:xandra, :debug, :received_frame], _measurements, metadata, :no_config) do
+    Logger.debug("Received frame #{metadata.frame_type}", [])
+  end
+
+  def handle_debug_event([:xandra, :debug, :sent_frame], measurements, metadata, :no_config) do
+    message =
+      if metadata.frame_type == :STARTUP do
+        "Sent frame STARTUP with protocol #{inspect(measurements.protocol_module)} " <>
+          "and requested options: #{inspect(measurements.requested_options)}"
+      else
+        "Sent frame #{metadata.frame_type}"
+      end
+
+    Logger.debug(message)
+  end
+
+  def handle_debug_event(
+        [:xandra, :debug, :downgrading_protocol],
+        _measurements,
+        metadata,
+        :no_config
+      ) do
+    Logger.debug(
+      "Could not use protocol #{inspect(metadata.failed_version)}, " <>
+        "downgrading to #{inspect(metadata.new_version)}",
+      xandra_address: metadata.address,
+      xandra_port: metadata.port
+    )
+  end
+
+  def handle_debug_event([:xandra, :connected], _measurements, metadata, :no_config) do
+    logger_meta = [xandra_address: metadata.address, xandra_port: metadata.port]
+
+    Logger.debug("Connected using protocol #{inspect(metadata.protocol_module)}", logger_meta)
+    Logger.debug("Supported options: #{inspect(metadata.supported_options)}", logger_meta)
   end
 end
