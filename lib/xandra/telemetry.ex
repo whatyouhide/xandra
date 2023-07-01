@@ -152,19 +152,19 @@ defmodule Xandra.Telemetry do
   You can use these events to monitor exchanges of *Cassandra Native Protocol* frames
   between Xandra and the Cassandra server, for example.
 
-    * `[:xandra, :debug, :received_frame]`
+    * `[:xandra, :debug, :received_frame]` (since v0.17.0)
       * Measurements: none
       * Metadata:
         * `:frame_type` - the type of the frame, for example `:READY` or `:AUTHENTICATE`
 
-    * `[:xandra, :debug, :sent_frame]`
+    * `[:xandra, :debug, :sent_frame]` (since v0.17.0)
       * Measurements:
         * `:requested_options` - only for `STARTUP` frames
         * `:protocol_module` - only for `STARTUP` frames
       * Metadata:
         * `:frame_type` - the type of the frame, for example `:STARTUP`
 
-    * `[:xandra, :debug, :downgrading_protocol]`
+    * `[:xandra, :debug, :downgrading_protocol]` (since v0.17.0)
       * Measurements: none
       * Metadata:
         * `:failed_version` - the protocol version that failed
@@ -187,22 +187,26 @@ defmodule Xandra.Telemetry do
 
   These are the events that get logged. This list might change in the future.
 
-  | **Event**                                                 | **Level** |
-  | --------------------------------------------------------- | --------- |
-  | `[:xandra, :connected]`                                   | info      |
-  | `[:xandra, :disconnected]`                                | warn      |
-  | `[:xandra, :prepared_cache, :hit]`                        | debug     |
-  | `[:xandra, :prepared_cache, :miss]`                       | debug     |
-  | `[:xandra, :prepare_query, :start]`                       | debug     |
-  | `[:xandra, :prepare_query, :stop]`                        | debug     |
-  | `[:xandra, :prepare_query, :exception]`                   | error     |
-  | `[:xandra, :execute_query, :start]`                       | debug     |
-  | `[:xandra, :execute_query, :stop]`                        | debug     |
-  | `[:xandra, :execute_query, :exception]`                   | error     |
-  | `[:xandra, :server_warnings]`                             | warn      |
-  | `[:xandra, :cluster, :change_event]`                      | debug     |
-  | `[:xandra, :cluster, :control_connection, :connected]`    | debug     |
-  | `[:xandra, :cluster, :control_connection, :disconnected]` | debug     |
+  | **Event**                                                      | **Level** |
+  | -------------------------------------------------------------- | --------- |
+  | `[:xandra, :connected]`                                        | info      |
+  | `[:xandra, :disconnected]`                                     | warn      |
+  | `[:xandra, :prepared_cache, :hit]`                             | debug     |
+  | `[:xandra, :prepared_cache, :miss]`                            | debug     |
+  | `[:xandra, :prepare_query, :start]`                            | debug     |
+  | `[:xandra, :prepare_query, :stop]`                             | debug     |
+  | `[:xandra, :prepare_query, :exception]`                        | error     |
+  | `[:xandra, :execute_query, :start]`                            | debug     |
+  | `[:xandra, :execute_query, :stop]`                             | debug     |
+  | `[:xandra, :execute_query, :exception]`                        | error     |
+  | `[:xandra, :server_warnings]`                                  | warn      |
+  | `[:xandra, :cluster, :change_event]`                           | debug     |
+  | `[:xandra, :cluster, :control_connection, :connected]`         | debug     |
+  | `[:xandra, :cluster, :control_connection, :disconnected]`      | debug     |
+  | `[:xandra, :cluster, :control_connection, :failed_to_connect]` | warn      |
+  | `[:xandra, :cluster, :pool, :started]`                         | debug     |
+  | `[:xandra, :cluster, :pool, :restarted]`                       | debug     |
+  | `[:xandra, :cluster, :discovered_peers]`                       | debug     |
 
   Events have the following logger metadata:
 
@@ -223,7 +227,11 @@ defmodule Xandra.Telemetry do
       [:xandra, :server_warnings],
       [:xandra, :cluster, :change_event],
       [:xandra, :cluster, :control_connection, :connected],
-      [:xandra, :cluster, :control_connection, :disconnected]
+      [:xandra, :cluster, :control_connection, :disconnected],
+      [:xandra, :cluster, :control_connection, :failed_to_connect],
+      [:xandra, :cluster, :pool, :started],
+      [:xandra, :cluster, :pool, :restarted],
+      [:xandra, :cluster, :discovered_peers]
     ]
 
     :telemetry.attach_many(
@@ -267,13 +275,25 @@ defmodule Xandra.Telemetry do
 
     case event do
       [:change_event] ->
-        Logger.debug("Received change event: #{inspect(measurements.event)}", logger_meta)
+        Logger.debug("Received change event: #{inspect(metadata.event_type)}", logger_meta)
 
       [:control_connection, :connected] ->
         Logger.debug("Control connection established", logger_meta)
 
       [:control_connection, :disconnected] ->
         Logger.debug("Control connection disconnected", logger_meta)
+
+      [:control_connection, :failed_to_connect] ->
+        Logger.warning("Control connection failed to connect", logger_meta)
+
+      [:pool, :started] ->
+        Logger.debug("Pool started", logger_meta)
+
+      [:pool, :restarted] ->
+        Logger.debug("Pool restarted", logger_meta)
+
+      [:discovered_peers] ->
+        Logger.debug("Discovered peers: #{inspect(measurements.peers)}", logger_meta)
     end
   end
 
@@ -286,10 +306,10 @@ defmodule Xandra.Telemetry do
         Logger.info("Connection established", logger_meta)
 
       [:disconnected] ->
-        Logger.warn("Disconnected with reason: #{inspect(metadata.reason)}", logger_meta)
+        Logger.warning("Disconnected with reason: #{inspect(metadata.reason)}", logger_meta)
 
       [:server_warnings] ->
-        Logger.warn("Received warnings: #{inspect(measurements.warnings)}", logger_meta)
+        Logger.warning("Received warnings: #{inspect(measurements.warnings)}", logger_meta)
 
       [:prepared_cache, status] when status in [:hit, :miss] ->
         query = inspect(metadata.query)
