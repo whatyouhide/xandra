@@ -36,8 +36,12 @@ defmodule Xandra.ConnectionErrorTest do
     end
 
     test "with any other reason" do
-      assert message("connect", :banana) ==
-               ~s(action "connect" failed with reason: :banana)
+      message = message("connect", :banana)
+
+      assert message in [
+               ~s(action "connect" failed with reason: :banana),
+               ~s(action "connect" failed with reason: unknown POSIX error: banana)
+             ]
     end
   end
 

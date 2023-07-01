@@ -270,8 +270,20 @@ defmodule Xandra.Telemetry do
   def handle_event(event, measurements, metadata, config)
 
   def handle_event([:xandra, :cluster | event], measurements, metadata, :no_config) do
-    %Host{address: address, port: port} = metadata.host
-    logger_meta = [xandra_address: address, xandra_port: port]
+    logger_meta =
+      case Map.fetch(metadata, :host) do
+        {:ok, %Host{address: address, port: port}} ->
+          address =
+            case address do
+              ip when is_tuple(ip) -> ip |> :inet.ntoa() |> to_string()
+              str when is_list(str) -> to_string(str)
+            end
+
+          [xandra_address: address, xandra_port: port]
+
+        :error ->
+          []
+      end
 
     case event do
       [:change_event] ->
