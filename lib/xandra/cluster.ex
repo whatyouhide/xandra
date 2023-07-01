@@ -190,6 +190,9 @@ defmodule Xandra.Cluster do
   alias Xandra.{Batch, ConnectionError, Prepared, RetryStrategy}
   alias Xandra.Cluster.{ControlConnection, LoadBalancingPolicy, Host}
 
+  @typedoc """
+  A Xandra cluster.
+  """
   @type cluster :: GenServer.server()
 
   @default_port 9042
@@ -499,7 +502,7 @@ defmodule Xandra.Cluster do
   If the function is successful, the prepared query is returned directly
   instead of in an `{:ok, prepared}` tuple like in `prepare/3`.
   """
-  @spec prepare!(cluster, Xandra.statement(), keyword) :: Xandra.Prepared.t() | no_return
+  @spec prepare!(cluster, Xandra.statement(), keyword) :: Xandra.Prepared.t()
   def prepare!(cluster, statement, options \\ []) do
     case prepare(cluster, statement, options) do
       {:ok, result} -> result
@@ -548,9 +551,8 @@ defmodule Xandra.Cluster do
   Same as `execute/3` but returns the result directly or raises in case of errors.
   """
   @spec execute!(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values()) ::
-          Xandra.result() | no_return
-  @spec execute!(cluster, Xandra.Batch.t(), keyword) ::
-          Xandra.Void.t() | no_return
+          Xandra.result()
+  @spec execute!(cluster, Xandra.Batch.t(), keyword) :: Xandra.Void.t()
   def execute!(cluster, query, params_or_options \\ []) do
     case execute(cluster, query, params_or_options) do
       {:ok, result} -> result
@@ -562,7 +564,7 @@ defmodule Xandra.Cluster do
   Same as `execute/4` but returns the result directly or raises in case of errors.
   """
   @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), keyword) ::
-          Xandra.result() | no_return
+          Xandra.result()
   def execute!(cluster, query, params, options) do
     case execute(cluster, query, params, options) do
       {:ok, result} -> result

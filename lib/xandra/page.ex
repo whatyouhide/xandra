@@ -18,9 +18,11 @@ defmodule Xandra.Page do
   ## Examples
 
       statement = "SELECT name, age FROM users"
+
       %Xandra.Page{} = page = Xandra.execute!(conn, statement, _params = [])
+
       Enum.each(page, fn %{"name" => name, "age" => age} ->
-        IO.puts "Read user with name #{name} (age #{age}) out of the database"
+        IO.puts("Read user with name #{name} (age #{age}) out of the database")
       end)
 
   """
