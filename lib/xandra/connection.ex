@@ -6,8 +6,6 @@ defmodule Xandra.Connection do
   alias Xandra.{Batch, ConnectionError, Prepared, Frame, Simple, SetKeyspace}
   alias __MODULE__.Utils
 
-  require Logger
-
   @default_timeout 5_000
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
 
@@ -42,9 +40,6 @@ defmodule Xandra.Connection do
       |> Keyword.get(:transport_options, [])
       |> Keyword.merge(@forced_transport_options)
 
-    # Set the logger metadata for the whole process.
-    :ok = Logger.metadata(xandra_address: inspect(address), xandra_port: port)
-
     case transport.connect(address, port, transport_options, @default_timeout) do
       {:ok, socket} ->
         {:ok, peername} = inet_mod(transport).peername(socket)
@@ -69,9 +64,6 @@ defmodule Xandra.Connection do
         with {:ok, supported_options, protocol_module} <-
                Utils.request_options(transport, socket, enforced_protocol),
              state = %__MODULE__{state | protocol_module: protocol_module},
-             Logger.metadata(xandra_protocol_module: state.protocol_module),
-             Logger.debug("Connected successfully, using protocol #{inspect(protocol_module)}"),
-             Logger.debug("Supported options: #{inspect(supported_options)}"),
              :ok <-
                startup_connection(
                  transport,
@@ -98,9 +90,12 @@ defmodule Xandra.Connection do
             """
 
           {:error, {:use_this_protocol_instead, failed_protocol_version, protocol_version}} ->
-            Logger.debug(
-              "Could not use protocol #{inspect(failed_protocol_version)}, downgrading to #{inspect(protocol_version)}"
-            )
+            :telemetry.execute([:xandra, :debug, :downgrading_protocol], %{}, %{
+              failed_version: failed_protocol_version,
+              new_version: protocol_version,
+              address: address,
+              port: port
+            })
 
             :ok = transport.close(socket)
             options = Keyword.put(options, :protocol_version, protocol_version)
