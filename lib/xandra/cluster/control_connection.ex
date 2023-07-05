@@ -397,7 +397,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
     case transport.connect(address, port, data.transport_options, @default_timeout) do
       {:ok, socket} ->
-        Logger.debug("Connected to #{inspect(node)}")
+        Logger.debug("Connected")
         with {:ok, supported_opts, proto_mod} <- request_options(transport, socket, proto_vsn),
              Logger.debug("Supported options: #{inspect(supported_opts)}"),
              {:ok, {ip, port}} <- inet_mod(transport).peername(socket),
