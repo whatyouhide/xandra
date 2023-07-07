@@ -420,8 +420,7 @@ defmodule Xandra.ClusterTest do
   end
 
   defp assert_pool_started(test_ref, %Host{} = host) do
-    node = Host.format_address(host)
-    assert_receive {^test_ref, PoolMock, :init_called, %{nodes: [^node]}}
+    assert_receive {^test_ref, PoolMock, :init_called, %{nodes: [^host]}}
   end
 
   defp refute_other_pools_started(test_ref) do

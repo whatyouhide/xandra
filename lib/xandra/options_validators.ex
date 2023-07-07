@@ -40,6 +40,10 @@ defmodule Xandra.OptionsValidators do
     end
   end
 
+  def validate_node(%Xandra.Cluster.Host{address: address, port: port}) do
+    {:ok, {address, port}}
+  end
+
   def validate_node(other) do
     {:error, "expected node to be a string or a {ip, port} tuple, got: #{inspect(other)}"}
   end
