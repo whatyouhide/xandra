@@ -437,7 +437,7 @@ defmodule Xandra.Cluster do
       raise ArgumentError, "the :sync_connect option is only supported on Erlang/OTP 24+"
     end
 
-    defp unalias(alias), do: raise(ArgumentError, "should never reach this")
+    defp unalias(_alias), do: raise(ArgumentError, "should never reach this")
   end
 
   @doc """
