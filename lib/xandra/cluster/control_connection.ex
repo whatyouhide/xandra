@@ -727,7 +727,8 @@ defmodule Xandra.Cluster.ControlConnection do
       {host, port} ->
         %Host{address: host, port: port}
 
-      %Host{address: host, port: port} = _contact_point -> %Host{address: host, port: port}
+      %Host{address: host, port: port} = _contact_point ->
+        %Host{address: host, port: port}
 
       contact_point ->
         {:ok, {host, port}} = Xandra.OptionsValidators.validate_node(contact_point)
