@@ -41,6 +41,7 @@ defmodule Xandra.OptionsValidators do
   end
 
   def validate_node(%Xandra.Cluster.Host{address: address, port: port}) do
+    IO.puts("validate_node address: #{inspect(address)}, port: #{port}")
     {:ok, {address, port}}
   end
 

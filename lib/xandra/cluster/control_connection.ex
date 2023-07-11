@@ -728,6 +728,8 @@ defmodule Xandra.Cluster.ControlConnection do
         %Host{address: host, port: port}
 
       %Host{address: host, port: port} = _contact_point ->
+        IO.puts("contact_points_to_hosts address: #{inspect(host)}, port: #{port}")
+
         %Host{address: host, port: port}
 
       contact_point ->

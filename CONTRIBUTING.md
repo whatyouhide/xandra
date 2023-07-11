@@ -8,11 +8,11 @@ different ports to test different features (such as authenticationn). To run
 normal tests, do this from the root of the project:
 
 ```bash
-docker-compose up --daemon
+docker-compose up --detach
 mix test
 ```
 
-The `--daemon` flag runs the instances as daemons in the background. Give it a
+The `--detach` flag runs the instances as daemons in the background. Give it a
 minute between starting the services and running `mix test` since Cassandra
 takes a while to start. You can check whether the Docker containers are ready
 with `docker-compose ps`. To stop the services, run `docker-compose stop`.
