@@ -28,6 +28,7 @@ defmodule Xandra.OptionsValidators do
 
   @spec validate_node(term()) :: {:ok, {charlist(), integer()}} | {:error, String.t()}
   def validate_node(value) when is_binary(value) do
+    IO.puts("validate_node binary: #{inspect(value)}")
     case String.split(value, ":", parts: 2) do
       [address, port] ->
         case Integer.parse(port) do
@@ -41,6 +42,7 @@ defmodule Xandra.OptionsValidators do
   end
 
   def validate_node(%Xandra.Cluster.Host{address: address, port: port}) when is_tuple(address) do
+    IO.puts("validate_node tuple address: #{inspect(address)}, port: #{port}")
     case :inet.ntoa(address) do
       {:error, :einval} ->
         {:error,
@@ -52,6 +54,7 @@ defmodule Xandra.OptionsValidators do
   end
 
   def validate_node(%Xandra.Cluster.Host{address: address, port: port}) when is_list(address) do
+    IO.puts("validate_node list address: #{inspect(address)}, port: #{port}")
     case :inet.parse_address(address) do
       {:ok, _} ->
         {:ok, {address, port}}
