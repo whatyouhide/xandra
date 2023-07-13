@@ -367,6 +367,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   defp connect_to_first_available_node([%Host{} = host | nodes], data) do
     IO.puts("connect_to_first_available_node host #{inspect(host)}")
+
     case connect_to_node({host.address, host.port}, data) do
       {:ok, %ConnectedNode{}, _peers} = return ->
         return
