@@ -162,6 +162,10 @@ defmodule Xandra.Cluster.ControlConnection do
   def handle_event(:internal, :connect, :disconnected, %__MODULE__{} = data) do
     case connect_to_first_available_node(data) do
       {:ok, connected_node, peers} ->
+        IO.puts(
+          "handle_event(:internal, :connect, :disconnected, data) ... successfully connected, connected_node: #{connected_node}, peers: #{peers}"
+        )
+
         data = refresh_topology(data, peers)
         {:next_state, {:connected, connected_node}, data}
 
