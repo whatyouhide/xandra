@@ -232,7 +232,7 @@ defmodule Xandra.Cluster.ControlConnection do
         %__MODULE__{} = data
       ) do
     select_peers_query =
-      "SELECT peer, data_center, host_id, rack, release_version, schema_version, tokens FROM system.peers"
+      "SELECT peer, data_center, host_id, rack, release_version, rpc_address, schema_version, tokens FROM system.peers"
 
     with {:ok, peers} <- query(data, connected_node, select_peers_query),
          host when not is_nil(host) <-
@@ -719,6 +719,7 @@ defmodule Xandra.Cluster.ControlConnection do
       "host_id",
       "rack",
       "release_version",
+      "rpc_address",
       "schema_version",
       "tokens"
     ]
