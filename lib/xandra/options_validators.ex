@@ -48,24 +48,42 @@ defmodule Xandra.OptionsValidators do
     case :inet.ntoa(address) do
       {:error, :einval} ->
         {:error,
-         "expected valid address, got: tuple address: #{inspect(address)} and port: #{inspect(port)}, with error: :einval"}
+         "expected valid address tuple, got: address: #{inspect(address)} and port: #{inspect(port)}, with error: :einval"}
 
-      valid_address ->
-        {:ok, {valid_address, port}}
+      _valid_address ->
+        {:ok, {address, port}}
     end
+
+    # case :inet.ntoa(address) do
+    #   {:error, :einval} ->
+    #     {:error,
+    #      "expected valid address, got: tuple address: #{inspect(address)} and port: #{inspect(port)}, with error: :einval"}
+
+    #   valid_address ->
+    #     {:ok, {valid_address, port}}
+    # end
   end
 
   def validate_node(%Xandra.Cluster.Host{address: address, port: port}) when is_list(address) do
     IO.puts("validate_node list address: #{inspect(address)}, port: #{port}")
 
     case :inet.parse_address(address) do
-      {:ok, _} ->
-        {:ok, {address, port}}
+      {:ok, valid_address} ->
+        {:ok, {valid_address, port}}
 
       error ->
         {:error,
-         "expected valid address, got: list address: #{inspect(address)} and port: #{inspect(port)}, with error: #{inspect(error)}"}
+         "expected valid address list, got: address: #{inspect(address)} and port: #{inspect(port)}, with error: #{inspect(error)}"}
     end
+
+    # case :inet.parse_address(address) do
+    #   {:ok, _} ->
+    #     {:ok, {address, port}}
+
+    #   error ->
+    #     {:error,
+    #      "expected valid address, got: list address: #{inspect(address)} and port: #{inspect(port)}, with error: #{inspect(error)}"}
+    # end
   end
 
   def validate_node(other) do

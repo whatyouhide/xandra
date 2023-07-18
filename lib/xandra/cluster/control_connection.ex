@@ -233,7 +233,8 @@ defmodule Xandra.Cluster.ControlConnection do
       "SELECT peer, data_center, host_id, rack, release_version, schema_version, tokens FROM system.peers"
 
     with {:ok, peers} <- query(data, connected_node, select_peers_query),
-         host when not is_nil(host) <- Enum.find(peers, fn peer -> peer["peer"] == address end) do
+         host when not is_nil(host) <-
+           Enum.find(peers, fn peer -> peer["rpc_address"] == address end) do
       new_host = queried_peer_to_host(host)
       new_host = %Host{new_host | port: data.autodiscovered_nodes_port}
 
