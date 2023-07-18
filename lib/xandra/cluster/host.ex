@@ -32,7 +32,6 @@ defmodule Xandra.Cluster.Host do
     :host_id,
     :rack,
     :release_version,
-    :rpc_address,
     :schema_version,
     :tokens
   ]
