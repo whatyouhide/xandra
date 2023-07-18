@@ -782,6 +782,8 @@ defmodule Xandra.Cluster do
 
     peername = Host.to_peername(host)
 
+    IO.puts("start_pool - state.xandra_mod #{inspect(state.xandra_mod)}")
+
     pool_spec =
       Supervisor.child_spec({state.xandra_mod, conn_options},
         id: peername,

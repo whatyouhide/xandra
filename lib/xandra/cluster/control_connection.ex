@@ -166,6 +166,8 @@ defmodule Xandra.Cluster.ControlConnection do
           "\nhandle_event(:internal, :connect, :disconnected, data) ... SUCCESSFULLY connected, connected_node: address: #{inspect(connected_node.host.address)} port: #{inspect(connected_node.host.port)}}\n"
         )
 
+        IO.puts("\tpeers: #{inspect(peers)}")
+
         data = refresh_topology(data, peers)
         {:next_state, {:connected, connected_node}, data}
 
@@ -705,7 +707,7 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp queried_peer_to_host(%{"peer" => _} = peer_attrs) do
-    {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
+    {address, peer_attrs} = Map.pop!(peer_attrs, "rpc_address")
     peer_attrs = Map.put(peer_attrs, "address", address)
     queried_peer_to_host(peer_attrs)
   end
