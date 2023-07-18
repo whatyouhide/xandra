@@ -530,7 +530,7 @@ defmodule Xandra.Cluster.ControlConnection do
     select_peers_query = "SELECT * FROM system.peers"
 
     select_local_query =
-      "SELECT data_center, host_id, rack, release_version, schema_version, tokens FROM system.local"
+      "SELECT data_center, host_id, rack, release_version, rpc_address, schema_version, tokens FROM system.local"
 
     with {:ok, [local_node_info]} <- query(data, node, select_local_query),
          {:ok, peers} <- query(data, node, select_peers_query) do
