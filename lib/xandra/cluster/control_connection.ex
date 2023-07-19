@@ -162,12 +162,6 @@ defmodule Xandra.Cluster.ControlConnection do
   def handle_event(:internal, :connect, :disconnected, %__MODULE__{} = data) do
     case connect_to_first_available_node(data) do
       {:ok, connected_node, peers} ->
-        IO.puts(
-          "\nhandle_event(:internal, :connect, :disconnected, data) ... SUCCESSFULLY connected, connected_node: address: #{inspect(connected_node.host.address)} port: #{inspect(connected_node.host.port)}}\n"
-        )
-
-        IO.puts("\tpeers: #{inspect(peers)}")
-
         data = refresh_topology(data, peers)
         {:next_state, {:connected, connected_node}, data}
 
@@ -373,8 +367,6 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp connect_to_first_available_node([%Host{} = host | nodes], data) do
-    IO.puts("connect_to_first_available_node host #{inspect(host)}")
-
     case connect_to_node({host.address, host.port}, data) do
       {:ok, %ConnectedNode{}, _peers} = return ->
         return
@@ -737,8 +729,6 @@ defmodule Xandra.Cluster.ControlConnection do
         %Host{address: host, port: port}
 
       %Host{address: host, port: port} = _contact_point ->
-        IO.puts("contact_points_to_hosts address: #{inspect(host)}, port: #{port}")
-
         %Host{address: host, port: port}
 
       contact_point ->

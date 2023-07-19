@@ -773,8 +773,6 @@ defmodule Xandra.Cluster do
   defp start_pool(state, %Host{} = host) do
     conn_options =
       Keyword.merge(state.pool_options,
-        # NimbleOptions.validate! validate_node fails on ipv6 transformations
-        # nodes: Host.format_address(host)
         nodes: [host],
         registry: state.registry,
         connection_listeners: [state.control_connection]

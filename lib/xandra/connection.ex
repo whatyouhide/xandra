@@ -6,6 +6,8 @@ defmodule Xandra.Connection do
   alias Xandra.{Batch, ConnectionError, Prepared, Frame, Simple, SetKeyspace}
   alias __MODULE__.Utils
 
+  require Logger
+
   @default_timeout 5_000
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
 
@@ -40,9 +42,7 @@ defmodule Xandra.Connection do
       |> Keyword.get(:transport_options, [])
       |> Keyword.merge(@forced_transport_options)
 
-    IO.puts(
-      "CALLING transport.connect #{transport} (address: #{inspect(address)}, port: #{inspect(port)}, transport_options: #{inspect(transport_options)})"
-    )
+    log_info = "#{transport}.connect(address: #{inspect(address)}, port: #{inspect(port)}, transport_options: #{inspect(transport_options)})"
 
     case transport.connect(address, port, transport_options, @default_timeout) do
       {:ok, socket} ->
@@ -106,14 +106,17 @@ defmodule Xandra.Connection do
             connect(options)
 
           {:error, %Xandra.Error{} = error} ->
+            Logger.error(log_info)
             raise error
 
           {:error, reason} = error ->
+            Logger.error(log_info)
             disconnect(reason, state)
             error
         end
 
       {:error, reason} ->
+        Logger.error(log_info)
         message = if transport == :ssl, do: "TLS/SSL connect", else: "TCP connect"
         {:error, ConnectionError.new(message, reason)}
     end
