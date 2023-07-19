@@ -42,7 +42,8 @@ defmodule Xandra.Connection do
       |> Keyword.get(:transport_options, [])
       |> Keyword.merge(@forced_transport_options)
 
-    log_info = "#{transport}.connect(address: #{inspect(address)}, port: #{inspect(port)}, transport_options: #{inspect(transport_options)})"
+    log_info =
+      "#{transport}.connect(address: #{inspect(address)}, port: #{inspect(port)}, transport_options: #{inspect(transport_options)})"
 
     case transport.connect(address, port, transport_options, @default_timeout) do
       {:ok, socket} ->
