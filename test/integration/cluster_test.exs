@@ -120,7 +120,7 @@ defmodule Xandra.ClusterTest do
       cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
       assert_receive {^test_ref, ControlConnectionMock, :init_called, args}
-      assert args.contact_points == [{'node1.example.com', 9042}, {'node2.example.com', 9042}]
+      assert args.contact_points == [{~c"node1.example.com", 9042}, {~c"node2.example.com", 9042}]
       assert args.cluster == cluster
     end
 
@@ -130,7 +130,7 @@ defmodule Xandra.ClusterTest do
         control_connection_module: ControlConnectionMock,
         nodes: ["node1.example.com"],
         target_pools: 2,
-        load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []}
+        load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []}
       ]
 
       cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
@@ -156,7 +156,7 @@ defmodule Xandra.ClusterTest do
           control_connection_module: ControlConnectionMock,
           nodes: ["node1.example.com"],
           target_pools: 1,
-          load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []},
+          load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []},
           sync_connect: 1000,
           test_discovered_hosts: [host1 = %Host{address: {127, 0, 0, 1}, port: 9042}]
         ]
@@ -172,7 +172,7 @@ defmodule Xandra.ClusterTest do
           control_connection_module: ControlConnectionMock,
           nodes: ["node1.example.com"],
           target_pools: 1,
-          load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []},
+          load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []},
           sync_connect: 0
         ]
 
@@ -192,7 +192,7 @@ defmodule Xandra.ClusterTest do
       control_connection_module: ControlConnectionMock,
       nodes: ["node1"],
       target_pools: 1,
-      load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []}
+      load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []}
     ]
 
     cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
@@ -243,7 +243,7 @@ defmodule Xandra.ClusterTest do
       control_connection_module: ControlConnectionMock,
       nodes: ["node1"],
       target_pools: 2,
-      load_balancing_policy: {LoadBalancingPolicy.DCAwareRoundRobin, []}
+      load_balancing: {LoadBalancingPolicy.Random, []}
     ]
 
     cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
