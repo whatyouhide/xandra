@@ -215,6 +215,7 @@ defmodule Xandra.Telemetry do
     * `:xandra_protocol_module` - the protocol module for the Cassandra native protocol
 
   """
+  @doc since: "0.15.0"
   @spec attach_default_handler() :: :ok
   def attach_default_handler do
     events = [
@@ -244,6 +245,8 @@ defmodule Xandra.Telemetry do
     :ok
   end
 
+  # Used for debugging Xandra itself.
+  @doc false
   @spec attach_debug_handler() :: :ok
   def attach_debug_handler do
     events = [
