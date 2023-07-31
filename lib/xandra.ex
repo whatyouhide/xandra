@@ -677,9 +677,12 @@ defmodule Xandra do
     {prepare_opts, db_conn_opts} = Keyword.split(options, @prepare_opts_keys)
     options = NimbleOptions.validate!(prepare_opts, @prepare_opts_schema) ++ db_conn_opts
     DBConnection.prepare(conn, %Prepared{statement: statement}, options)
-  rescue
-    DBConnection.ConnectionError ->
+  catch
+    :error, DBConnection.ConnectionError ->
       error = ConnectionError.new("preparing query", :closed)
+      {:error, error}
+    :exit, _ ->
+      error = ConnectionError.new("preparing query", :exit)
       {:error, error}
   end
 
@@ -1243,9 +1246,13 @@ defmodule Xandra do
           {:error, reason}
       end
     end)
-  rescue
-    DBConnection.ConnectionError ->
+  catch
+    :error, DBConnection.ConnectionError ->
       error = ConnectionError.new("execute batch query", :closed)
+      {:error, error}
+
+    :exit, _ ->
+      error = ConnectionError.new("execute batch query", :exit)
       {:error, error}
   end
 
@@ -1260,9 +1267,13 @@ defmodule Xandra do
       {:error, reason} ->
         {:error, reason}
     end
-  rescue
-    DBConnection.ConnectionError ->
+  catch
+    :error, DBConnection.ConnectionError ->
       error = ConnectionError.new("execute simple query", :closed)
+      {:error, error}
+
+    :exit, _ ->
+      error = ConnectionError.new("execute simple query", :exit)
       {:error, error}
   end
 
@@ -1298,9 +1309,13 @@ defmodule Xandra do
           {:error, reason}
       end
     end)
-  rescue
-    DBConnection.ConnectionError ->
+  catch
+    :error, DBConnection.ConnectionError ->
       error = ConnectionError.new("execute prepared query", :closed)
+      {:error, error}
+
+    :exit, _ ->
+      error = ConnectionError.new("execute prepared query", :exit)
       {:error, error}
   end
 end

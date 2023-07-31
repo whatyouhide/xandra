@@ -51,6 +51,10 @@ defmodule Xandra.ConnectionError do
     "socket is closed"
   end
 
+  defp format_reason(:exit) do
+    "socket closed with exit"
+  end
+
   defp format_reason({:cluster, :not_connected}) do
     "not connected to any of the nodes"
   end
