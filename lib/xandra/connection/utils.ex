@@ -3,8 +3,6 @@ defmodule Xandra.Connection.Utils do
 
   alias Xandra.{ConnectionError, Error, Frame}
 
-  require Logger
-
   @typep transport :: :gen_tcp | :ssl
   @typep socket :: :gen_tcp.socket() | :ssl.sslsocket()
 
@@ -123,26 +121,22 @@ defmodule Xandra.Connection.Utils do
       |> protocol_module.encode_request(requested_options)
       |> Frame.encode_v4(protocol_module)
 
-    Logger.debug(
-      "Sending STARTUP frame with protocol #{inspect(protocol_module)} and " <>
-        "requested options: #{inspect(requested_options)}"
-    )
-
     # However, we need to pass the compressor module around when we
     # receive the response to this frame because if we said we want to use
     # compression, this response is already compressed.
     with :ok <- transport.send(socket, payload),
+         tmtry_meas = %{protocol_module: protocol_module, requested_options: requested_options},
+         :telemetry.execute([:xandra, :debug, :sent_frame], tmtry_meas, %{frame_type: :STARTUP}),
          {:ok, frame, rest} <- recv_frame(transport, socket, :v4_or_less, compressor) do
       "" = rest
       # TODO: handle :error frames for things like :protocol_violation.
       case frame do
         %Frame{kind: :ready, body: <<>>} ->
-          Logger.debug("FRAME READY #{inspect(frame)}, #{inspect(rest)}, #{inspect(socket)}}")
-          Logger.debug("Received READY frame")
+          :telemetry.execute([:xandra, :debug, :received_frame], %{}, %{frame_type: :READY})
           :ok
 
         %Frame{kind: :authenticate} ->
-          Logger.debug("Received AUTHENTICATE frame, authenticating connection")
+          :telemetry.execute([:xandra, :debug, :received_frame], %{}, %{frame_type: :AUTHENTICATE})
 
           authenticate_connection(
             transport,

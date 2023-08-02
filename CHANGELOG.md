@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.17.0
+
+  * Move most logs to Telemetry events instead. If you want to keep the same behavior as before, call this in your application's `start/2` callback:
+
+    ```elixir
+    Xandra.Telemetry.attach_default_handler()
+    ```
+
+    See the `Xandra.Telemetry` documentation for more information. This was started in v0.15.0, but now most logs have been moved to Telemetry.
+
 ## v0.16.0
 
   * Add the `:sync_connect` option to `Xandra.Cluster.start_link/1`.

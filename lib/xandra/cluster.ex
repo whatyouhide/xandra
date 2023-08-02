@@ -31,7 +31,7 @@ defmodule Xandra.Cluster do
   specified in `:nodes`, plus one extra connection used for internal
   purposes, for a total of twenty-one connections going out of the machine.
 
-  ## Child specification
+  ## Child Specification
 
   `Xandra.Cluster` implements a `child_spec/1` function, so it can be used as a child
   under a supervisor:
@@ -41,7 +41,7 @@ defmodule Xandra.Cluster do
         {Xandra.Cluster, nodes: ["cassandra-seed.example.net"]}
       ]
 
-  ## Contact points and cluster discovery
+  ## Contact Points and Cluster Discovery
 
   `Xandra.Cluster` auto-discovers peer nodes in the cluster, by using the `system.peers`
   built-in Cassandra table. Once Xandra discovers peers, it opens a pool of connections
@@ -59,7 +59,7 @@ defmodule Xandra.Cluster do
   Xandra also **refreshes** the cluster topology periodically. See the
   `:refresh_topology_interval` option in `start_link/1`.
 
-  ## Load-balancing policies
+  ## Load-balancing Policies
 
   `Xandra.Cluster` uses customizable "load-balancing policies" to manage nodes
   in the cluster. A load-balancing policy is a module that implements the
@@ -79,7 +79,7 @@ defmodule Xandra.Cluster do
     * `Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin` - it will execute the
       queries on the nodes in a round robin manner, prioritizing the current DC.
 
-  ## Disconnections and reconnections
+  ## Disconnections and Reconnections
 
   `Xandra.Cluster` also supports nodes disconnecting and reconnecting: if Xandra
   detects one of the nodes in `:nodes` going down, it will not execute queries
@@ -95,60 +95,104 @@ defmodule Xandra.Cluster do
   This section describes all the Telemetry events that `Xandra.Cluster` emits. These events
   are available since *v0.15.0*. See also `Xandra.Telemetry`.
 
-  * `[:xandra, :cluster, :change_event]` — emitted when there is a change in the
-    cluster, either as reported by Cassandra itself or as detected by Xandra.
-    **Measurements**: *none*.
-    **Metadata**:
-      * `:event_type` - one of `:host_up` (a host went up), `:host_down` (a host went down),
-        `:host_added` (a host was added to the cluster topology), or `:host_removed` (a host
-        was removed from the cluster topology).
-      * `:source` - one of `:cassandra` or `:xandra`. If the event was reported by
-        Cassandra itself, the source is `:cassandra`. If the event was detected by
-        Xandra, the source is `:xandra`.
-      * `:changed` (`t:boolean/0`) - this is `true` if the node wasn't in the state
-        reported by the event, and `false` if the node was already in the reported state.
-      * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that went up or down.
-      * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
-      * `:cluster_name` - the name of the cluster executing the event, if provided
-        through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+    * `[:xandra, :cluster, :change_event]` — emitted when there is a change in the
+      cluster, either as reported by Cassandra itself or as detected by Xandra.
 
-  * `[:xandra, :cluster, :control_connection, :connected]` — emitted when the control
-    connection for the cluster is established.
-    **Measurements**: *none*.
-    **Metadata**:
-      * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that the control connection is
-        connected to.
-      * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
-      * `:cluster_name` - the name of the cluster executing the event, if provided
-        through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+      **Measurements**: *none*.
 
-  * `[:xandra, :cluster, :control_connection, :disconnected]` — emitted when the control
-    connection for the cluster is established.
-    **Measurements**: *none*.
-    **Metadata**:
-      * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that the control connection is
-        connected to.
-      * `:reason` - the reason for the disconnection. For example, `:closed` if the connected
-        node closes the connection peacefully.
-      * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
-      * `:cluster_name` - the name of the cluster executing the event, if provided
-        through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+      **Metadata**:
+
+        * `:event_type` - one of `:host_up` (a host went up), `:host_down` (a host went down),
+          `:host_added` (a host was added to the cluster topology), or `:host_removed` (a host
+          was removed from the cluster topology).
+        * `:source` - one of `:cassandra` or `:xandra`. If the event was reported by
+          Cassandra itself, the source is `:cassandra`. If the event was detected by
+          Xandra, the source is `:xandra`.
+        * `:changed` (`t:boolean/0`) - this is `true` if the node wasn't in the state
+          reported by the event, and `false` if the node was already in the reported state.
+        * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that went up or down.
+        * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
+        * `:cluster_name` - the name of the cluster executing the event, if provided
+          through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+
+    * `[:xandra, :cluster, :control_connection, :connected]` — emitted when the control
+      connection for the cluster is established.
+
+      **Measurements**: *none*.
+
+      **Metadata**:
+        * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that the control connection is
+          connected to.
+        * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
+        * `:cluster_name` - the name of the cluster executing the event, if provided
+          through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+
+    * `[:xandra, :cluster, :control_connection, :disconnected]` — emitted when the control
+      connection for the cluster is established.
+
+      **Measurements**: *none*.
+
+      **Metadata**:
+
+        * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that the control connection is
+          connected to.
+        * `:reason` - the reason for the disconnection. For example, `:closed` if the connected
+          node closes the connection peacefully.
+        * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
+        * `:cluster_name` - the name of the cluster executing the event, if provided
+          through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+
+    * `[:xandra, :cluster, :control_connection, :failed_to_connect]` — (available since v0.17.0)
+      emitted when the control connection for the cluster fails to connect to the given node.
+
+      **Measurements**: *none*.
+
+      **Metadata**:
+
+        * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that the control connection failed
+          to connect to.
+        * `:reason` - the reason for the failure.
+        * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
+        * `:cluster_name` - the name of the cluster executing the event, if provided
+          through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+
+    * `[:xandra, :cluster, :pool, :started | :restarted]` — (available since v0.17.0) emitted
+      when a pool of connection to a node is started or restarted.
+
+      **Measurements**: *none*.
+
+      **Metadata**:
+
+        * `:host` (`t:Xandra.Cluster.Host.t/0`) - the host that the pool connected or reconnected
+          to.
+        * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
+        * `:cluster_name` - the name of the cluster executing the event, if provided
+          through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
+
+    * `[:xandra, :cluster, :discovered_peers]` - (available since v0.17.0) executed when
+      the Xandra cluster's control connection discovers peers. The peers might have been
+      already discovered in the past, so you'll need to keep track of new peers if you need to.
+
+      **Measurements**:
+
+        * `:peers` (list of `t:Xandra.Cluster.Host.t/0`) the discovered peers.
+
+      **Metadata**:
+
+        * `:cluster_pid` (`t:pid/0`) - the PID of the cluster process.
+        * `:cluster_name` - the name of the cluster executing the event, if provided
+          through the `:name` option in `start_link/1`. `nil` if no `:name` was provided.
 
   """
 
   use GenServer
 
-  alias Xandra.Cluster.{
-    ControlConnection,
-    LoadBalancingPolicy,
-    Host
-  }
-
   alias Xandra.{Batch, ConnectionError, Prepared, RetryStrategy}
+  alias Xandra.Cluster.{ControlConnection, LoadBalancingPolicy, Host}
 
-  require Logger
-  require Record
-
+  @typedoc """
+  A Xandra cluster.
+  """
   @type cluster :: GenServer.server()
 
   @default_port 9042
@@ -183,6 +227,9 @@ defmodule Xandra.Cluster do
     # destination for the :connected message. If the :sync_connect is false,
     # this is nil.
     :sync_connect_alias,
+
+    # The name of the cluster (if present), only used for Telemetry events.
+    :name,
 
     # A map of peername to pool PID pairs.
     pools: %{},
@@ -455,7 +502,7 @@ defmodule Xandra.Cluster do
   If the function is successful, the prepared query is returned directly
   instead of in an `{:ok, prepared}` tuple like in `prepare/3`.
   """
-  @spec prepare!(cluster, Xandra.statement(), keyword) :: Xandra.Prepared.t() | no_return
+  @spec prepare!(cluster, Xandra.statement(), keyword) :: Xandra.Prepared.t()
   def prepare!(cluster, statement, options \\ []) do
     case prepare(cluster, statement, options) do
       {:ok, result} -> result
@@ -504,9 +551,8 @@ defmodule Xandra.Cluster do
   Same as `execute/3` but returns the result directly or raises in case of errors.
   """
   @spec execute!(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values()) ::
-          Xandra.result() | no_return
-  @spec execute!(cluster, Xandra.Batch.t(), keyword) ::
-          Xandra.Void.t() | no_return
+          Xandra.result()
+  @spec execute!(cluster, Xandra.Batch.t(), keyword) :: Xandra.Void.t()
   def execute!(cluster, query, params_or_options \\ []) do
     case execute(cluster, query, params_or_options) do
       {:ok, result} -> result
@@ -518,7 +564,7 @@ defmodule Xandra.Cluster do
   Same as `execute/4` but returns the result directly or raises in case of errors.
   """
   @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), keyword) ::
-          Xandra.result() | no_return
+          Xandra.result()
   def execute!(cluster, query, params, options) do
     case execute(cluster, query, params, options) do
       {:ok, result} -> result
@@ -605,7 +651,8 @@ defmodule Xandra.Cluster do
       control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module),
       target_pools: Keyword.fetch!(cluster_opts, :target_pools),
       sync_connect_alias: sync_connect_alias_or_nil,
-      registry: registry_name
+      registry: registry_name,
+      name: cluster_opts[:name]
     }
 
     # Start supervisor for the pools.
@@ -653,15 +700,12 @@ defmodule Xandra.Cluster do
   def handle_info(msg, state)
 
   def handle_info({:host_up, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host reported as UP: #{Host.format_address(host)}")
     state = update_in(state.load_balancing_state, &state.load_balancing_module.host_up(&1, host))
     state = maybe_start_pools(state)
     {:noreply, state}
   end
 
   def handle_info({:host_connected, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host connected successfully: #{Host.format_address(host)}")
-
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_connected(&1, host))
 
@@ -679,8 +723,6 @@ defmodule Xandra.Cluster do
   end
 
   def handle_info({:host_down, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host marked as DOWN: #{Host.format_address(host)}")
-
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_down(&1, host))
 
@@ -690,8 +732,6 @@ defmodule Xandra.Cluster do
   end
 
   def handle_info({:host_added, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host added to the cluster: #{Host.format_address(host)}")
-
     state =
       update_in(state.load_balancing_state, &state.load_balancing_module.host_added(&1, host))
 
@@ -700,7 +740,6 @@ defmodule Xandra.Cluster do
   end
 
   def handle_info({:host_removed, %Host{} = host}, %__MODULE__{} = state) do
-    Logger.debug("Host removed from the cluster: #{Host.format_address(host)}")
     state = stop_pool(state, host)
 
     # Also delete the child from the supervisor altogether.
@@ -716,7 +755,7 @@ defmodule Xandra.Cluster do
   end
 
   def handle_info({:discovered_hosts, hosts}, %__MODULE__{} = state) when is_list(hosts) do
-    Logger.debug("Discovered hosts: #{Enum.map_join(hosts, ", ", &Host.format_address/1)}")
+    execute_telemetry(state, [:discovered_peers], %{peers: hosts}, _extra_meta = %{})
 
     state =
       Enum.reduce(hosts, state, fn %Host{} = host, acc ->
@@ -749,14 +788,14 @@ defmodule Xandra.Cluster do
 
     case Supervisor.start_child(state.pool_supervisor, pool_spec) do
       {:ok, pool} ->
-        Logger.debug("Started pool to: #{Host.format_address(host)}")
+        execute_telemetry(state, [:pool, :started], %{}, %{host: host})
         send(state.control_connection, {:healthcheck, host})
         put_in(state.pools[peername], pool)
 
       {:error, :already_present} ->
         case Supervisor.restart_child(state.pool_supervisor, _id = peername) do
           {:ok, pool} ->
-            Logger.debug("Restarted pool to: #{Host.format_address(host)}")
+            execute_telemetry(state, [:pool, :restarted], %{}, %{host: host})
             send(state.control_connection, {:healthcheck, host})
             put_in(state.pools[peername], pool)
 
@@ -804,5 +843,10 @@ defmodule Xandra.Cluster do
           end
       end
     end)
+  end
+
+  defp execute_telemetry(%__MODULE__{} = state, event_postfix, measurements, extra_meta) do
+    meta = Map.merge(%{cluster_name: state.name, cluster_pid: self()}, extra_meta)
+    :telemetry.execute([:xandra, :cluster] ++ event_postfix, measurements, meta)
   end
 end

@@ -54,7 +54,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
         assert %Host{address: {127, 0, 0, 1}} = local_peer
       end)
 
-    assert log =~ "Error connecting: non-existing domain"
+    assert log =~ "Control connection failed to connect"
     assert log =~ "xandra_address=bad-domain"
     assert log =~ "xandra_port=9042"
   end
@@ -72,7 +72,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
         assert {:disconnected, _data} = :sys.get_state(ctrl_conn)
       end)
 
-    assert log =~ "Error connecting: non-existing domain"
+    assert log =~ "Control connection failed to connect"
     assert log =~ "xandra_address=bad-domain"
     assert log =~ "xandra_address=other-bad-domain"
   end

@@ -138,16 +138,12 @@ defmodule Xandra.Cluster.ControlConnection do
 
   # If we connect successfully, we set up a timer to periodically refresh the topology.
   def handle_event(:enter, _old = :disconnected, _new = {:connected, node}, data) do
-    Logger.metadata(xandra_address: format_address(node.ip), xandra_port: node.port)
-    Logger.debug("Established control connection (protocol #{inspect(node.protocol_module)})")
     execute_telemetry(data, [:control_connection, :connected], %{}, %{host: node.host})
     {:keep_state_and_data, {{:timeout, :refresh_topology}, data.refresh_topology_interval, nil}}
   end
 
   # If we disconnect, we cancel the timer for the periodic refresh.
   def handle_event(:enter, _old = {:connected, _node}, _new = :disconnected, _data) do
-    Logger.metadata(xandra_address: nil, xandra_port: nil)
-
     timeouts_to_cancel =
       for name <- [:refresh_topology, :delayed_topology_change] do
         {{:timeout, name}, :infinity, nil}
@@ -260,7 +256,6 @@ defmodule Xandra.Cluster.ControlConnection do
       )
       when kind in [:tcp_error, :ssl_error] do
     _ = data.transport.close(socket)
-    Logger.debug("Socket error: #{:inet.format_error(reason)}")
     execute_disconnected_telemetry(data, node, reason)
     {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
   end
@@ -273,7 +268,6 @@ defmodule Xandra.Cluster.ControlConnection do
       )
       when kind in [:tcp_closed, :ssl_closed] do
     _ = data.transport.close(socket)
-    Logger.debug("Socket closed")
     execute_disconnected_telemetry(data, node, :closed)
     data = %__MODULE__{data | buffer: <<>>}
     {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
@@ -369,7 +363,6 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp connect_to_first_available_node([], _data) do
-    Logger.error("No nodes available to connect to")
     :error
   end
 
@@ -379,8 +372,11 @@ defmodule Xandra.Cluster.ControlConnection do
         return
 
       {:error, reason} ->
-        logger_meta = [xandra_address: format_address(host.address), xandra_port: host.port]
-        Logger.warning("Error connecting: #{:inet.format_error(reason)}", logger_meta)
+        execute_telemetry(data, [:control_connection, :failed_to_connect], %{}, %{
+          host: host,
+          reason: reason
+        })
+
         connect_to_first_available_node(nodes, data)
     end
   end
@@ -392,14 +388,10 @@ defmodule Xandra.Cluster.ControlConnection do
     # A nil :protocol_version means "negotiate". A non-nil one means "enforce".
     proto_vsn = Keyword.get(options, :protocol_version)
 
-    Logger.metadata(xandra_address: format_address(address), xandra_port: port)
-    Logger.debug("Opening new connection")
-
     case transport.connect(address, port, data.transport_options, @default_timeout) do
       {:ok, socket} ->
         Logger.debug("Connected")
         with {:ok, supported_opts, proto_mod} <- request_options(transport, socket, proto_vsn),
-             Logger.debug("Supported options: #{inspect(supported_opts)}"),
              {:ok, {ip, port}} <- inet_mod(transport).peername(socket),
              connected_node = %ConnectedNode{
                socket: socket,
@@ -418,7 +410,6 @@ defmodule Xandra.Cluster.ControlConnection do
           res
         else
           {:error, {:use_this_protocol_instead, _failed_protocol_version, proto_vsn}} ->
-            Logger.debug("Cassandra said to use protocol #{inspect(proto_vsn)}, reconnecting")
             transport.close(socket)
             data = update_in(data.options, &Keyword.put(&1, :protocol_version, proto_vsn))
             connect_to_node(node, data)
@@ -430,8 +421,6 @@ defmodule Xandra.Cluster.ControlConnection do
       {:error, reason} ->
         {:error, reason}
     end
-  after
-    Logger.metadata(xandra_address: nil, xandra_port: nil)
   end
 
   # checks if the node is actually up by executing a node ready
@@ -710,7 +699,7 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp handle_change_event(data, _connected_node, %TopologyChange{effect: "MOVED_NODE"} = event) do
-    Logger.warn("Ignored TOPOLOGY_CHANGE event: #{inspect(event)}")
+    Logger.warning("Ignored TOPOLOGY_CHANGE event: #{inspect(event)}")
     {data, _actions = []}
   end
 
@@ -738,7 +727,6 @@ defmodule Xandra.Cluster.ControlConnection do
     case apply(Xandra.Frame, function, [fetch_bytes_fun, data.buffer, _compressor = nil, rest_fun]) do
       {:ok, frame, rest} ->
         change_event = connected_node.protocol_module.decode_response(frame)
-        Logger.debug("Received event: #{inspect(change_event)}")
         {data, new_actions} = handle_change_event(data, connected_node, change_event)
         consume_new_data(%__MODULE__{data | buffer: rest}, connected_node, actions ++ new_actions)
 
@@ -853,7 +841,4 @@ defmodule Xandra.Cluster.ControlConnection do
       0 -> :ok
     end
   end
-
-  defp format_address(address) when is_tuple(address), do: List.to_string(:inet.ntoa(address))
-  defp format_address(address) when is_list(address), do: List.to_string(address)
 end
