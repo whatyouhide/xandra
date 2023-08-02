@@ -142,7 +142,7 @@ defmodule Xandra.Cluster.ControlConnection do
     {:keep_state_and_data, {{:timeout, :refresh_topology}, data.refresh_topology_interval, nil}}
   end
 
-  # If we disconnect, we cancel the timer for the periodic refresh.
+  # If we disconnect, we cancel the timers for the periodic refreshes.
   def handle_event(:enter, _old = {:connected, _node}, _new = :disconnected, _data) do
     timeouts_to_cancel =
       for name <- [:refresh_topology, :delayed_topology_change] do
@@ -186,7 +186,7 @@ defmodule Xandra.Cluster.ControlConnection do
     {:keep_state_and_data, :postpone}
   end
 
-  # Postpone these messages for when the connection is connected.
+  # Postpone these DBConnection messages for when the connection is connected.
   def handle_event(:info, {event, pid}, :disconnected, %__MODULE__{} = _data)
       when event in [:connected, :disconnected] and is_pid(pid) do
     {:keep_state_and_data, :postpone}
@@ -242,7 +242,12 @@ defmodule Xandra.Cluster.ControlConnection do
 
       data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :added))
       send(data.cluster, {:host_added, new_host})
-      put_in(data.peers[{new_host.address, new_host.port}], %{status: :up, host: host, last_seen_at:  System.system_time(:millisecond)})
+
+      put_in(data.peers[{new_host.address, new_host.port}], %{
+        status: :up,
+        host: host,
+        last_discovered_at: System.system_time(:millisecond)
+      })
     else
       _ -> data
     end
@@ -348,7 +353,10 @@ defmodule Xandra.Cluster.ControlConnection do
 
       data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host_info.host, :down))
       data = put_in(data.peers[{address, port}].status, :down)
-      data = put_in(data.peers[{address, port}].last_seen_at, System.system_time(:millisecond))
+
+      data =
+        put_in(data.peers[{address, port}].last_discovered_at, System.system_time(:millisecond))
+
       send(data.cluster, {:host_down, host_info.host})
       {:keep_state, data}
     else
@@ -390,7 +398,6 @@ defmodule Xandra.Cluster.ControlConnection do
 
     case transport.connect(address, port, data.transport_options, @default_timeout) do
       {:ok, socket} ->
-        Logger.debug("Connected")
         with {:ok, supported_opts, proto_mod} <- request_options(transport, socket, proto_vsn),
              {:ok, {ip, port}} <- inet_mod(transport).peername(socket),
              connected_node = %ConnectedNode{
@@ -405,9 +412,7 @@ defmodule Xandra.Cluster.ControlConnection do
              :ok <- inet_mod(transport).setopts(socket, active: :once) do
           [local_host | _] = peers
 
-          res = {:ok, %ConnectedNode{connected_node | host: local_host}, peers}
-          Logger.debug("#{inspect(res)}")
-          res
+          {:ok, %ConnectedNode{connected_node | host: local_host}, peers}
         else
           {:error, {:use_this_protocol_instead, _failed_protocol_version, proto_vsn}} ->
             transport.close(socket)
@@ -431,10 +436,8 @@ defmodule Xandra.Cluster.ControlConnection do
     # A nil :protocol_version means "negotiate". A non-nil one means "enforce".
     proto_vsn = Keyword.get(options, :protocol_version)
 
-    Logger.metadata(xandra_address: format_address(address), xandra_port: port)
-    Logger.debug("Attempting to connect to #{inspect(node)}")
-
-    with {:ok, socket} <- transport.connect(address, port, data.transport_options, @default_timeout),
+    with {:ok, socket} <-
+           transport.connect(address, port, data.transport_options, @default_timeout),
          {:ok, supported_opts, proto_mod} <- request_options(transport, socket, proto_vsn),
          {:ok, {ip, port}} <- inet_mod(transport).peername(socket),
          connected_node = %ConnectedNode{
@@ -443,16 +446,12 @@ defmodule Xandra.Cluster.ControlConnection do
            ip: ip,
            port: port
          },
-         :ok <- startup_connection(data, connected_node, supported_opts)
-      do
-        Logger.debug("Node #{inspect(node)} is up")
-        :ok
+         :ok <- startup_connection(data, connected_node, supported_opts) do
+      :ok
     else
       _ ->
-        Logger.debug("Node #{inspect(node)} is still down")
         {:error, :timeout}
     end
-
   end
 
   defp refresh_topology(%__MODULE__{peers: old_peers} = data, new_peers) do
@@ -472,9 +471,9 @@ defmodule Xandra.Cluster.ControlConnection do
       })
     end)
 
-
     {existing_hosts, discovered_hosts, downed_hosts} =
-      Enum.reduce(new_peers, {[], [], MapSet.new()}, fn %Host{} = host, {existing_acc, discovered_acc, downed_acc} ->
+      Enum.reduce(new_peers, {[], [], MapSet.new()}, fn %Host{} = host,
+                                                        {existing_acc, discovered_acc, downed_acc} ->
         peername = Host.to_peername(host)
 
         case Map.fetch(old_peers, peername) do
@@ -490,12 +489,15 @@ defmodule Xandra.Cluster.ControlConnection do
                   changed: true,
                   source: :xandra
                 })
+
                 send(data.cluster, {:host_up, host})
                 {existing_acc ++ [host], discovered_acc, downed_acc}
+
               _ ->
                 send(data.cluster, {:host_down, host})
                 {existing_acc ++ [host], discovered_acc, MapSet.put(downed_acc, peername)}
             end
+
           :error ->
             execute_telemetry(data, [:change_event], %{}, %{
               event_type: :host_added,
@@ -515,11 +517,18 @@ defmodule Xandra.Cluster.ControlConnection do
     final_peers =
       Enum.reduce(existing_hosts ++ discovered_hosts, %{}, fn host, acc ->
         peername = Host.to_peername(host)
-        status = case MapSet.member?(downed_hosts, peername) do
-          true -> :down
-          false -> :up
-        end
-        Map.put(acc, Host.to_peername(host), %{host: host, status: status, last_seen_at: System.system_time(:millisecond)})
+
+        status =
+          case MapSet.member?(downed_hosts, peername) do
+            true -> :down
+            false -> :up
+          end
+
+        Map.put(acc, Host.to_peername(host), %{
+          host: host,
+          status: status,
+          last_discovered_at: System.system_time(:millisecond)
+        })
       end)
 
     data =
@@ -575,10 +584,6 @@ defmodule Xandra.Cluster.ControlConnection do
       local_peer = queried_peer_to_host(local_node_info)
       local_peer = %Host{local_peer | address: node.ip, port: node.port}
 
-      Logger.debug("Local peer: #{inspect(local_peer)}")
-      Logger.debug("Peers: #{inspect(peers)}")
-
-      Logger.debug("Cluster: #{inspect(data.cluster)}")
       # We filter out the peers with null host_id because they seem to be nodes that are down or
       # decommissioned but not removed from the cluster. See
       # https://github.com/lexhide/xandra/pull/196 and
@@ -591,17 +596,6 @@ defmodule Xandra.Cluster.ControlConnection do
             do: peer
 
       {:ok, [local_peer | peers]}
-    end
-  end
-
-  defp same_peer_was_recently_downed?(%__MODULE__{} = data, peer) do
-    with {:ok, peer_state} <- Map.fetch(data.peers, peer),
-         :down <- peer_state.status,
-         last_down_time <- peer_state |> Access.get(:last_seen_at, 0)
-      do
-        last_down_time + @default_backoff > System.monotonic_time(:millisecond)
-    else
-      _ -> false
     end
   end
 
@@ -653,7 +647,7 @@ defmodule Xandra.Cluster.ControlConnection do
         data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :down))
         send(data.cluster, {:host_down, host})
         data = put_in(data.peers[peer].status, :down)
-        data = put_in(data.peers[peer].last_seen_at, System.system_time(:millisecond))
+        data = put_in(data.peers[peer].last_discovered_at, System.system_time(:millisecond))
         {data, _actions = []}
     end
   end
