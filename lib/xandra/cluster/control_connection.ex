@@ -429,7 +429,7 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   # checks if the node is actually up by executing a node ready
-  defp attempt_to_connect_to_node({address, port} = node, data) do
+  defp attempt_to_connect_to_node({address, port}, data) do
     import Utils, only: [request_options: 3]
     %__MODULE__{options: options, transport: transport} = data
 
