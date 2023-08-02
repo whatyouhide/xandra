@@ -635,6 +635,9 @@ defmodule Xandra.Cluster do
 
     {:ok, _} = Registry.start_link(keys: :unique, name: registry_name)
 
+    # Start supervisor for the pools.
+    {:ok, pool_sup} = Supervisor.start_link([], strategy: :one_for_one)
+
     {lb_mod, lb_opts} =
       case Keyword.fetch!(cluster_opts, :load_balancing) do
         :random -> {LoadBalancingPolicy.Random, []}
@@ -652,11 +655,9 @@ defmodule Xandra.Cluster do
       target_pools: Keyword.fetch!(cluster_opts, :target_pools),
       sync_connect_alias: sync_connect_alias_or_nil,
       registry: registry_name,
-      name: cluster_opts[:name]
+      name: cluster_opts[:name],
+      pool_supervisor: pool_sup
     }
-
-    # Start supervisor for the pools.
-    {:ok, pool_sup} = Supervisor.start_link([], strategy: :one_for_one)
 
     {:ok, control_conn} =
       state.control_conn_mod.start_link(
@@ -670,8 +671,9 @@ defmodule Xandra.Cluster do
         name: Keyword.get(cluster_opts, :name)
       )
 
-    state = %__MODULE__{state | pool_supervisor: pool_sup, control_connection: control_conn}
+    state = %__MODULE__{state | control_connection: control_conn}
 
+    # This is only for testing purposes, and is not exposed.
     if hosts = cluster_opts[:test_discovered_hosts] do
       send(self(), {:discovered_hosts, hosts})
       Enum.each(hosts, &send(self(), {:host_connected, &1}))

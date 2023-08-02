@@ -3,8 +3,9 @@ defmodule Xandra.Cluster.ControlConnection do
 
   @behaviour :gen_statem
 
-  alias Xandra.{Frame, Simple, Connection.Utils}
+  alias Xandra.{Frame, Connection.Utils}
   alias Xandra.Cluster.{Host, LoadBalancingPolicy, StatusChange, TopologyChange}
+  alias Xandra.Cluster.ControlConnection.{ConnectedNode, Network}
 
   require Logger
 
@@ -64,11 +65,6 @@ defmodule Xandra.Cluster.ControlConnection do
     # Data buffer.
     buffer: <<>>
   ]
-
-  defmodule ConnectedNode do
-    @moduledoc false
-    defstruct [:socket, :protocol_module, :ip, :port, :host]
-  end
 
   # Need to manually define child_spec/1 because :gen_statem doesn't provide any utilities
   # around that.
@@ -205,10 +201,11 @@ defmodule Xandra.Cluster.ControlConnection do
         {:connected, %ConnectedNode{socket: socket} = node},
         %__MODULE__{} = data
       ) do
-    with :ok <- inet_mod(data.transport).setopts(socket, active: false),
-         :ok <- assert_no_transport_message(socket),
-         {:ok, peers} <- fetch_cluster_topology(data, node),
-         :ok <- inet_mod(data.transport).setopts(socket, active: :once) do
+    with :ok <- Network.set_socket_passive(data.transport, socket),
+         :ok <- Network.assert_no_transport_message(socket),
+         {:ok, peers} <-
+           Network.fetch_cluster_topology(data.transport, data.autodiscovered_nodes_port, node),
+         :ok <- Network.set_socket_active_once(data.transport, socket) do
       data = refresh_topology(data, peers)
       {:keep_state, data, {{:timeout, :refresh_topology}, data.refresh_topology_interval, nil}}
     else
@@ -225,26 +222,26 @@ defmodule Xandra.Cluster.ControlConnection do
         {:connected, connected_node},
         %__MODULE__{} = data
       ) do
-    select_peers_query =
-      "SELECT peer, data_center, host_id, rack, release_version, schema_version, tokens FROM system.peers"
+    case Network.get_info_about_peer(
+           data.transport,
+           data.autodiscovered_nodes_port,
+           connected_node,
+           address
+         ) do
+      {:ok, %Host{} = new_host} ->
+        execute_telemetry(data, [:change_event], %{}, %{
+          event_type: :host_added,
+          host: new_host,
+          changed: true,
+          source: :cassandra
+        })
 
-    with {:ok, peers} <- query(data, connected_node, select_peers_query),
-         host when not is_nil(host) <- Enum.find(peers, fn peer -> peer["peer"] == address end) do
-      new_host = queried_peer_to_host(host)
-      new_host = %Host{new_host | port: data.autodiscovered_nodes_port}
+        data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, new_host, :added))
+        send(data.cluster, {:host_added, new_host})
+        put_in(data.peers[{new_host.address, new_host.port}], %{status: :up, host: new_host})
 
-      execute_telemetry(data, [:change_event], %{}, %{
-        event_type: :host_added,
-        host: new_host,
-        changed: true,
-        source: :cassandra
-      })
-
-      data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :added))
-      send(data.cluster, {:host_added, new_host})
-      put_in(data.peers[{new_host.address, new_host.port}], %{status: :up, host: host})
-    else
-      _ -> data
+      :error ->
+        data
     end
   end
 
@@ -281,7 +278,7 @@ defmodule Xandra.Cluster.ControlConnection do
         %__MODULE__{} = data
       )
       when kind in [:tcp, :ssl] do
-    :ok = inet_mod(data.transport).setopts(socket, active: :once)
+    :ok = Network.set_socket_active_once(data.transport, socket)
     data = update_in(data.buffer, &(&1 <> bytes))
     {data, actions} = consume_new_data(data, connected_node)
     {:keep_state, data, actions}
@@ -390,17 +387,16 @@ defmodule Xandra.Cluster.ControlConnection do
     case transport.connect(address, port, data.transport_options, @default_timeout) do
       {:ok, socket} ->
         with {:ok, supported_opts, proto_mod} <- request_options(transport, socket, proto_vsn),
-             {:ok, {ip, port}} <- inet_mod(transport).peername(socket),
-             connected_node = %ConnectedNode{
-               socket: socket,
-               protocol_module: proto_mod,
-               ip: ip,
-               port: port
-             },
+             {:ok, connected_node} <- ConnectedNode.new(transport, socket, proto_mod),
              :ok <- startup_connection(data, connected_node, supported_opts),
-             {:ok, peers} <- fetch_cluster_topology(data, connected_node),
+             {:ok, peers} <-
+               Network.fetch_cluster_topology(
+                 data.transport,
+                 data.autodiscovered_nodes_port,
+                 connected_node
+               ),
              :ok <- register_to_events(data, connected_node),
-             :ok <- inet_mod(transport).setopts(socket, active: :once) do
+             :ok <- Network.set_socket_active_once(transport, socket) do
           [local_host | _] = peers
           {:ok, %ConnectedNode{connected_node | host: local_host}, peers}
         else
@@ -507,39 +503,12 @@ defmodule Xandra.Cluster.ControlConnection do
     protocol_format = Xandra.Protocol.frame_protocol_format(node.protocol_module)
 
     with :ok <- data.transport.send(node.socket, payload),
-         {:ok, %Frame{} = frame} <- recv_frame(data.transport, node.socket, protocol_format) do
+         {:ok, %Frame{} = frame} <-
+           Network.recv_frame(data.transport, node.socket, protocol_format) do
       :ok = node.protocol_module.decode_response(frame)
     else
       {:error, reason} ->
         {:error, reason}
-    end
-  end
-
-  # Discover the peers in the same data center as the node we're connected to.
-  defp fetch_cluster_topology(%__MODULE__{} = data, %ConnectedNode{} = node) do
-    # https://docs.datastax.com/en/cql-oss/3.3/cql/cql_using/useQuerySystemTableCluster.html
-    select_peers_query = "SELECT * FROM system.peers"
-
-    select_local_query =
-      "SELECT data_center, host_id, rack, release_version, schema_version, tokens FROM system.local"
-
-    with {:ok, [local_node_info]} <- query(data, node, select_local_query),
-         {:ok, peers} <- query(data, node, select_peers_query) do
-      local_peer = queried_peer_to_host(local_node_info)
-      local_peer = %Host{local_peer | address: node.ip, port: node.port}
-
-      # We filter out the peers with null host_id because they seem to be nodes that are down or
-      # decommissioned but not removed from the cluster. See
-      # https://github.com/lexhide/xandra/pull/196 and
-      # https://user.cassandra.apache.narkive.com/APRtj5hb/system-peers-and-decommissioned-nodes.
-      peers =
-        for peer_attrs <- peers,
-            peer = queried_peer_to_host(peer_attrs),
-            peer = %Host{peer | port: data.autodiscovered_nodes_port},
-            not is_nil(peer.host_id),
-            do: peer
-
-      {:ok, [local_peer | peers]}
     end
   end
 
@@ -670,58 +639,6 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  defp inet_mod(:gen_tcp), do: :inet
-  defp inet_mod(:ssl), do: :ssl
-
-  defp recv_frame(transport, socket, protocol_format) do
-    case Utils.recv_frame(transport, socket, protocol_format, _compressor = nil) do
-      {:ok, frame, ""} -> {:ok, frame}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp query(%__MODULE__{} = data, %ConnectedNode{} = node, statement) do
-    query = %Simple{statement: statement, values: [], default_consistency: :one}
-
-    payload =
-      Frame.new(:query, _options = [])
-      |> node.protocol_module.encode_request(query)
-      |> Frame.encode(node.protocol_module)
-
-    protocol_format = Xandra.Protocol.frame_protocol_format(node.protocol_module)
-
-    with :ok <- data.transport.send(node.socket, payload),
-         {:ok, %Frame{} = frame} <- recv_frame(data.transport, node.socket, protocol_format) do
-      {%Xandra.Page{} = page, _warnings} = node.protocol_module.decode_response(frame, query)
-      {:ok, Enum.to_list(page)}
-    end
-  end
-
-  defp queried_peer_to_host(%{"peer" => _} = peer_attrs) do
-    {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
-    peer_attrs = Map.put(peer_attrs, "address", address)
-    queried_peer_to_host(peer_attrs)
-  end
-
-  defp queried_peer_to_host(%{} = peer_attrs) do
-    columns = [
-      "address",
-      "data_center",
-      "host_id",
-      "rack",
-      "release_version",
-      "schema_version",
-      "tokens"
-    ]
-
-    peer_attrs =
-      peer_attrs
-      |> Map.take(columns)
-      |> Enum.map(fn {key, val} -> {String.to_existing_atom(key), val} end)
-
-    struct!(Host, peer_attrs)
-  end
-
   defp contact_points_to_hosts(contact_points) do
     Enum.map(contact_points, fn
       {host, port} ->
@@ -763,17 +680,5 @@ defmodule Xandra.Cluster.ControlConnection do
   defp execute_disconnected_telemetry(%__MODULE__{} = data, %ConnectedNode{host: host}, reason) do
     meta = %{host: host, reason: reason}
     execute_telemetry(data, [:control_connection, :disconnected], %{}, meta)
-  end
-
-  # Returns {:error, reason} if the socket was closes or if there was any data
-  # coming from the socket. Otherwise, returns :ok.
-  defp assert_no_transport_message(socket) do
-    receive do
-      {kind, ^socket, _data} when kind in [:tcp, :ssl] -> {:error, :data}
-      {kind, ^socket, reason} when kind in [:tcp_error, :ssl_error] -> {:error, reason}
-      {kind, ^socket} when kind in [:tcp_closed, :ssl_closed] -> {:error, :closed}
-    after
-      0 -> :ok
-    end
   end
 end
