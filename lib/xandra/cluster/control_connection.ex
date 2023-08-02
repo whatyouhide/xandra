@@ -139,13 +139,15 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   # If we disconnect, we cancel the timer for the periodic refresh.
-  def handle_event(:enter, _old = {:connected, _node}, _new = :disconnected, _data) do
+  def handle_event(:enter, _old = {:connected, _node}, _new = :disconnected, data) do
     timeouts_to_cancel =
       for name <- [:refresh_topology, :delayed_topology_change] do
         {{:timeout, name}, :infinity, nil}
       end
 
-    {:keep_state_and_data, timeouts_to_cancel}
+    data = %__MODULE__{data | buffer: <<>>}
+
+    {:keep_state, data, timeouts_to_cancel}
   end
 
   # Connecting is the hardest thing control connections do. The gist is this:
@@ -266,7 +268,6 @@ defmodule Xandra.Cluster.ControlConnection do
       when kind in [:tcp_closed, :ssl_closed] do
     _ = data.transport.close(socket)
     execute_disconnected_telemetry(data, node, :closed)
-    data = %__MODULE__{data | buffer: <<>>}
     {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
   end
 
