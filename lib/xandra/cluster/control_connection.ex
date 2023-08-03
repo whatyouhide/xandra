@@ -60,6 +60,14 @@ defmodule Xandra.Cluster.ControlConnection do
     :name,
 
     # A map of {ip, port} => %{host: %Host{}, status: atom}.
+    # A host can be:
+    #   * :known - this means it's in system.peers and we know about it,
+    #     but we have no info on its status.
+    #   * :marked_as_down_by_server - this means it's in system.peers, but it was
+    #     marked as down by the server.
+    #   * :marked_as_down_by_us - this means that it's in system.peers, but we
+    #     empirically verified that for now this is down.
+    #   * :connected - this means the node is up and we're connected to it.
     peers: %{},
 
     # Data buffer.
@@ -116,47 +124,43 @@ defmodule Xandra.Cluster.ControlConnection do
   # * {:connected, %ConnectedNode{}} - the control connection is connected to the given node
 
   @impl :gen_statem
+  def callback_mode, do: [:handle_event_function, :state_enter]
+
+  # Connect right as we start.
+  @impl :gen_statem
   def init(data) do
     {:ok, :disconnected, data, {:next_event, :internal, :connect}}
   end
 
-  @impl :gen_statem
-  def callback_mode, do: [:handle_event_function, :state_enter]
-
-  # Disconnected state
-
   @impl true
   def handle_event(type, content, state, data)
 
+  # :enter for the same even is a no-op.
   def handle_event(:enter, state, state, _data) do
     :keep_state_and_data
   end
 
-  # If we connect successfully, we set up a timer to periodically refresh the topology.
+  # Disconnected -> connected.
   def handle_event(:enter, _old = :disconnected, _new = {:connected, node}, data) do
     execute_telemetry(data, [:control_connection, :connected], %{}, %{host: node.host})
-    {:keep_state_and_data, {{:timeout, :refresh_topology}, data.refresh_topology_interval, nil}}
+    # We set up a timer to periodically refresh the topology.
+    timer_action = {{:timeout, :refresh_topology}, data.refresh_topology_interval, nil}
+    {:keep_state_and_data, timer_action}
   end
 
-  # If we disconnect, we cancel the timer for the periodic refresh.
-  def handle_event(:enter, _old = {:connected, _node}, _new = :disconnected, data) do
-    timeouts_to_cancel =
-      for name <- [:refresh_topology, :delayed_topology_change] do
-        {{:timeout, name}, :infinity, nil}
-      end
+  # Connected -> disconnected.
+  def handle_event(:enter, _old = {:connected, node}, _new = :disconnected, data) do
+    # Close the socket and then flush all socket messages:
+    data.transport.close(node.socket)
+    flush_socket_messages(node)
 
-    data = %__MODULE__{data | buffer: <<>>}
+    # Cancel the :refresh_topology timeout.
+    cancel_timeout_action = {{:timeout, :refresh_topology}, :infinity, nil}
 
-    {:keep_state, data, timeouts_to_cancel}
+    {:keep_state, %__MODULE__{data | buffer: <<>>}, cancel_timeout_action}
   end
 
-  # Connecting is the hardest thing control connections do. The gist is this:
-  #
-  #   1. We try to connect to each node in :seed_peernames until one succeeds
-  #   2. We discover the peers for that node
-  #   3. We register to the events for that node
-  #   4. We send the discovered peers back to the cluster alongside the connected node
-  #   5. We move to the state {:connected, node}
+  # :connect event fired.
   def handle_event(:internal, :connect, :disconnected, %__MODULE__{} = data) do
     case connect_to_first_available_node(data) do
       {:ok, connected_node, peers} ->
@@ -166,13 +170,6 @@ defmodule Xandra.Cluster.ControlConnection do
       :error ->
         {:keep_state_and_data, {{:timeout, :reconnect}, @default_backoff, nil}}
     end
-  end
-
-  # TCP/SSL messages that we get when we're already in the "disconnected" state can
-  # be safely ignored.
-  def handle_event(:info, msg, :disconnected, %__MODULE__{})
-      when is_tuple(msg) and elem(msg, 0) in [:tcp_error, :ssl_error, :tcp_closed, :ssl_closed] do
-    :keep_state_and_data
   end
 
   # Postpone healthcheck for after control connection is established
@@ -190,60 +187,29 @@ defmodule Xandra.Cluster.ControlConnection do
     {:keep_state_and_data, :postpone}
   end
 
-  # Trigger the reconnect event once the timer expires.
+  # Trigger the :connect event once the timer expires.
   def handle_event({:timeout, :reconnect}, _content, :disconnected, _data) do
     {:keep_state_and_data, {:next_event, :internal, :connect}}
   end
-
-  # Connected state
 
   def handle_event(
         {:timeout, :refresh_topology},
         nil,
         {:connected, %ConnectedNode{socket: socket} = node},
-        %__MODULE__{} = data
+        %__MODULE__{transport: transport} = data
       ) do
-    with :ok <- Network.set_socket_passive(data.transport, socket),
+    with :ok <- Network.set_socket_passive(transport, socket),
          :ok <- Network.assert_no_transport_message(socket),
          {:ok, peers} <-
-           Network.fetch_cluster_topology(data.transport, data.autodiscovered_nodes_port, node),
-         :ok <- Network.set_socket_active_once(data.transport, socket) do
+           Network.fetch_cluster_topology(transport, data.autodiscovered_nodes_port, node),
+         :ok <- Network.set_socket_active_once(transport, socket) do
       data = refresh_topology(data, peers)
       {:keep_state, data, {{:timeout, :refresh_topology}, data.refresh_topology_interval, nil}}
     else
       {:error, reason} ->
-        _ = data.transport.close(socket)
+        _ = transport.close(socket)
         execute_disconnected_telemetry(data, node, reason)
         {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
-    end
-  end
-
-  def handle_event(
-        {:timeout, :delayed_topology_change},
-        %TopologyChange{effect: "NEW_NODE", address: address},
-        {:connected, connected_node},
-        %__MODULE__{} = data
-      ) do
-    case Network.get_info_about_peer(
-           data.transport,
-           data.autodiscovered_nodes_port,
-           connected_node,
-           address
-         ) do
-      {:ok, %Host{} = new_host} ->
-        execute_telemetry(data, [:change_event], %{}, %{
-          event_type: :host_added,
-          host: new_host,
-          changed: true,
-          source: :cassandra
-        })
-
-        data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, new_host, :added))
-        send(data.cluster, {:host_added, new_host})
-        put_in(data.peers[{new_host.address, new_host.port}], %{status: :up, host: new_host})
-
-      :error ->
-        data
     end
   end
 
@@ -254,7 +220,6 @@ defmodule Xandra.Cluster.ControlConnection do
         %__MODULE__{} = data
       )
       when kind in [:tcp_error, :ssl_error] do
-    _ = data.transport.close(socket)
     execute_disconnected_telemetry(data, node, reason)
     {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
   end
@@ -266,7 +231,6 @@ defmodule Xandra.Cluster.ControlConnection do
         %__MODULE__{} = data
       )
       when kind in [:tcp_closed, :ssl_closed] do
-    _ = data.transport.close(socket)
     execute_disconnected_telemetry(data, node, :closed)
     {:next_state, :disconnected, data, {:next_event, :internal, :connect}}
   end
@@ -285,7 +249,7 @@ defmodule Xandra.Cluster.ControlConnection do
     {:keep_state, data, actions}
   end
 
-  # A DBConnection single connection process went up. We don't need to do anything
+  # A DBConnection single connection process went up. We don't need to do anything.
   def handle_event(:info, {:connected, pid}, {:connected, _node}, %__MODULE__{})
       when is_pid(pid) do
     :keep_state_and_data
@@ -416,6 +380,13 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp refresh_topology(%__MODULE__{peers: old_peers} = data, new_peers) do
+    meta = %{cluster_name: data.name, cluster_pid: data.cluster}
+    :telemetry.execute([:xandra, :cluster, :discovered_peers], %{peers: new_peers}, meta)
+
+    # A map of {ip, port} => %Host{}.
+    new_peers_lookup = Map.new(new_peers, &{Host.to_peername(&1), &1})
+
+    # These two are sets of {ip, port} tuples.
     old_peers_set = old_peers |> Map.keys() |> MapSet.new()
     new_peers_set = MapSet.new(new_peers, &Host.to_peername/1)
 
@@ -432,54 +403,49 @@ defmodule Xandra.Cluster.ControlConnection do
       })
     end)
 
-    {existing_hosts, discovered_hosts} =
-      Enum.reduce(new_peers, {[], []}, fn %Host{} = host, {existing_acc, discovered_acc} ->
-        peername = Host.to_peername(host)
+    # Notify cluster of all the peers that got added.
+    Enum.each(MapSet.difference(new_peers_set, old_peers_set), fn peername ->
+      %Host{} = host = Map.fetch!(new_peers_lookup, peername)
+      send(data.cluster, {:host_added, host})
 
-        case Map.fetch(old_peers, peername) do
-          {:ok, %{status: :up}} ->
-            {existing_acc ++ [host], discovered_acc}
+      execute_telemetry(data, [:change_event], %{}, %{
+        event_type: :host_added,
+        host: host,
+        changed: true,
+        source: :xandra
+      })
+    end)
 
-          {:ok, %{status: :down}} ->
-            execute_telemetry(data, [:change_event], %{}, %{
-              event_type: :host_up,
-              host: host,
-              changed: true,
-              source: :xandra
-            })
-
-            send(data.cluster, {:host_up, host})
-            {existing_acc ++ [host], discovered_acc}
-
-          :error ->
-            execute_telemetry(data, [:change_event], %{}, %{
-              event_type: :host_added,
-              host: host,
-              changed: true,
-              source: :xandra
-            })
-
-            {existing_acc, discovered_acc ++ [host]}
-        end
-      end)
+    discovered_hosts =
+      new_peers_set
+      |> MapSet.difference(old_peers_set)
+      |> Enum.map(&Map.fetch!(new_peers_lookup, &1))
 
     if discovered_hosts != [] do
       send(data.cluster, {:discovered_hosts, discovered_hosts})
     end
 
     final_peers =
-      Enum.reduce(existing_hosts ++ discovered_hosts, %{}, fn host, acc ->
-        Map.put(acc, Host.to_peername(host), %{host: host, status: :up})
+      Enum.reduce(new_peers, %{}, fn %Host{} = new_host, acc ->
+        new_peername = Host.to_peername(new_host)
+
+        case Map.fetch(old_peers, new_peername) do
+          {:ok, host_info} ->
+            Map.put(acc, new_peername, host_info)
+
+          :error ->
+            # If we don't know about this host, we assume it's up.
+            Map.put(acc, Host.to_peername(new_host), %{host: new_host, status: :up})
+        end
       end)
 
-    data =
-      if final_peers != old_peers do
-        reset_lbp(data, Enum.map(final_peers, fn {_peername, %{host: host}} -> host end))
-      else
-        data
-      end
+    data = %__MODULE__{data | peers: final_peers}
 
-    %__MODULE__{data | peers: final_peers}
+    if final_peers != old_peers do
+      reset_lbp(data, Enum.map(final_peers, fn {_peername, %{host: host}} -> host end))
+    else
+      data
+    end
   end
 
   defp startup_connection(%__MODULE__{} = data, %ConnectedNode{} = node, supported_options) do
@@ -564,43 +530,13 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   # When we get a NEW_NODE, we need to re-query the system.peers to get info about the new node.
-  defp handle_change_event(data, _connected_node, %TopologyChange{effect: "NEW_NODE"} = event) do
-    timeout_action = {{:timeout, :delayed_topology_change}, @delay_after_topology_change, event}
+  # When we get REMOVED_NODE, we can still re-query system.peers to check.
+  # Might as well just refresh the topology, right?
+  defp handle_change_event(data, _connected_node, %TopologyChange{effect: effect})
+       when effect in ["NEW_NODE", "REMOVED_NODE"] do
+    # Let's override the :refresh_topology timeout here.
+    timeout_action = {{:timeout, :refresh_topology}, @delay_after_topology_change, nil}
     {data, [timeout_action]}
-  end
-
-  # If we know about this node, we remove it from the list of nodes and send the event
-  # to the cluster. If we don't know about this node, this is a no-op.
-  defp handle_change_event(data, _connected_node, %TopologyChange{
-         effect: "REMOVED_NODE",
-         address: address,
-         port: port
-       }) do
-    telemetry_meta = %{event_type: :host_removed, source: :cassandra}
-
-    case get_and_update_in(data.peers, &Map.pop(&1, {address, port})) do
-      {%{host: host}, data} ->
-        execute_telemetry(
-          data,
-          [:change_event],
-          %{},
-          Map.merge(telemetry_meta, %{host: host, changed: true})
-        )
-
-        data = update_in(data.lbp, &LoadBalancingPolicy.update_host(&1, host, :removed))
-        send(data.cluster, {:host_removed, host})
-        {data, _actions = []}
-
-      {nil, data} ->
-        execute_telemetry(
-          data,
-          [:change_event],
-          %{},
-          Map.merge(telemetry_meta, %{host: %Host{address: address, port: port}, changed: false})
-        )
-
-        {data, _actions = []}
-    end
   end
 
   defp handle_change_event(data, _connected_node, %TopologyChange{effect: "MOVED_NODE"} = event) do
@@ -671,6 +607,16 @@ defmodule Xandra.Cluster.ControlConnection do
       end)
 
     %__MODULE__{data | lbp: {mod, state}}
+  end
+
+  defp flush_socket_messages(%ConnectedNode{socket: socket}) do
+    receive do
+      {type, ^socket, _data} when type in [:tcp, :ssl] -> :ok
+      {type, ^socket} when type in [:tcp_closed, :ssl_closed] -> :ok
+      {type, ^socket, _reason} when type in [:tcp_error, :ssl_error] -> :ok
+    after
+      0 -> :ok
+    end
   end
 
   defp execute_telemetry(%__MODULE__{} = data, event_postfix, measurements, extra_meta) do

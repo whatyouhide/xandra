@@ -49,14 +49,14 @@ defmodule Xandra.Cluster.ControlConnectionTest do
        %{mirror_ref: mirror_ref, start_options: start_options} do
     log =
       capture_log(fn ->
-        start_control_connection!(start_options, contact_points: ["bad-domain", "127.0.0.1"])
+        start_control_connection!(start_options, contact_points: ["127.0.0.1:9039", "127.0.0.1"])
         assert_receive {^mirror_ref, {:discovered_hosts, [local_peer]}}
         assert %Host{address: {127, 0, 0, 1}} = local_peer
       end)
 
     assert log =~ "Control connection failed to connect"
-    assert log =~ "xandra_address=bad-domain"
-    assert log =~ "xandra_port=9042"
+    assert log =~ "xandra_address=127.0.0.1"
+    assert log =~ "xandra_port=9039"
   end
 
   test "when all contact points are unavailable",
@@ -65,7 +65,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       capture_log(fn ->
         ctrl_conn =
           start_control_connection!(start_options,
-            contact_points: ["bad-domain", "other-bad-domain"]
+            contact_points: ["127.0.0.1:9098", "127.0.0.1:9099"]
           )
 
         refute_receive {^mirror_ref, _}, 500
@@ -73,8 +73,9 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       end)
 
     assert log =~ "Control connection failed to connect"
-    assert log =~ "xandra_address=bad-domain"
-    assert log =~ "xandra_address=other-bad-domain"
+    assert log =~ "xandra_address=127.0.0.1"
+    assert log =~ "xandra_port=9098"
+    assert log =~ "xandra_port=9099"
   end
 
   test "reconnecting after the node closes its socket",
@@ -202,35 +203,14 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert %Host{address: {127, 0, 0, 1}} = meta.host
   end
 
-  @tag :skip
-  test "deals with TopologyChange NEW_NODE events",
-       %{mirror_ref: mirror_ref, mirror: mirror, registry: registry} do
-    opts = [
-      cluster: mirror,
-      contact_points: ["127.0.0.1"],
-      autodiscovered_nodes_port: 9042,
-      refresh_topology_interval: 60_000,
-      registry: registry,
-      load_balancing: {LoadBalancingPolicy.Random, []}
-    ]
-
-    ctrl_conn = TestHelper.start_link_supervised!({ControlConnection, opts})
-
-    assert_receive {^mirror_ref, {:host_added, _peer}}
-
-    send_change_event(ctrl_conn, %TopologyChange{
-      effect: "NEW_NODE",
-      address: {127, 0, 0, 2},
-      port: 9042
-    })
-
-    flunk("TODO: we need to run this in the cluster")
-  end
-
-  test "deals with TopologyChange REMOVED_NODE events",
+  # This is just a smoke test, because we actually just refresh the topology after a while here.
+  test "deals with TopologyChange NEW_NODE and REMOVED_NODE events",
        %{mirror_ref: mirror_ref, start_options: start_options} do
     telemetry_ref =
-      :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
+      :telemetry_test.attach_event_handlers(self(), [
+        [:xandra, :cluster, :change_event],
+        [:xandra, :cluster, :discovered_peers]
+      ])
 
     ctrl_conn = start_control_connection!(start_options)
 
@@ -238,20 +218,19 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
     send_change_event(ctrl_conn, %TopologyChange{
-      effect: "REMOVED_NODE",
-      address: {127, 0, 0, 1},
+      effect: "NEW_NODE",
+      address: {127, 0, 0, 101},
       port: 9042
     })
 
-    assert_receive {^mirror_ref, {:host_removed, %Host{} = host}}
-    assert host.address == {127, 0, 0, 1}
-    assert host.port == 9042
-    assert host.data_center == "datacenter1"
+    send_change_event(ctrl_conn, %TopologyChange{
+      effect: "REMOVED_NODE",
+      address: {127, 0, 0, 102},
+      port: 9042
+    })
 
-    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, measurements, meta}
-    assert measurements == %{}
-    assert %{source: :cassandra, event_type: :host_removed, changed: true} = meta
-    assert %Host{address: {127, 0, 0, 1}} = meta.host
+    # Wait for the messages to be processed.
+    :sys.get_state(ctrl_conn)
   end
 
   test "ignores TopologyChange events of type MOVED_NODE",
@@ -292,6 +271,8 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
 
     assert_receive {^mirror_ref, {:host_removed, %Host{address: {127, 0, 0, 1}}}}
+    assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 1}}}}
+    assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 2}}}}
 
     assert_receive {^mirror_ref,
                     {:discovered_hosts,
@@ -329,6 +310,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
 
     assert_receive {^mirror_ref, {:host_removed, %Host{address: {192, 168, 1, 1}}}}
+    assert_receive {^mirror_ref, {:host_added, %Host{address: {192, 168, 1, 3}}}}
     assert_receive {^mirror_ref, {:discovered_hosts, [%Host{address: {192, 168, 1, 3}}]}}
 
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},

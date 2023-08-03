@@ -361,46 +361,6 @@ defmodule Xandra.ClusterTest do
       assert random_pids != Enum.sort(random_pids, :asc) and
                random_pids != Enum.sort(random_pids, :desc)
     end
-
-    @tag skip: "a proper :priority strategy has not been implemented yet"
-    test "with load balancing :priority", %{test_ref: test_ref} do
-      opts = [
-        xandra_module: PoolMock,
-        control_connection_module: ControlConnectionMock,
-        nodes: ["node1", "node2"],
-        load_balancing: :priority
-      ]
-
-      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
-
-      assert_control_connection_started(test_ref)
-
-      discovered_peers(cluster, [
-        host1 = %Host{address: {192, 0, 0, 1}, port: 9042},
-        host2 = %Host{address: {192, 0, 0, 2}, port: 9042}
-      ])
-
-      assert_pool_started(test_ref, host1)
-      assert_pool_started(test_ref, host2)
-
-      %{{{192, 0, 0, 1}, 9042} => pid1, {{192, 0, 0, 2}, 9042} => pid2} =
-        TestHelper.wait_for_passing(500, fn ->
-          pools = :sys.get_state(cluster).pools
-          assert map_size(pools) == 2
-          pools
-        end)
-
-      assert GenServer.call(cluster, :checkout) == {:ok, pid1}
-
-      # StatusChange DOWN to bring the connection to the first node down, so that :priority
-      # selects the second one the next time.
-
-      pool_monitor_ref = Process.monitor(pid1)
-      send(cluster, {:host_down, %Host{address: {192, 0, 0, 1}, port: 9042}})
-      assert_receive {:DOWN, ^pool_monitor_ref, _, _, _}
-
-      assert GenServer.call(cluster, :checkout) == {:ok, pid2}
-    end
   end
 
   describe "stop/1" do
