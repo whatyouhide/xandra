@@ -31,7 +31,7 @@ defmodule Xandra.ClusterTest do
     end
 
     @impl true
-    def handle_info({:healthcheck, %Host{}}, state) do
+    def handle_info({:started_pool, %Host{}}, state) do
       {:noreply, state}
     end
   end

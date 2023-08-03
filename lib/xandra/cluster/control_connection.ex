@@ -172,8 +172,8 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  # Postpone healthcheck for after control connection is established
-  def handle_event(:info, {:healthcheck, _host}, :disconnected, _data) do
+  # Postpone healthcheck for after control connection is established.
+  def handle_event(:info, {:started_pool, _host}, :disconnected, _data) do
     {:keep_state_and_data, :postpone}
   end
 
@@ -264,7 +264,7 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   # We wait for the pool to register itself before healthcheck
-  def handle_event(:info, {:healthcheck, %Host{} = host}, {:connected, _host}, %__MODULE__{}) do
+  def handle_event(:info, {:started_pool, %Host{} = host}, {:connected, _host}, %__MODULE__{}) do
     {:keep_state_and_data,
      {{:timeout, {:check_host_health, Host.to_peername(host)}}, @healthcheck_timeout, nil}}
   end

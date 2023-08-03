@@ -791,14 +791,14 @@ defmodule Xandra.Cluster do
     case Supervisor.start_child(state.pool_supervisor, pool_spec) do
       {:ok, pool} ->
         execute_telemetry(state, [:pool, :started], %{}, %{host: host})
-        send(state.control_connection, {:healthcheck, host})
+        send(state.control_connection, {:started_pool, host})
         put_in(state.pools[peername], pool)
 
       {:error, :already_present} ->
         case Supervisor.restart_child(state.pool_supervisor, _id = peername) do
           {:ok, pool} ->
             execute_telemetry(state, [:pool, :restarted], %{}, %{host: host})
-            send(state.control_connection, {:healthcheck, host})
+            send(state.control_connection, {:started_pool, host})
             put_in(state.pools[peername], pool)
 
           {:error, reason} when reason in [:running, :restarting] ->

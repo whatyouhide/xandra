@@ -431,12 +431,12 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     send(
       ctrl_conn,
-      {:healthcheck, %Host{address: {127, 0, 0, 1}, port: 9042, data_center: "datacenter1"}}
+      {:started_pool, %Host{address: {127, 0, 0, 1}, port: 9042, data_center: "datacenter1"}}
     )
 
     send(
       ctrl_conn,
-      {:healthcheck, %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"}}
+      {:started_pool, %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"}}
     )
 
     refute_receive {^mirror_ref, {:host_down, %Host{address: {127, 0, 0, 1}}}}, 600
