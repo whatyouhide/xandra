@@ -3,8 +3,8 @@ defmodule Xandra.Connection.Utils do
 
   alias Xandra.{ConnectionError, Error, Frame}
 
-  @typep transport :: :gen_tcp | :ssl
-  @typep socket :: :gen_tcp.socket() | :ssl.sslsocket()
+  @type transport :: :gen_tcp | :ssl
+  @type socket :: :gen_tcp.socket() | :ssl.sslsocket()
 
   @spec recv_frame(transport, socket, protocol_format :: :v4_or_less | :v5_or_more, module | nil) ::
           {:ok, Frame.t(), rest :: binary()} | {:error, :closed | :inet.posix()}

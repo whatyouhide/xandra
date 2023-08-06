@@ -7,7 +7,7 @@ defmodule Xandra.Cluster.ControlConnection.ConnectedNode do
   alias Xandra.Connection.Utils
 
   @type t() :: %__MODULE__{
-          socket: :gen_tcp.socket() | :ssl.socket(),
+          socket: Utils.socket(),
           protocol_module: module(),
           ip: :inet.ip_address(),
           port: :inet.port_number(),
