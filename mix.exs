@@ -24,7 +24,10 @@ defmodule Xandra.Mixfile do
       # Dialyzer
       dialyzer: [
         flags: [:no_contracts, :no_improper_lists],
-        plt_add_apps: [:ssl, :crypto, :mix, :ex_unit, :decimal]
+        list_unused_filters: true,
+        plt_add_apps: [:ssl, :crypto, :mix, :ex_unit, :decimal],
+        plt_local_path: "priv/plts",
+        plt_core_path: "priv/plts"
       ],
 
       # Testing
@@ -71,7 +74,17 @@ defmodule Xandra.Mixfile do
 
   defp aliases() do
     [
-      "test.scylladb": "test --exclude cassandra_specific --exclude encryption",
+      "test.scylladb": [
+        fn _args ->
+          System.put_env("CASSANDRA_PORT", "9052")
+          System.put_env("CASSANDRA_WITH_AUTH_PORT", "9053")
+        end,
+        "test --exclude cassandra_specific --exclude encryption"
+      ],
+      "test.all": fn args ->
+        Mix.Task.run(:test, args)
+        Mix.Task.run(:"test.scylladb", args)
+      end,
       "test.clustering": "run test_clustering/run.exs"
     ]
   end
