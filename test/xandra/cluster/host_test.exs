@@ -17,7 +17,7 @@ defmodule Xandra.Cluster.HostTest do
     end
 
     test "formats a hostname" do
-      host = %Host{address: 'cassandra.example.net', port: 9042}
+      host = %Host{address: ~c"cassandra.example.net", port: 9042}
       assert Host.format_address(host) == "cassandra.example.net:9042"
     end
   end

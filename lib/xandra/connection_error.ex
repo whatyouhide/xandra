@@ -57,7 +57,7 @@ defmodule Xandra.ConnectionError do
 
   defp format_reason(reason) do
     case :inet.format_error(reason) do
-      'unknown POSIX error' -> inspect(reason)
+      ~c"unknown POSIX error" -> inspect(reason)
       formatted -> List.to_string(formatted)
     end
   end

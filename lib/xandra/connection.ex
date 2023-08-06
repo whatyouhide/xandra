@@ -76,7 +76,9 @@ defmodule Xandra.Connection do
           :telemetry.execute([:xandra, :connected], %{}, %{
             connection_name: connection_name,
             address: address,
-            port: port
+            port: port,
+            protocol_module: protocol_module,
+            supported_options: supported_options
           })
 
           maybe_register_or_put_value(state, :up)
