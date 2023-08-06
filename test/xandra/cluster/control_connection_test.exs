@@ -47,35 +47,53 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
   test "trying all the nodes in the contact points",
        %{mirror_ref: mirror_ref, start_options: start_options} do
-    log =
-      capture_log(fn ->
-        start_control_connection!(start_options, contact_points: ["127.0.0.1:9039", "127.0.0.1"])
-        assert_receive {^mirror_ref, {:discovered_hosts, [local_peer]}}
-        assert %Host{address: {127, 0, 0, 1}} = local_peer
-      end)
+    telemetry_ref =
+      :telemetry_test.attach_event_handlers(self(), [
+        [:xandra, :cluster, :control_connection, :failed_to_connect],
+        [:xandra, :cluster, :control_connection, :connected]
+      ])
 
-    assert log =~ "Control connection failed to connect"
-    assert log =~ "xandra_address=127.0.0.1"
-    assert log =~ "xandra_port=9039"
+    start_control_connection!(start_options, contact_points: ["127.0.0.1:9039", "127.0.0.1"])
+    assert_receive {^mirror_ref, {:discovered_hosts, [local_peer]}}
+    assert %Host{address: {127, 0, 0, 1}} = local_peer
+
+    assert_receive {[:xandra, :cluster, :control_connection, :failed_to_connect], ^telemetry_ref,
+                    %{}, metadata}
+
+    assert %{reason: :econnrefused, host: %Host{address: ~c"127.0.0.1", port: 9039}} = metadata
+
+    assert_receive {[:xandra, :cluster, :control_connection, :connected], ^telemetry_ref, %{},
+                    %{}}
   end
 
   test "when all contact points are unavailable",
        %{mirror_ref: mirror_ref, start_options: start_options} do
-    log =
-      capture_log(fn ->
-        ctrl_conn =
-          start_control_connection!(start_options,
-            contact_points: ["127.0.0.1:9098", "127.0.0.1:9099"]
-          )
+    telemetry_ref =
+      :telemetry_test.attach_event_handlers(self(), [
+        [:xandra, :cluster, :control_connection, :failed_to_connect],
+        [:xandra, :cluster, :control_connection, :connected]
+      ])
 
-        refute_receive {^mirror_ref, _}, 500
-        assert {:disconnected, _data} = :sys.get_state(ctrl_conn)
-      end)
+    ctrl_conn =
+      start_control_connection!(start_options,
+        contact_points: ["127.0.0.1:9098", "127.0.0.1:9099"]
+      )
 
-    assert log =~ "Control connection failed to connect"
-    assert log =~ "xandra_address=127.0.0.1"
-    assert log =~ "xandra_port=9098"
-    assert log =~ "xandra_port=9099"
+    refute_receive {^mirror_ref, _}, 500
+    assert {:disconnected, _data} = :sys.get_state(ctrl_conn)
+
+    assert_received {[:xandra, :cluster, :control_connection, :failed_to_connect], ^telemetry_ref,
+                     %{}, metadata}
+
+    assert %{reason: :econnrefused, host: %Host{address: ~c"127.0.0.1", port: 9098}} = metadata
+
+    assert_received {[:xandra, :cluster, :control_connection, :failed_to_connect], ^telemetry_ref,
+                     %{}, metadata}
+
+    assert %{reason: :econnrefused, host: %Host{address: ~c"127.0.0.1", port: 9099}} = metadata
+
+    refute_received {[:xandra, :cluster, :control_connection, :connected], ^telemetry_ref, %{},
+                     %{}}
   end
 
   test "reconnecting after the node closes its socket",

@@ -9,5 +9,3 @@ excluded =
   end
 
 ExUnit.start(exclude: excluded, assert_receive_timeout: 1_000)
-
-Xandra.Telemetry.attach_default_handler()
