@@ -1,7 +1,7 @@
 defmodule Xandra.Cluster.CCMTest do
   use ExUnit.Case
 
-  import Xandra.TestHelper, only: [cmd!: 2]
+  import Xandra.TestHelper, only: [cmd!: 2, wait_for_passing: 2]
 
   @moduletag :integration
   @moduletag :ccm
@@ -25,8 +25,12 @@ defmodule Xandra.Cluster.CCMTest do
 
     cluster =
       start_supervised!(
-        {Xandra.Cluster, nodes: ["127.0.0.1"], target_pools: 2, sync_connect: 1000}
+        {Xandra.Cluster, nodes: ["127.0.0.1"], target_pools: 2, sync_connect: 5000}
       )
+
+    wait_for_passing(5000, fn ->
+      assert map_size(:sys.get_state(cluster).pools) == 2
+    end)
 
     cluster_state = :sys.get_state(cluster)
 
