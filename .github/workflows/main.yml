@@ -140,9 +140,6 @@ jobs:
       - name: Install ccm
         run: pip install ccm
 
-      - name: Check for ccm
-        run: ccm
-
       - name: Install OTP and Elixir
         uses: erlef/setup-beam@v1
         with:
