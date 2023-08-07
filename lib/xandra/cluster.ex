@@ -334,7 +334,8 @@ defmodule Xandra.Cluster do
     # Internal for testing, not exposed.
     xandra_module: [type: :atom, default: Xandra, doc: false],
     control_connection_module: [type: :atom, default: ControlConnection, doc: false],
-    test_discovered_hosts: [type: :any, default: [], doc: false]
+    test_discovered_hosts: [type: :any, default: [], doc: false],
+    registry_listeners: []
   ]
 
   @start_link_opts_schema_keys Keyword.keys(@start_link_opts_schema)
@@ -633,7 +634,12 @@ defmodule Xandra.Cluster do
     registry_name =
       Module.concat([Xandra.ClusterRegistry, to_string(System.unique_integer([:positive]))])
 
-    {:ok, _} = Registry.start_link(keys: :unique, name: registry_name)
+    {:ok, _} =
+      Registry.start_link(
+        keys: :unique,
+        name: registry_name,
+        listeners: Keyword.fetch!(cluster_opts, :registry_listeners)
+      )
 
     # Start supervisor for the pools.
     {:ok, pool_sup} = Supervisor.start_link([], strategy: :one_for_one)

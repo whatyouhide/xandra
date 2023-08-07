@@ -23,9 +23,15 @@ defmodule Xandra.Cluster.CCMTest do
     ccm("start")
     ccm("status")
 
+    Process.register(self(), :this_test_process)
+
     cluster =
       start_supervised!(
-        {Xandra.Cluster, nodes: ["127.0.0.1"], target_pools: 2, sync_connect: 5000}
+        {Xandra.Cluster,
+         nodes: ["127.0.0.1"],
+         target_pools: 2,
+         sync_connect: 5000,
+         registry_listeners: [:this_test_process]}
       )
 
     wait_for_passing(5000, fn ->
@@ -55,13 +61,8 @@ defmodule Xandra.Cluster.CCMTest do
              {{127, 0, 0, 3}, 9042} => %{host: _host3, status: :up}
            } = ctrl_conn_state.peers
 
-    assert [
-             {{{registry_addr1, 9042}, 1}, _pid1, :up},
-             {{{registry_addr2, 9042}, 1}, _pid2, :up}
-           ] =
-             cluster_state.registry
-             |> Registry.select([{{:"$1", :"$2", :"$3"}, [], [{{:"$1", :"$2", :"$3"}}]}])
-             |> Enum.sort()
+    assert_receive {:register, _registry, {{registry_addr1, 9042}, 1}, _pid1, :up}
+    assert_receive {:register, _registry, {{registry_addr2, 9042}, 1}, _pid2, :up}
 
     assert MapSet.subset?(
              MapSet.new([registry_addr1, registry_addr2]),
