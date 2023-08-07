@@ -97,14 +97,12 @@ defmodule Xandra.Mixfile do
       {:telemetry, "~> 0.4.3 or ~> 1.0"},
 
       # Dev and test dependencies
-      # We override CAStore because some downstream dep still uses ~> 0.1.
-      {:castore, "~> 1.0", only: [:dev, :test], override: true},
       {:dialyxir, "~> 1.3", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.28", only: :dev},
       # TODO: replace with Hex version once it gets released
       {:excoveralls, github: "whatyouhide/excoveralls", branch: "httpc", only: :test},
       {:stream_data, "~> 0.5.0", only: [:dev, :test]},
-      {:nimble_lz4, "~> 0.1.2", only: [:dev, :test]}
+      {:nimble_lz4, "~> 0.1.3", only: [:dev, :test]}
     ]
   end
 end
