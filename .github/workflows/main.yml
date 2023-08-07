@@ -27,7 +27,7 @@ jobs:
         uses: erlef/setup-beam@v1
         with:
           otp-version: "25.3"
-          elixir-version: "1.14"
+          elixir-version: "1.15.4"
 
       - name: Cache dependencies
         id: cache-deps
@@ -74,7 +74,14 @@ jobs:
         run: mix dialyzer --format github
 
   test:
-    name: Test (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, C* ${{ matrix.cassandra_version }}, Native protocols ${{ matrix.cassandra_native_protocol }})
+    name: >-
+      Test (
+      Elixir ${{ matrix.elixir }},
+      OTP ${{ matrix.otp }},
+      C* ${{ matrix.server_versions.cassandra }},
+      Scylla ${{ matrix.server_versions.scylla }},
+      Native protocol ${{ matrix.cassandra_native_protocol }}
+      )
 
     runs-on: ubuntu-20.04
 
@@ -85,7 +92,7 @@ jobs:
         otp:
           - "25.3"
         elixir:
-          - "1.14"
+          - "1.15.4"
         server_versions:
           - cassandra: "4.1"
             scylla: "5.1.6"
@@ -97,7 +104,7 @@ jobs:
         include:
           # Only C* 4.1+ supports native protocol v5.
           - otp: "25.3"
-            elixir: "1.14"
+            elixir: "1.15.4"
             test_only_cassandra: true
             cassandra_version: "4.1"
             cassandra_native_protocol: "v4"
