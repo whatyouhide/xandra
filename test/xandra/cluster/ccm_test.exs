@@ -53,15 +53,17 @@ defmodule Xandra.Cluster.CCMTest do
   end
 
   defp validate_ifaddresses do
-    {:ok, addresses} = :inet.getifaddrs()
-    assert {~c"lo0", info} = List.keyfind!(addresses, ~c"lo0", 0)
+    if :os.type() == {:unix, :darwin} do
+      {:ok, addresses} = :inet.getifaddrs()
+      assert {~c"lo0", info} = List.keyfind!(addresses, ~c"lo0", 0)
 
-    localhosts = for {:addr, {127, 0, 0, _} = addr} <- info, do: addr
+      localhosts = for {:addr, {127, 0, 0, _} = addr} <- info, do: addr
 
-    assert Enum.sort(localhosts) == [
-             {127, 0, 0, 1},
-             {127, 0, 0, 2},
-             {127, 0, 0, 3}
-           ]
+      assert Enum.sort(localhosts) == [
+               {127, 0, 0, 1},
+               {127, 0, 0, 2},
+               {127, 0, 0, 3}
+             ]
+    end
   end
 end
