@@ -1,7 +1,6 @@
 defmodule AuthenticationTest do
   auth_options = [username: "cassandra", password: "cassandra"]
   port = System.get_env("CASSANDRA_WITH_AUTH_PORT", "9043")
-  dbg(port)
 
   use XandraTest.IntegrationCase,
     start_options: [
@@ -14,7 +13,6 @@ defmodule AuthenticationTest do
   @moduletag :authentication
 
   test "challenge is passed to cluster connections", %{start_options: start_options} do
-    dbg()
     cluster = TestHelper.start_link_supervised!({Xandra.Cluster, start_options})
     TestHelper.await_cluster_connected(cluster)
   end
