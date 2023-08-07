@@ -28,7 +28,18 @@ defmodule Xandra.Cluster.CCMTest do
       )
 
     cluster_state = :sys.get_state(cluster)
-    assert %{{{127, 0, 0, 1}, 9042} => _, {{127, 0, 0, 2}, 9042} => _} = cluster_state.pools
+
+    assert map_size(cluster_state.pools) == 2
+
+    pool_addresses =
+      MapSet.new(cluster_state.pools, fn {{address, port}, _} ->
+        assert port == 9042
+        address
+      end)
+
+    assert [{127, 0, 0, 1}, {127, 0, 0, 2}, {127, 0, 0, 3}]
+           |> MapSet.new()
+           |> MapSet.intersection(pool_addresses) == pool_addresses
 
     assert {{:connected, _connected_node}, ctrl_conn_state} =
              :sys.get_state(cluster_state.control_connection)
@@ -40,12 +51,17 @@ defmodule Xandra.Cluster.CCMTest do
            } = ctrl_conn_state.peers
 
     assert [
-             {{{{127, 0, 0, 1}, 9042}, 1}, _pid1, :up},
-             {{{{127, 0, 0, 2}, 9042}, 1}, _pid2, :up}
+             {{{registry_addr1, 9042}, 1}, _pid1, :up},
+             {{{registry_addr2, 9042}, 1}, _pid2, :up}
            ] =
              cluster_state.registry
              |> Registry.select([{{:"$1", :"$2", :"$3"}, [], [{{:"$1", :"$2", :"$3"}}]}])
              |> Enum.sort()
+
+    assert MapSet.subset?(
+             MapSet.new([registry_addr1, registry_addr2]),
+             MapSet.new([{127, 0, 0, 1}, {127, 0, 0, 2}, {127, 0, 0, 3}])
+           )
   end
 
   defp ccm(args) do

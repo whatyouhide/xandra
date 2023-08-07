@@ -79,7 +79,7 @@ defmodule Xandra.Mixfile do
           System.put_env("CASSANDRA_PORT", "9062")
           System.put_env("CASSANDRA_WITH_AUTH_PORT", "9063")
         end,
-        "test --exclude cassandra_specific --exclude encryption"
+        "test --exclude cassandra_specific --exclude encryption --exclude ccm"
       ],
       "test.all": fn args ->
         Mix.Task.run(:test, args)
