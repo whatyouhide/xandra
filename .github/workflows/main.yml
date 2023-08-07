@@ -139,7 +139,13 @@ jobs:
           python-version: "3.9.16"
 
       - name: Install ccm
-        run: pip install ccm
+        run: pip3 install ccm
+
+      - name: Install OpenJDK
+        uses: actions/setup-java@v2
+        with:
+          distribution: "zulu"
+          java-version: "11"
 
       - name: Install OTP and Elixir
         uses: erlef/setup-beam@v1
