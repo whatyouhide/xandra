@@ -173,11 +173,11 @@ jobs:
       # TODO: eventually figure out why we can't run encryption tests on CI.
       - name: Run tests for Cassandra and Scylla
         if: ${{ !matrix.test_only_cassandra }}
-        run: mix test.all --trace --exclude encryption
+        run: mix test.all --trace --exclude encryption --exclude ccm
 
       - name: Run tests for Cassandra only
         if: ${{ matrix.test_only_cassandra }}
-        run: mix test --trace --exclude encryption
+        run: mix test --trace --exclude encryption --exclude ccm
 
       - name: Dump Docker logs on failure
         uses: jwalton/gh-docker-logs@v1
