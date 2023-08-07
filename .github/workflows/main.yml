@@ -9,8 +9,6 @@ on:
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   MIX_ENV: test
-  LATEST_ELIXIR_VERSION: "1.14"
-  LATEST_OTP_VERSION: "25.3"
 
 jobs:
   lint:
@@ -28,8 +26,8 @@ jobs:
       - name: Install OTP and Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "${{ env.LATEST_ELIXIR_VERSION }}"
-          elixir-version: "${{ env.LATEST_OTP_VERSION }}"
+          otp-version: "25.3"
+          elixir-version: "1.14"
 
       - name: Cache dependencies
         id: cache-deps
@@ -76,7 +74,7 @@ jobs:
         run: mix dialyzer --format github
 
   test:
-    name: Test (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, C* ${{ matrix.cassandra_version }}, Native protocols ${{ matrix.cassandra_native_protocols }})
+    name: Test (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, C* ${{ matrix.cassandra_version }}, Native protocols ${{ matrix.cassandra_native_protocol }})
 
     runs-on: ubuntu-20.04
 
@@ -85,9 +83,9 @@ jobs:
 
       matrix:
         otp:
-          - "${{ env.LATEST_OTP_VERSION }}"
+          - "25.3"
         elixir:
-          - "${{ env.LATEST_ELIXIR_VERSION }}"
+          - "1.14"
         server_versions:
           - cassandra: "4.1"
             scylla: "5.1.6"
