@@ -300,7 +300,7 @@ defmodule Xandra.Cluster.ControlConnection do
     spec = [{{{:"$1", :_}, :_, :"$2"}, [{:==, :"$1", {{{address}, port}}}], [:"$2"]}]
     statuses = Registry.select(data.registry, spec)
 
-    if host_info.status == :up and Enum.all?(statuses, &(&1 == :down)) do
+    if host_info.status == :up and statuses != [] and Enum.all?(statuses, &(&1 == :down)) do
       execute_telemetry(data, [:change_event], %{}, %{
         event_type: :host_down,
         host: host_info.host,
