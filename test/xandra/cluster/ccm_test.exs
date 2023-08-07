@@ -21,6 +21,7 @@ defmodule Xandra.Cluster.CCMTest do
     end
 
     ccm("start")
+    ccm("status")
 
     cluster =
       start_supervised!(
