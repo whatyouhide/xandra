@@ -1,6 +1,6 @@
 defmodule AuthenticationTest do
   auth_options = [username: "cassandra", password: "cassandra"]
-  port = System.get_env("CASSANDRA_WITH_AUTH_PORT", "9043")
+  port = System.get_env("CASSANDRA_WITH_AUTH_PORT", "9053")
 
   use XandraTest.IntegrationCase,
     start_options: [

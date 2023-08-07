@@ -76,8 +76,8 @@ defmodule Xandra.Mixfile do
     [
       "test.scylladb": [
         fn _args ->
-          System.put_env("CASSANDRA_PORT", "9052")
-          System.put_env("CASSANDRA_WITH_AUTH_PORT", "9053")
+          System.put_env("CASSANDRA_PORT", "9062")
+          System.put_env("CASSANDRA_WITH_AUTH_PORT", "9063")
         end,
         "test --exclude cassandra_specific --exclude encryption"
       ],
