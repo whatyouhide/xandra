@@ -335,7 +335,7 @@ defmodule Xandra.Cluster do
     xandra_module: [type: :atom, default: Xandra, doc: false],
     control_connection_module: [type: :atom, default: ControlConnection, doc: false],
     test_discovered_hosts: [type: :any, default: [], doc: false],
-    registry_listeners: []
+    registry_listeners: [type: :any, default: [], doc: false]
   ]
 
   @start_link_opts_schema_keys Keyword.keys(@start_link_opts_schema)
