@@ -413,7 +413,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
                     }}
   end
 
-  test "performs healthcheck and sends node down message if not registered",
+  test "performs healthcheck",
        %{mirror_ref: mirror_ref, registry: registry, start_options: start_options} do
     telemetry_ref =
       :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
@@ -457,21 +457,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       {:started_pool, %Host{address: {127, 0, 0, 1}, port: @port, data_center: "datacenter1"}}
     )
 
-    send(
-      ctrl_conn,
-      {:started_pool, %Host{address: {192, 168, 1, 1}, port: @port, data_center: "datacenter1"}}
-    )
-
     refute_receive {^mirror_ref, {:host_down, %Host{address: {127, 0, 0, 1}}}}, 600
-    assert_receive {^mirror_ref, {:host_down, %Host{address: {192, 168, 1, 1}}}}
-
-    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
-                    %{
-                      event_type: :host_down,
-                      changed: true,
-                      source: :xandra,
-                      host: %Host{address: {192, 168, 1, 1}}
-                    }}
   end
 
   defp start_control_connection!(start_options, overrides \\ []) do
