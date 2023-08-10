@@ -99,8 +99,7 @@ defmodule Xandra.Mixfile do
       # Dev and test dependencies
       {:dialyxir, "~> 1.3", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.28", only: :dev},
-      # TODO: replace with Hex version once it gets released
-      {:excoveralls, github: "whatyouhide/excoveralls", branch: "httpc", only: :test},
+      {:excoveralls, "~> 0.17", only: :test},
       {:stream_data, "~> 0.5.0", only: [:dev, :test]},
       {:nimble_lz4, "~> 0.1.3", only: [:dev, :test]}
     ]
