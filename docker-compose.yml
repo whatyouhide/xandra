@@ -8,8 +8,8 @@ services:
       args:
         CASSANDRA_VERSION: "${CASSANDRA_VERSION:-4.1}"
     ports:
-      - "9042:9042" # TCP connections
-      - "9142:9142" # TLS/SSL connections
+      - "9052:9042" # TCP connections
+      - "9152:9142" # TLS/SSL connections
     environment:
       - HEAP_NEWSIZE=1M
       - MAX_HEAP_SIZE=200M
@@ -31,7 +31,7 @@ services:
         AUTHENTICATION: "true"
         CASSANDRA_VERSION: "${CASSANDRA_VERSION:-4.1}"
     ports:
-      - "9043:9042"
+      - "9053:9042"
     environment:
       - HEAP_NEWSIZE=1M
       - MAX_HEAP_SIZE=200M
@@ -52,7 +52,7 @@ services:
       args:
         SCYLLA_VERSION: ${SCYLLA_VERSION:-2.3.1}
     ports:
-      - "9052:9042"
+      - "9062:9042"
     command:
       - "--smp"
       - "1"
@@ -74,7 +74,7 @@ services:
         SCYLLA_VERSION: ${SCYLLA_VERSION:-2.3.1}
         AUTHENTICATION: "true"
     ports:
-      - "9053:9042"
+      - "9063:9042"
     command:
       - "--smp"
       - "1"

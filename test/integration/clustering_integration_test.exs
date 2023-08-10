@@ -12,8 +12,7 @@ defmodule ClusteringTest do
     start_options =
       Keyword.merge(start_options,
         load_balancing: :random,
-        name: TestCluster,
-        nodes: ["127.0.0.1"]
+        name: TestCluster
       )
 
     cluster = TestHelper.start_link_supervised!({Xandra.Cluster, start_options})

@@ -3,22 +3,27 @@ defmodule TelemetryTest do
 
   alias Xandra.Prepared
 
+  @port String.to_integer(System.get_env("CASSANDRA_PORT", "9052"))
+
   setup_all %{setup_conn: conn, keyspace: keyspace} do
     Xandra.execute!(conn, "CREATE TABLE #{keyspace}.names (name text PRIMARY KEY)")
     :ok
   end
 
   describe "connection" do
-    test "sends event on connection/disconnection" do
+    test "sends event on connection/disconnection", %{start_options: start_options} do
       ref = :telemetry_test.attach_event_handlers(self(), [[:xandra, :connected]])
-      start_supervised!({Xandra, [name: :telemetry_test_connection, pool_size: 1]})
+
+      start_supervised!(
+        {Xandra, [name: :telemetry_test_connection, pool_size: 1] ++ start_options}
+      )
 
       assert_receive {[:xandra, :connected], ^ref, measurements, metadata}
 
       assert measurements == %{}
       assert metadata.connection_name == :telemetry_test_connection
       assert metadata.address == ~c"127.0.0.1"
-      assert metadata.port == 9042
+      assert metadata.port == @port
     end
   end
 
@@ -37,7 +42,7 @@ defmodule TelemetryTest do
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == ~c"127.0.0.1"
-    assert metadata.port == 9042
+    assert metadata.port == @port
 
     # Successive call to prepare uses cache.
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement)
@@ -47,7 +52,7 @@ defmodule TelemetryTest do
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == ~c"127.0.0.1"
-    assert metadata.port == 9042
+    assert metadata.port == @port
 
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement, force: true)
 
@@ -56,7 +61,7 @@ defmodule TelemetryTest do
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == ~c"127.0.0.1"
-    assert metadata.port == 9042
+    assert metadata.port == @port
   end
 
   test "prepare query", %{conn: conn} do
@@ -75,7 +80,7 @@ defmodule TelemetryTest do
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == ~c"127.0.0.1"
-    assert metadata.port == 9042
+    assert metadata.port == @port
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(system_time)
 
@@ -84,7 +89,7 @@ defmodule TelemetryTest do
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == ~c"127.0.0.1"
-    assert metadata.port == 9042
+    assert metadata.port == @port
     assert metadata.extra_metadata == %{foo: :bar}
     assert metadata.reprepared == false
     assert is_integer(duration)
@@ -97,7 +102,7 @@ defmodule TelemetryTest do
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == ~c"127.0.0.1"
-    assert metadata.port == 9042
+    assert metadata.port == @port
     assert metadata.extra_metadata == %{foo: :bar}
     assert metadata.reprepared == true
     assert is_integer(duration)
@@ -121,7 +126,7 @@ defmodule TelemetryTest do
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == ~c"127.0.0.1"
-    assert metadata.port == 9042
+    assert metadata.port == @port
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(system_time)
 
@@ -130,7 +135,7 @@ defmodule TelemetryTest do
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == ~c"127.0.0.1"
-    assert metadata.port == 9042
+    assert metadata.port == @port
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(duration)
   end

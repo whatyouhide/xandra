@@ -51,7 +51,7 @@ defmodule WarningTest do
     assert %{warnings: [warning]} = measurements
     assert warning =~ "Unlogged batch covering 11 partitions"
     assert metadata.address == ~c"127.0.0.1"
-    assert metadata.port == 9042
+    assert metadata.port == 9052
     assert metadata.current_keyspace == keyspace
     assert inspect(metadata.query) == inspect(batch)
   end

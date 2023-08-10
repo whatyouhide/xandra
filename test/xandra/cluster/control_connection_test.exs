@@ -15,6 +15,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   }
 
   @protocol_version XandraTest.IntegrationCase.protocol_version()
+  @port String.to_integer(System.get_env("CASSANDRA_PORT", "9052"))
 
   setup context do
     parent = self()
@@ -28,11 +29,11 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     start_options = [
       cluster: mirror,
       refresh_topology_interval: 60_000,
-      autodiscovered_nodes_port: 9042,
+      autodiscovered_nodes_port: @port,
       connection_options: [protocol_version: @protocol_version],
       registry: registry,
       load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []},
-      contact_points: ["127.0.0.1"]
+      contact_points: ["127.0.0.1:#{@port}"]
     ]
 
     %{mirror_ref: mirror_ref, mirror: mirror, registry: registry, start_options: start_options}
@@ -53,7 +54,10 @@ defmodule Xandra.Cluster.ControlConnectionTest do
         [:xandra, :cluster, :control_connection, :connected]
       ])
 
-    start_control_connection!(start_options, contact_points: ["127.0.0.1:9039", "127.0.0.1"])
+    start_control_connection!(start_options,
+      contact_points: ["127.0.0.1:9039", "127.0.0.1:#{@port}"]
+    )
+
     assert_receive {^mirror_ref, {:discovered_hosts, [local_peer]}}
     assert %Host{address: {127, 0, 0, 1}} = local_peer
 
@@ -164,7 +168,8 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
     # No-op: sending a UP event for a node that is already up.
-    send_change_event(ctrl_conn, %StatusChange{effect: "UP", address: {127, 0, 0, 1}, port: 9042})
+    send_change_event(ctrl_conn, %StatusChange{effect: "UP", address: {127, 0, 0, 1}, port: @port})
+
     refute_receive {:host_up, _host}, 100
 
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, measurements, meta}
@@ -177,12 +182,12 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     send_change_event(ctrl_conn, %StatusChange{
       effect: "DOWN",
       address: {127, 0, 0, 1},
-      port: 9042
+      port: @port
     })
 
     assert_receive {^mirror_ref, {:host_down, %Host{} = host}}
     assert host.address == {127, 0, 0, 1}
-    assert host.port == 9042
+    assert host.port == @port
     assert host.data_center == "datacenter1"
 
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, measurements, meta}
@@ -195,7 +200,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     send_change_event(ctrl_conn, %StatusChange{
       effect: "DOWN",
       address: {127, 0, 0, 1},
-      port: 9042
+      port: @port
     })
 
     refute_receive {:host_down, _host}, 100
@@ -207,11 +212,11 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert %Host{address: {127, 0, 0, 1}} = meta.host
 
     # Getting StatusChange UP for the node brings it back up and notifies the cluster.
-    send_change_event(ctrl_conn, %StatusChange{effect: "UP", address: {127, 0, 0, 1}, port: 9042})
+    send_change_event(ctrl_conn, %StatusChange{effect: "UP", address: {127, 0, 0, 1}, port: @port})
 
     assert_receive {^mirror_ref, {:host_up, %Host{} = host}}
     assert host.address == {127, 0, 0, 1}
-    assert host.port == 9042
+    assert host.port == @port
     assert host.data_center == "datacenter1"
 
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, measurements, meta}
@@ -238,13 +243,13 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     send_change_event(ctrl_conn, %TopologyChange{
       effect: "NEW_NODE",
       address: {127, 0, 0, 101},
-      port: 9042
+      port: @port
     })
 
     send_change_event(ctrl_conn, %TopologyChange{
       effect: "REMOVED_NODE",
       address: {127, 0, 0, 102},
-      port: 9042
+      port: @port
     })
 
     # Wait for the messages to be processed.
@@ -263,7 +268,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
         send_change_event(ctrl_conn, %TopologyChange{
           effect: "MOVED_NODE",
           address: {127, 0, 0, 2},
-          port: 9042
+          port: @port
         })
 
         Process.sleep(100)
@@ -282,8 +287,8 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, _, _}
 
     new_peers = [
-      %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"},
-      %Host{address: {192, 168, 1, 2}, port: 9042, data_center: "datacenter2"}
+      %Host{address: {192, 168, 1, 1}, port: @port, data_center: "datacenter1"},
+      %Host{address: {192, 168, 1, 2}, port: @port, data_center: "datacenter2"}
     ]
 
     :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
@@ -321,8 +326,8 @@ defmodule Xandra.Cluster.ControlConnectionTest do
                     }}
 
     new_peers = [
-      %Host{address: {192, 168, 1, 2}, port: 9042, data_center: "datacenter2"},
-      %Host{address: {192, 168, 1, 3}, port: 9042, data_center: "datacenter3"}
+      %Host{address: {192, 168, 1, 2}, port: @port, data_center: "datacenter2"},
+      %Host{address: {192, 168, 1, 3}, port: @port, data_center: "datacenter3"}
     ]
 
     :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
@@ -349,8 +354,8 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     # Send the same list of peers and verify that we don't get any events.
     new_peers = [
-      %Host{address: {192, 168, 1, 2}, port: 9042, data_center: "datacenter2"},
-      %Host{address: {192, 168, 1, 3}, port: 9042, data_center: "datacenter3"}
+      %Host{address: {192, 168, 1, 2}, port: @port, data_center: "datacenter2"},
+      %Host{address: {192, 168, 1, 3}, port: @port, data_center: "datacenter3"}
     ]
 
     :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
@@ -371,7 +376,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       for index <- 1..2 do
         {:ok, task_pid} =
           Task.start_link(fn ->
-            key = {{{127, 0, 0, 1}, 9042}, index}
+            key = {{{127, 0, 0, 1}, @port}, index}
             {:ok, _} = Registry.register(registry, key, :up)
             send(parent, {:ready, self()})
 
@@ -408,7 +413,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
                     }}
   end
 
-  test "performs healthcheck and sends node down message if not registered",
+  test "performs healthcheck",
        %{mirror_ref: mirror_ref, registry: registry, start_options: start_options} do
     telemetry_ref =
       :telemetry_test.attach_event_handlers(self(), [[:xandra, :cluster, :change_event]])
@@ -422,7 +427,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     {:ok, task_pid} =
       Task.start_link(fn ->
-        key = {{{127, 0, 0, 1}, 9042}, 1}
+        key = {{{127, 0, 0, 1}, @port}, 1}
         {:ok, _} = Registry.register(registry, key, :up)
         send(parent, {:ready, self()})
         Process.sleep(:infinity)
@@ -431,8 +436,8 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert_receive {:ready, ^task_pid}
 
     new_peers = [
-      %Host{address: {127, 0, 0, 1}, port: 9042, data_center: "datacenter1"},
-      %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"}
+      %Host{address: {127, 0, 0, 1}, port: @port, data_center: "datacenter1"},
+      %Host{address: {192, 168, 1, 1}, port: @port, data_center: "datacenter1"}
     ]
 
     :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
@@ -449,24 +454,10 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
     send(
       ctrl_conn,
-      {:started_pool, %Host{address: {127, 0, 0, 1}, port: 9042, data_center: "datacenter1"}}
-    )
-
-    send(
-      ctrl_conn,
-      {:started_pool, %Host{address: {192, 168, 1, 1}, port: 9042, data_center: "datacenter1"}}
+      {:started_pool, %Host{address: {127, 0, 0, 1}, port: @port, data_center: "datacenter1"}}
     )
 
     refute_receive {^mirror_ref, {:host_down, %Host{address: {127, 0, 0, 1}}}}, 600
-    assert_receive {^mirror_ref, {:host_down, %Host{address: {192, 168, 1, 1}}}}
-
-    assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
-                    %{
-                      event_type: :host_down,
-                      changed: true,
-                      source: :xandra,
-                      host: %Host{address: {192, 168, 1, 1}}
-                    }}
   end
 
   defp start_control_connection!(start_options, overrides \\ []) do

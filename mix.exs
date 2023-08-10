@@ -76,10 +76,10 @@ defmodule Xandra.Mixfile do
     [
       "test.scylladb": [
         fn _args ->
-          System.put_env("CASSANDRA_PORT", "9052")
-          System.put_env("CASSANDRA_WITH_AUTH_PORT", "9053")
+          System.put_env("CASSANDRA_PORT", "9062")
+          System.put_env("CASSANDRA_WITH_AUTH_PORT", "9063")
         end,
-        "test --exclude cassandra_specific --exclude encryption"
+        "test --exclude cassandra_specific --exclude encryption --exclude ccm"
       ],
       "test.all": fn args ->
         Mix.Task.run(:test, args)
@@ -99,8 +99,7 @@ defmodule Xandra.Mixfile do
       # Dev and test dependencies
       {:dialyxir, "~> 1.3", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.28", only: :dev},
-      # TODO: replace with Hex version once it gets released
-      {:excoveralls, github: "whatyouhide/excoveralls", branch: "httpc", only: :test},
+      {:excoveralls, "~> 0.17", only: :test},
       {:stream_data, "~> 0.5.0", only: [:dev, :test]},
       {:nimble_lz4, "~> 0.1.3", only: [:dev, :test]}
     ]

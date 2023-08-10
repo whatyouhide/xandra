@@ -1,6 +1,6 @@
 defmodule EncryptionTest do
   start_options = [
-    nodes: ["127.0.0.1:9142"],
+    nodes: ["127.0.0.1:9152"],
     encryption: true,
     transport_options: [verify: :verify_none]
   ]

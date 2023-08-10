@@ -36,7 +36,7 @@ defmodule XandraTest.IntegrationCase do
 
   @spec default_start_options() :: keyword()
   def default_start_options do
-    port = System.get_env("CASSANDRA_PORT", "9042")
+    port = System.get_env("CASSANDRA_PORT", "9052")
 
     options = [
       show_sensitive_data_on_connection_error: true,
