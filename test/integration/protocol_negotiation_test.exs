@@ -10,7 +10,7 @@ defmodule ProtocolNegotiationTest do
   #     downgrade to a lower version of the protocol
   #
   test "beta protocol v5" do
-    conn = start_supervised!({Xandra, show_sensitive_data_on_connection_error: true})
+    conn = start_supervised!({Xandra, XandraTest.IntegrationCase.default_start_options()})
     assert %Xandra.Page{} = Xandra.execute!(conn, "SELECT * FROM system.local")
   end
 end

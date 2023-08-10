@@ -23,6 +23,10 @@ defmodule Xandra.Cluster.CCMTest do
     ccm("start")
     ccm("status")
 
+    on_exit(fn ->
+      ccm("stop")
+    end)
+
     Process.register(self(), :this_test_process)
 
     cluster =
