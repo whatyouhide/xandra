@@ -11,22 +11,21 @@ defmodule Xandra.Cluster.Pool do
 
   alias Xandra.Cluster.{Host, LoadBalancingPolicy}
 
+  @genserver_opts [:debug, :hibernate_after, :spawn_opt]
+
   ## Public API
 
   @spec start_link(keyword(), keyword()) :: GenServer.on_start()
   def start_link(cluster_opts, pool_opts) do
     {sync_connect_timeout, cluster_opts} = Keyword.pop!(cluster_opts, :sync_connect)
 
+    # Split out GenServer-specific options from the cluster options.
+    {genserver_opts, cluster_opts} = Keyword.split(cluster_opts, @genserver_opts)
+    genserver_opts = Keyword.merge(genserver_opts, Keyword.take(cluster_opts, [:name]))
+
     alias_or_nil = if sync_connect_timeout, do: alias()
 
-    result =
-      GenServer.start_link(
-        __MODULE__,
-        {cluster_opts, pool_opts, alias_or_nil},
-        Keyword.take(cluster_opts, [:name])
-      )
-
-    case result do
+    case GenServer.start_link(__MODULE__, {cluster_opts, pool_opts, alias_or_nil}, genserver_opts) do
       {:ok, pid} when sync_connect_timeout == false ->
         {:ok, pid}
 
@@ -137,7 +136,7 @@ defmodule Xandra.Cluster.Pool do
       target_pools: Keyword.fetch!(cluster_opts, :target_pools),
       sync_connect_alias: sync_connect_alias_or_nil,
       registry: registry_name,
-      name: cluster_opts[:name],
+      name: Keyword.get(cluster_opts, :name),
       pool_supervisor: pool_sup
     }
 
@@ -150,7 +149,7 @@ defmodule Xandra.Cluster.Pool do
         load_balancing: {lb_mod, lb_opts},
         refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval),
         registry: registry_name,
-        name: Keyword.get(cluster_opts, :name)
+        cluster_name: Keyword.get(cluster_opts, :name)
       )
 
     state = %__MODULE__{state | control_connection: control_conn}

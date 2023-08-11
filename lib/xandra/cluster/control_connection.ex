@@ -26,7 +26,7 @@ defmodule Xandra.Cluster.ControlConnection do
     load_balancing: [type: :mod_arg, required: true],
     refresh_topology_interval: [type: :timeout, required: true],
     registry: [type: :atom, required: true],
-    name: [type: :any]
+    cluster_name: [type: :any]
   ]
 
   defstruct [
@@ -56,8 +56,8 @@ defmodule Xandra.Cluster.ControlConnection do
     # The registry to use to register connections.
     :registry,
 
-    # The name of the cluster (as given through the :name option).
-    :name,
+    # The name of the cluster (as given through the :cluster_name option).
+    :cluster_name,
 
     # A map of {ip, port} => %{host: %Host{}, status: atom}.
     # A host can be:
@@ -110,7 +110,7 @@ defmodule Xandra.Cluster.ControlConnection do
       transport: transport,
       transport_options: Keyword.merge(transport_options, @forced_transport_options),
       registry: Keyword.fetch!(options, :registry),
-      name: Keyword.get(options, :name)
+      cluster_name: Keyword.get(options, :cluster_name)
     }
 
     :gen_statem.start_link(__MODULE__, data, [])
@@ -380,7 +380,7 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp refresh_topology(%__MODULE__{peers: old_peers} = data, new_peers) do
-    meta = %{cluster_name: data.name, cluster_pid: data.cluster}
+    meta = %{cluster_name: data.cluster_name, cluster_pid: data.cluster}
     :telemetry.execute([:xandra, :cluster, :discovered_peers], %{peers: new_peers}, meta)
 
     # A map of {ip, port} => %Host{}.
@@ -620,7 +620,7 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp execute_telemetry(%__MODULE__{} = data, event_postfix, measurements, extra_meta) do
-    meta = Map.merge(%{cluster_name: data.name, cluster_pid: data.cluster}, extra_meta)
+    meta = Map.merge(%{cluster_name: data.cluster_name, cluster_pid: data.cluster}, extra_meta)
     :telemetry.execute([:xandra, :cluster] ++ event_postfix, measurements, meta)
   end
 

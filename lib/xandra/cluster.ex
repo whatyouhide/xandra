@@ -286,6 +286,24 @@ defmodule Xandra.Cluster do
       this function returns `{:error, :sync_connect_timeout}`. Available since v0.16.0.
       """
     ],
+    debug: [
+      type: :any,
+      doc: """
+      Same as the `:debug` option in `GenServer.start_link/3`. Available since v0.18.0.
+      """
+    ],
+    spawn_opt: [
+      type: :any,
+      doc: """
+      Same as the `:spawn_opt` option in `GenServer.start_link/3`. Available since v0.18.0.
+      """
+    ],
+    hibernate_after: [
+      type: :any,
+      doc: """
+      Same as the `:hibernate_after` option in `GenServer.start_link/3`. Available since v0.18.0.
+      """
+    ],
 
     # Internal for testing, not exposed.
     xandra_module: [type: :atom, default: Xandra, doc: false],
