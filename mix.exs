@@ -25,7 +25,7 @@ defmodule Xandra.Mixfile do
       dialyzer: [
         flags: [:no_contracts, :no_improper_lists],
         list_unused_filters: true,
-        plt_add_apps: [:ssl, :crypto, :mix, :ex_unit, :decimal],
+        plt_add_apps: [:ssl, :crypto, :mix, :ex_unit, :erts, :kernel, :stdlib],
         plt_local_path: "priv/plts",
         plt_core_path: "priv/plts"
       ],
@@ -33,7 +33,6 @@ defmodule Xandra.Mixfile do
       # Testing
       preferred_cli_env: [
         "test.scylladb": :test,
-        "test.clustering": :test,
         "test.native_protocols": :test,
         "coveralls.html": :test
       ],
@@ -84,8 +83,7 @@ defmodule Xandra.Mixfile do
       "test.all": fn args ->
         Mix.Task.run(:test, args)
         Mix.Task.run(:"test.scylladb", args)
-      end,
-      "test.clustering": "run test_clustering/run.exs"
+      end
     ]
   end
 
@@ -100,6 +98,7 @@ defmodule Xandra.Mixfile do
       {:dialyxir, "~> 1.3", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.28", only: :dev},
       {:excoveralls, "~> 0.17", only: :test},
+      {:mox, "~> 1.0", only: :test},
       {:stream_data, "~> 0.5.0", only: [:dev, :test]},
       {:nimble_lz4, "~> 0.1.3", only: [:dev, :test]}
     ]

@@ -185,8 +185,8 @@ defmodule Xandra.Cluster do
 
   """
 
-  alias Xandra.{Batch, ConnectionError, Prepared, RetryStrategy}
-  alias Xandra.Cluster.{ControlConnection, Pool}
+  alias Xandra.{Batch, ConnectionError, OptionsValidators, Prepared, RetryStrategy}
+  alias Xandra.Cluster.{ControlConnection, Host, Pool}
 
   @typedoc """
   A Xandra cluster.
@@ -268,7 +268,7 @@ defmodule Xandra.Cluster do
       """
     ],
     name: [
-      type: :any,
+      type: {:custom, OptionsValidators, :validate_genstatem_name, []},
       doc: """
       The name to register this cluster under. Follows the name registration rules of `GenServer`.
       """
@@ -308,8 +308,7 @@ defmodule Xandra.Cluster do
     # Internal for testing, not exposed.
     xandra_module: [type: :atom, default: Xandra, doc: false],
     control_connection_module: [type: :atom, default: ControlConnection, doc: false],
-    test_discovered_hosts: [type: :any, default: [], doc: false],
-    registry_listeners: [type: :any, default: [], doc: false]
+    test_discovered_hosts: [type: :any, default: [], doc: false]
   ]
 
   @start_link_opts_schema_keys Keyword.keys(@start_link_opts_schema)
@@ -544,6 +543,15 @@ defmodule Xandra.Cluster do
   def stop(cluster, reason \\ :normal, timeout \\ :infinity)
       when timeout == :infinity or (is_integer(timeout) and timeout >= 0) do
     Pool.stop(cluster, reason, timeout)
+  end
+
+  @doc """
+  Returns a list of hosts that the cluster has outgoing connections to.
+  """
+  @doc since: "0.18.0"
+  @spec connected_hosts(cluster) :: [Host.t()]
+  def connected_hosts(cluster) do
+    Pool.connected_hosts(cluster)
   end
 
   defp with_conn_and_retrying(cluster, options, fun) do

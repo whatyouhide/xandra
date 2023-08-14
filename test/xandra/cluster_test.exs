@@ -1,9 +1,11 @@
 defmodule Xandra.ClusterTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias Xandra.TestHelper
   alias Xandra.Cluster.Host
-  alias Xandra.Cluster.LoadBalancingPolicy
+
+  @protocol_version XandraTest.IntegrationCase.protocol_version()
+  @port String.to_integer(System.get_env("CASSANDRA_PORT", "9052"))
 
   defmodule PoolMock do
     use GenServer
@@ -95,6 +97,14 @@ defmodule Xandra.ClusterTest do
         Xandra.Cluster.start_link(nodes: ["example.com:9042"], sync_connect: :foo)
       end
     end
+
+    test "validates the :name option" do
+      message = ~r/invalid value for :name option/
+
+      assert_raise NimbleOptions.ValidationError, message, fn ->
+        Xandra.Cluster.start_link(nodes: ["example.com:9042"], name: "something something")
+      end
+    end
   end
 
   describe "child_spec/1" do
@@ -109,257 +119,134 @@ defmodule Xandra.ClusterTest do
     end
   end
 
-  describe "in the starting phase" do
-    test "starts a single control connection with the right contact points", %{test_ref: test_ref} do
-      opts = [
-        xandra_module: PoolMock,
-        control_connection_module: ControlConnectionMock,
-        nodes: ["node1.example.com", "node2.example.com"]
-      ]
-
-      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
-
-      assert_receive {^test_ref, ControlConnectionMock, :init_called, args}
-      assert args.contact_points == [{~c"node1.example.com", 9042}, {~c"node2.example.com", 9042}]
-      assert args.cluster == cluster
-    end
-
-    test "starts one pool per node up to :target_pools", %{test_ref: test_ref} do
-      opts = [
-        xandra_module: PoolMock,
-        control_connection_module: ControlConnectionMock,
-        nodes: ["node1.example.com"],
-        target_pools: 2,
-        load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []}
-      ]
-
-      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
-      assert_control_connection_started(test_ref)
-
-      discovered_peers(cluster, [
-        host1 = %Host{address: {199, 0, 0, 1}, port: 9042},
-        host2 = %Host{address: {199, 0, 0, 2}, port: 9042},
-        %Host{address: {199, 0, 0, 3}, port: 9042}
-      ])
-
-      # Assert that the cluster starts a pool for each discovered peer up to :target_pools.
-      assert_pool_started(test_ref, host1)
-      assert_pool_started(test_ref, host2)
-      refute_other_pools_started(test_ref)
-    end
-
-    # TODO: remove this conditional once we depend on Elixir 1.15+, which depends on OTP 24+.
-    if System.otp_release() >= "24" do
-      test "waits for any node to be up if :sync_connect is a timeout", %{test_ref: test_ref} do
+  # TODO: remove this conditional once we depend on Elixir 1.15+, which depends on OTP 24+.
+  if System.otp_release() >= "24" do
+    describe "connected_hosts/1" do
+      test "returns a list of connected %Host{} structs" do
         opts = [
-          xandra_module: PoolMock,
-          control_connection_module: ControlConnectionMock,
-          nodes: ["node1.example.com"],
-          target_pools: 1,
-          load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []},
-          sync_connect: 1000,
-          test_discovered_hosts: [host1 = %Host{address: {127, 0, 0, 1}, port: 9042}]
+          nodes: ["127.0.0.1:#{@port}"],
+          sync_connect: 1000
         ]
 
-        TestHelper.start_link_supervised!({Xandra.Cluster, opts})
-        assert_control_connection_started(test_ref)
-        assert_pool_started(test_ref, host1)
-      end
+        opts =
+          if @protocol_version do
+            Keyword.put(opts, :protocol_version, @protocol_version)
+          else
+            opts
+          end
 
-      test "returns {:error, :sync_connect_timeout} if no nodes connect within the timeout" do
+        cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+
+        assert [%Host{} = host] = Xandra.Cluster.connected_hosts(cluster)
+
+        assert host.address == {127, 0, 0, 1}
+        assert host.port == @port
+        assert host.data_center == "datacenter1"
+        assert host.rack == "rack1"
+        assert is_binary(host.release_version)
+        assert is_binary(host.host_id)
+        assert is_binary(host.schema_version)
+        assert is_struct(host.tokens, MapSet)
+      end
+    end
+
+    describe "execute/3" do
+      test "executes a query" do
         opts = [
-          xandra_module: PoolMock,
-          control_connection_module: ControlConnectionMock,
-          nodes: ["node1.example.com"],
-          target_pools: 1,
-          load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []},
-          sync_connect: 0
+          nodes: ["127.0.0.1:#{@port}"],
+          sync_connect: 1000
         ]
 
-        assert {:error, {:sync_connect_timeout, _}} = start_supervised({Xandra.Cluster, opts})
+        opts =
+          if @protocol_version do
+            Keyword.put(opts, :protocol_version, @protocol_version)
+          else
+            opts
+          end
+
+        cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+
+        assert {:ok, %Xandra.Page{}} =
+                 Xandra.Cluster.execute(cluster, "SELECT * FROM system.local")
+
+        assert {:ok, %Xandra.Page{}} =
+                 Xandra.Cluster.execute(
+                   cluster,
+                   "SELECT * FROM system.local WHERE key = ?",
+                   _params = [{"varchar", "local"}],
+                   _options = []
+                 )
+      end
+
+      test "returns the result directly for the bang! version" do
+        opts = [
+          nodes: ["127.0.0.1:#{@port}"],
+          sync_connect: 1000
+        ]
+
+        opts =
+          if @protocol_version do
+            Keyword.put(opts, :protocol_version, @protocol_version)
+          else
+            opts
+          end
+
+        cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+
+        assert %Xandra.Page{} = Xandra.Cluster.execute!(cluster, "SELECT * FROM system.local")
+
+        assert %Xandra.Page{} =
+                 Xandra.Cluster.execute!(
+                   cluster,
+                   "SELECT * FROM system.local WHERE key = ?",
+                   _params = [{"varchar", "local"}],
+                   _options = []
+                 )
       end
     end
-  end
 
-  test "handles status change events", %{test_ref: test_ref} do
-    host1 = %Host{address: {199, 0, 0, 1}, port: 9042}
-    host2 = %Host{address: {199, 0, 0, 2}, port: 9042}
-    peername1 = Host.to_peername(host1)
-    peername2 = Host.to_peername(host2)
+    describe "prepare/3" do
+      test "prepares a query" do
+        opts = [
+          nodes: ["127.0.0.1:#{@port}"],
+          sync_connect: 1000
+        ]
 
-    opts = [
-      xandra_module: PoolMock,
-      control_connection_module: ControlConnectionMock,
-      nodes: ["node1"],
-      target_pools: 1,
-      load_balancing: {LoadBalancingPolicy.DCAwareRoundRobin, []}
-    ]
+        opts =
+          if @protocol_version do
+            Keyword.put(opts, :protocol_version, @protocol_version)
+          else
+            opts
+          end
 
-    cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+        cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
-    assert_control_connection_started(test_ref)
+        assert {:ok, %Xandra.Prepared{} = prepared} =
+                 Xandra.Cluster.prepare(cluster, "SELECT * FROM system.local")
 
-    discovered_peers(cluster, [host1, host2])
+        assert {:ok, _page} = Xandra.Cluster.execute(cluster, prepared)
+      end
 
-    assert_pool_started(test_ref, host1)
-    refute_other_pools_started(test_ref)
+      test "returns the result directly for the bang! version" do
+        opts = [
+          nodes: ["127.0.0.1:#{@port}"],
+          sync_connect: 1000
+        ]
 
-    assert %{pool_supervisor: pool_sup, pools: %{^peername1 => pool1}} = :sys.get_state(cluster)
+        opts =
+          if @protocol_version do
+            Keyword.put(opts, :protocol_version, @protocol_version)
+          else
+            opts
+          end
 
-    assert [{^peername1, ^pool1, :worker, _}] = Supervisor.which_children(pool_sup)
-    assert Process.alive?(pool1)
+        cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
-    pool_monitor_ref = Process.monitor(pool1)
+        assert %Xandra.Prepared{} =
+                 prepared = Xandra.Cluster.prepare!(cluster, "SELECT * FROM system.local")
 
-    # StatusChange DOWN:
-    send(cluster, {:host_down, host1})
-    assert_receive {:DOWN, ^pool_monitor_ref, _, _, _}
-
-    TestHelper.wait_for_passing(100, fn ->
-      assert {_, :undefined, _, _} =
-               List.keyfind(Supervisor.which_children(pool_sup), peername1, 0)
-    end)
-
-    # The cluster starts a pool to the other node.
-    assert_pool_started(test_ref, host2)
-
-    assert %{pools: %{^peername2 => pool2}} = :sys.get_state(cluster)
-
-    # StatusChange UP, which doesn't change which host goes up.
-    send(cluster, {:host_up, host1})
-
-    TestHelper.wait_for_passing(100, fn ->
-      assert :sys.get_state(cluster).pools == %{peername2 => pool2}
-    end)
-  end
-
-  test "handles topology change events", %{test_ref: test_ref} do
-    host = %Host{address: {199, 0, 0, 1}, port: 9042}
-    new_host = %Host{address: {199, 0, 0, 2}, port: 9042}
-    ignored_host = %Host{address: {199, 0, 0, 3}, port: 9042}
-
-    opts = [
-      xandra_module: PoolMock,
-      control_connection_module: ControlConnectionMock,
-      nodes: ["node1"],
-      target_pools: 2,
-      load_balancing: {LoadBalancingPolicy.Random, []}
-    ]
-
-    cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
-
-    assert_control_connection_started(test_ref)
-
-    discovered_peers(cluster, [host])
-    assert_pool_started(test_ref, host)
-
-    # TopologyChange NEW_NODE starts a new pool to the node.
-    send(cluster, {:host_added, new_host})
-    assert_pool_started(test_ref, new_host)
-
-    # TopologyChange NEW_NODE doesn't do anything, since we reached :target_pools.
-    send(cluster, {:host_added, ignored_host})
-    refute_other_pools_started(test_ref)
-    send(cluster, {:host_removed, ignored_host})
-
-    # TopologyChange REMOVED_NODE (removing the original node) stops the pool.
-    assert {:ok, pool} = Map.fetch(:sys.get_state(cluster).pools, Host.to_peername(host))
-    pool_monitor_ref = Process.monitor(pool)
-    send(cluster, {:host_removed, host})
-    assert_receive {:DOWN, ^pool_monitor_ref, _, _, _}
-
-    TestHelper.wait_for_passing(500, fn ->
-      assert [_] = Supervisor.which_children(:sys.get_state(cluster).pool_supervisor)
-    end)
-  end
-
-  test "handles the same peers being re-reported", %{test_ref: test_ref} do
-    host1 = %Host{address: {192, 0, 0, 1}, port: 9042}
-    host2 = %Host{address: {192, 0, 0, 2}, port: 9042}
-
-    opts = [
-      xandra_module: PoolMock,
-      control_connection_module: ControlConnectionMock,
-      nodes: [Host.format_address(host1)]
-    ]
-
-    # Start the cluster.
-    cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
-
-    # First, the control connection is started and both pools as well.
-    assert_control_connection_started(test_ref)
-    discovered_peers(cluster, [host1])
-    assert_pool_started(test_ref, host1)
-    assert Map.has_key?(:sys.get_state(cluster).pools, Host.to_peername(host1))
-
-    # Now simulate the control connection re-reporting different peers for some reason.
-    discovered_peers(cluster, [host1, host2])
-
-    assert_pool_started(test_ref, host2)
-    refute_other_pools_started(test_ref)
-
-    assert Map.has_key?(:sys.get_state(cluster).pools, Host.to_peername(host2))
-  end
-
-  describe "checkout call" do
-    test "with no pools" do
-      opts = [
-        xandra_module: PoolMock,
-        control_connection_module: ControlConnectionMock,
-        nodes: ["node1"]
-      ]
-
-      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
-
-      assert GenServer.call(cluster, :checkout) == {:error, :empty}
-    end
-
-    test "with the Random load-balancing policy", %{test_ref: test_ref} do
-      opts = [
-        xandra_module: PoolMock,
-        control_connection_module: ControlConnectionMock,
-        nodes: ["node1", "node2"],
-        load_balancing: {LoadBalancingPolicy.Random, []}
-      ]
-
-      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
-
-      assert_control_connection_started(test_ref)
-
-      discovered_peers(cluster, [
-        host1 = %Host{address: {192, 0, 0, 1}, port: 9042},
-        host2 = %Host{address: {192, 0, 0, 2}, port: 9042}
-      ])
-
-      assert_pool_started(test_ref, host1)
-      assert_pool_started(test_ref, host2)
-
-      lbs = :sys.get_state(cluster).load_balancing_state
-      assert MapSet.new(lbs) == MapSet.new([{host1, :up}, {host2, :up}])
-
-      report_peers_connected(cluster, [host1, host2])
-
-      lbs = :sys.get_state(cluster).load_balancing_state
-      assert MapSet.new(lbs) == MapSet.new([{host1, :connected}, {host2, :connected}])
-
-      pool_pids =
-        TestHelper.wait_for_passing(500, fn ->
-          pools = :sys.get_state(cluster).pools
-          assert map_size(pools) == 2
-          for {_address, pid} <- pools, do: pid
-        end)
-
-      # If we check out enough times with load_balancing: :random, statistically it
-      # means we have to have a non-sorted list of pids.
-      random_pids =
-        for _ <- 1..50 do
-          assert {:ok, pid} = GenServer.call(cluster, :checkout)
-          assert pid in pool_pids
-          pid
-        end
-
-      assert random_pids != Enum.sort(random_pids, :asc) and
-               random_pids != Enum.sort(random_pids, :desc)
+        assert {:ok, _page} = Xandra.Cluster.execute(cluster, prepared)
+      end
     end
   end
 
@@ -379,24 +266,7 @@ defmodule Xandra.ClusterTest do
     end
   end
 
-  defp assert_pool_started(test_ref, %Host{} = host) do
-    node = Host.format_address(host)
-    assert_receive {^test_ref, PoolMock, :init_called, %{nodes: [^node]}}
-  end
-
-  defp refute_other_pools_started(test_ref) do
-    refute_receive {^test_ref, PoolMock, :init_called, _args}, 50
-  end
-
   defp assert_control_connection_started(test_ref) do
     assert_receive {^test_ref, ControlConnectionMock, :init_called, _start_args}
-  end
-
-  defp discovered_peers(cluster, hosts) do
-    Enum.each(hosts, &send(cluster, {:host_added, &1}))
-  end
-
-  defp report_peers_connected(cluster, hosts) do
-    Enum.each(hosts, &send(cluster, {:host_connected, &1}))
   end
 end

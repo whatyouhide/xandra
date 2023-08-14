@@ -276,13 +276,7 @@ defmodule Xandra.Telemetry do
     logger_meta =
       case Map.fetch(metadata, :host) do
         {:ok, %Host{address: address, port: port}} ->
-          address =
-            case address do
-              ip when is_tuple(ip) -> ip |> :inet.ntoa() |> to_string()
-              str when is_list(str) -> to_string(str)
-            end
-
-          [xandra_address: address, xandra_port: port]
+          [xandra_address: address_to_string(address), xandra_port: port]
 
         :error ->
           []
@@ -314,7 +308,7 @@ defmodule Xandra.Telemetry do
 
   def handle_event([:xandra | event], measurements, metadata, :no_config) do
     %{address: address, port: port} = metadata
-    logger_meta = [xandra_address: address, xandra_port: port]
+    logger_meta = [xandra_address: address_to_string(address), xandra_port: port]
 
     case event do
       [:connected] ->
@@ -368,15 +362,21 @@ defmodule Xandra.Telemetry do
     Logger.debug(
       "Could not use protocol #{inspect(metadata.failed_version)}, " <>
         "downgrading to #{inspect(metadata.new_version)}",
-      xandra_address: metadata.address,
+      xandra_address: address_to_string(metadata.address),
       xandra_port: metadata.port
     )
   end
 
   def handle_debug_event([:xandra, :connected], _measurements, metadata, :no_config) do
-    logger_meta = [xandra_address: metadata.address, xandra_port: metadata.port]
+    logger_meta = [
+      xandra_address: address_to_string(metadata.address),
+      xandra_port: metadata.port
+    ]
 
     Logger.debug("Connected using protocol #{inspect(metadata.protocol_module)}", logger_meta)
     Logger.debug("Supported options: #{inspect(metadata.supported_options)}", logger_meta)
   end
+
+  defp address_to_string(ip) when is_tuple(ip), do: ip |> :inet.ntoa() |> to_string()
+  defp address_to_string(other), do: to_string(other)
 end

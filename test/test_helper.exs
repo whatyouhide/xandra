@@ -26,4 +26,6 @@ excluded =
     excluded ++ [:ccm]
   end
 
+Mox.defmock(LBPMock, for: Xandra.Cluster.LoadBalancingPolicy)
+
 ExUnit.start(exclude: excluded, assert_receive_timeout: 1_000)
