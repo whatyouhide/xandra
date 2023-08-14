@@ -182,20 +182,23 @@ defmodule Xandra.Cluster.Pool2 do
     end
   end
 
-  # def handle_call({:call, _from}, :checkout, @state, %__MODULE__{} = data) do
-  #   {query_plan, state} =
-  #     get_and_update_in(state.load_balancing_state, fn lb_state ->
-  #       state.load_balancing_module.query_plan(lb_state)
-  #     end)
+  def handle_event({:call, from}, :checkout, @state, %__MODULE__{} = data) do
+    {query_plan, data} =
+      get_and_update_in(data.load_balancing_state, fn lb_state ->
+        data.load_balancing_module.query_plan(lb_state)
+      end)
 
-  #   # Find the first host in the plan for which we have a pool.
-  #   reply =
-  #     query_plan
-  #     |> Stream.map(fn %Host{} = host -> Map.fetch(state.pools, Host.to_peername(host)) end)
-  #     |> Enum.find(_default = {:error, :empty}, &match?({:ok, _}, &1))
+    # Find the first host in the plan for which we have a pool.
+    reply =
+      query_plan
+      |> Stream.map(fn %Host{} = host -> Map.fetch(data.peers, Host.to_peername(host)) end)
+      |> Enum.find_value(_default = {:error, :empty}, fn
+        {:ok, %{pool_pid: pid}} when is_pid(pid) -> {:ok, pid}
+        _other -> nil
+      end)
 
-  #   {:reply, reply, state}
-  # end
+    {:keep_state, data, {:reply, from, reply}}
+  end
 
   def handle_event(:into, {:host_up, %Host{} = host}, @state, %__MODULE__{} = data) do
     data = update_in(data.load_balancing_state, &data.load_balancing_module.host_up(&1, host))
@@ -209,23 +212,6 @@ defmodule Xandra.Cluster.Pool2 do
     data = maybe_start_pools(data)
     {:keep_state, data}
   end
-
-  # def handle_event({:host_connected, %Host{} = host}, %__MODULE__{} = state) do
-  #   state =
-  #     update_in(state.load_balancing_state, &state.load_balancing_module.host_connected(&1, host))
-
-  #   state = maybe_start_pools(state)
-
-  #   state =
-  #     if alias = state.sync_connect_alias do
-  #       send(alias, :connected)
-  #       %__MODULE__{state | sync_connect_alias: nil}
-  #     else
-  #       state
-  #     end
-
-  #   {:noreply, state}
-  # end
 
   def handle_event(:info, {:host_down, %Host{} = host}, @state, %__MODULE__{} = data) do
     data =
@@ -273,6 +259,11 @@ defmodule Xandra.Cluster.Pool2 do
       )
       when is_peername(peername) do
     data = put_in(data.peers[peername].status, :connected)
+
+    host = data.peers[peername].host
+
+    data =
+      update_in(data.load_balancing_state, &data.load_balancing_module.host_connected(&1, host))
 
     data =
       if alias = data.sync_connect_alias do
