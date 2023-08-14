@@ -1,11 +1,11 @@
-defmodule Xandra.Cluster.Pool2Test do
+defmodule Xandra.Cluster.PoolTest do
   use ExUnit.Case, async: false
 
   import Mox
 
-  alias Xandra.Cluster.ControlConnection2
+  alias Xandra.Cluster.ControlConnection
   alias Xandra.Cluster.Host
-  alias Xandra.Cluster.Pool2
+  alias Xandra.Cluster.Pool
 
   @protocol_version XandraTest.IntegrationCase.protocol_version()
   @port String.to_integer(System.get_env("CASSANDRA_PORT", "9052"))
@@ -15,7 +15,7 @@ defmodule Xandra.Cluster.Pool2Test do
 
   setup do
     base_start_options = [
-      control_connection_module: ControlConnection2,
+      control_connection_module: ControlConnection,
       nodes: [{~c"127.0.0.1", @port}],
       sync_connect: false,
       registry_listeners: [],
@@ -200,7 +200,7 @@ defmodule Xandra.Cluster.Pool2Test do
         start_options = Keyword.merge(start_options, sync_connect: 1000)
         assert {:ok, pid} = start_supervised(spec(start_options, pool_options))
 
-        assert {:ok, pool_pid} = Pool2.checkout(pid)
+        assert {:ok, pool_pid} = Pool.checkout(pid)
         assert is_pid(pool_pid)
       end
     end
@@ -208,8 +208,8 @@ defmodule Xandra.Cluster.Pool2Test do
 
   defp spec(cluster_opts, pool_opts) do
     %{
-      id: Pool2,
-      start: {Pool2, :start_link, [cluster_opts, pool_opts]}
+      id: Pool,
+      start: {Pool, :start_link, [cluster_opts, pool_opts]}
     }
   end
 
