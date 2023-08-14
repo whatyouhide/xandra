@@ -181,13 +181,13 @@ defmodule Xandra.Cluster.PoolTest do
       assert_receive {[:xandra, :failed_to_connect], ^telemetry_ref, %{},
                       %{address: ~c"127.0.0.1", port: 8092}}
 
-      cluster_state = get_state(pid)
-      assert %{status: :down} = cluster_state.peers[{{127, 0, 0, 1}, 8092}]
-
       assert %{
                cluster_pid: ^pid,
                host: %Host{address: {127, 0, 0, 1}, port: 8092}
              } = assert_telemetry(telemetry_ref, [:pool, :stopped])
+
+      cluster_state = get_state(pid)
+      assert %{status: :down} = cluster_state.peers[{{127, 0, 0, 1}, 8092}]
     end
   end
 
