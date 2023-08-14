@@ -127,15 +127,8 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   @impl true
-  def handle_continue(continue, state)
-
   def handle_continue({:disconnected, reason}, %__MODULE__{} = state) do
     execute_telemetry(state, [:control_connection, :disconnected], %{}, %{reason: reason})
-    {:stop, {:shutdown, reason}, state}
-  end
-
-  def handle_continue({:failed_to_connect, reason}, %__MODULE__{} = state) do
-    execute_telemetry(state, [:control_connection, :failed_to_connect], %{}, %{reason: reason})
     {:stop, {:shutdown, reason}, state}
   end
 
@@ -187,7 +180,6 @@ defmodule Xandra.Cluster.ControlConnection do
     {:noreply, state}
   end
 
-  # Used only for testing.
   @impl true
   def handle_cast({:refresh_topology, peers}, %__MODULE__{} = state) do
     {:keep_state, refresh_topology(state, peers)}

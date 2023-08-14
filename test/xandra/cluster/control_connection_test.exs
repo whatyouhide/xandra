@@ -192,11 +192,22 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       %Host{address: {192, 168, 1, 2}, port: @port, data_center: "datacenter2"}
     ]
 
-    :gen_statem.cast(ctrl_conn, {:refresh_topology, new_peers})
+    GenServer.cast(ctrl_conn, {:refresh_topology, new_peers})
 
     assert_receive {^mirror_ref,
                     {:discovered_hosts,
                      [%Host{address: {192, 168, 1, 1}}, %Host{address: {192, 168, 1, 2}}]}}
+  end
+
+  test "triggers a topology refresh with the :refresh_topology message",
+       %{mirror_ref: mirror_ref, start_options: start_options} do
+    ctrl_conn = start_control_connection!(start_options)
+
+    assert_receive {^mirror_ref, {:discovered_hosts, _peers}}
+
+    send(ctrl_conn, :refresh_topology)
+
+    assert_receive {^mirror_ref, {:discovered_hosts, _peers}}
   end
 
   defp start_control_connection!(start_options, overrides \\ []) do

@@ -194,7 +194,6 @@ defmodule Xandra.Cluster.PoolTest do
   describe "checkout" do
     # TODO: remove this conditional once we depend on Elixir 1.15+, which depends on OTP 24+.
     if System.otp_release() >= "24" do
-      @tag :focus
       test "returns the right pool", %{start_options: start_options, pool_options: pool_options} do
         start_options = Keyword.merge(start_options, sync_connect: 1000)
         assert {:ok, pid} = start_supervised(spec(start_options, pool_options))
@@ -202,6 +201,16 @@ defmodule Xandra.Cluster.PoolTest do
         assert {:ok, pool_pid} = Pool.checkout(pid)
         assert is_pid(pool_pid)
       end
+    end
+
+    test "returns {:error, :empty} when there are no pools",
+         %{start_options: start_options, pool_options: pool_options} do
+      start_options =
+        Keyword.merge(start_options, nodes: [{~c"127.0.0.1", 8092}])
+
+      assert {:ok, pid} = start_supervised(spec(start_options, pool_options))
+
+      assert {:error, :empty} = Pool.checkout(pid)
     end
   end
 

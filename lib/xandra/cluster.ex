@@ -185,7 +185,7 @@ defmodule Xandra.Cluster do
 
   """
 
-  alias Xandra.{Batch, ConnectionError, Prepared, RetryStrategy}
+  alias Xandra.{Batch, ConnectionError, OptionsValidators, Prepared, RetryStrategy}
   alias Xandra.Cluster.{ControlConnection, Host, Pool}
 
   @typedoc """
@@ -268,7 +268,7 @@ defmodule Xandra.Cluster do
       """
     ],
     name: [
-      type: :any,
+      type: {:custom, OptionsValidators, :validate_genstatem_name, []},
       doc: """
       The name to register this cluster under. Follows the name registration rules of `GenServer`.
       """

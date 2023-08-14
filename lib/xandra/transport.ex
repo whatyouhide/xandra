@@ -5,7 +5,7 @@ defmodule Xandra.Transport do
   # the transport (TCP or SSL).
 
   @type options() :: [{atom(), term()} | atom()]
-  @type error_reason() :: :inet.posix() | :ssl.reason()
+  @type error_reason() :: :inet.posix() | term()
 
   @type t() :: %__MODULE__{
           module: :gen_tcp | :ssl,

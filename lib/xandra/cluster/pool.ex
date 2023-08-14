@@ -28,34 +28,13 @@ defmodule Xandra.Cluster.Pool do
 
     start_arg = {cluster_opts, pool_opts, alias_or_nil}
 
-    result =
-      case Keyword.fetch(cluster_opts, :name) do
-        :error ->
-          :gen_statem.start_link(__MODULE__, start_arg, genstatem_opts)
-
-        {:ok, atom} when is_atom(atom) ->
-          :gen_statem.start_link({:local, atom}, __MODULE__, start_arg, genstatem_opts)
-
-        {:ok, {:global, _term} = tuple} ->
-          :gen_statem.start_link(tuple, __MODULE__, start_arg, genstatem_opts)
-
-        {:ok, {:via, via_module, _term} = tuple} when is_atom(via_module) ->
-          :gen_statem.start_link(tuple, __MODULE__, start_arg, genstatem_opts)
-
-        {:ok, other} ->
-          raise ArgumentError, """
-          expected :name option to be one of the following:
-
-            * nil
-            * atom
-            * {:global, term}
-            * {:via, module, term}
-
-          Got: #{inspect(other)}
-          """
-      end
-
-    case result do
+    cluster_opts
+    |> Keyword.fetch(:name)
+    |> case do
+      :error -> :gen_statem.start_link(__MODULE__, start_arg, genstatem_opts)
+      {:ok, name} -> :gen_statem.start_link(name, __MODULE__, start_arg, genstatem_opts)
+    end
+    |> case do
       {:ok, pid} when sync_connect_timeout == false ->
         {:ok, pid}
 
