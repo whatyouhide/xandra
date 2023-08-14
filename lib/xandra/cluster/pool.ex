@@ -205,7 +205,7 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state_and_data, {:reply, from, connected_hosts}}
   end
 
-  def handle_event(:into, {:host_up, %Host{} = host}, @state, %__MODULE__{} = data) do
+  def handle_event(:info, {:host_up, %Host{} = host}, @state, %__MODULE__{} = data) do
     data = update_in(data.load_balancing_state, &data.load_balancing_module.host_up(&1, host))
 
     data =

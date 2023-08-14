@@ -191,6 +191,100 @@ defmodule Xandra.Cluster.PoolTest do
     end
   end
 
+  # TODO: remove this conditional once we depend on Elixir 1.15+, which depends on OTP 24+.
+  if System.otp_release() >= "24" do
+    describe "handling change events" do
+      test ":host_down followed by :host_up", %{
+        start_options: start_opts,
+        pool_options: pool_opts
+      } do
+        telemetry_ref =
+          :telemetry_test.attach_event_handlers(self(), [
+            [:xandra, :cluster, :pool, :started],
+            [:xandra, :cluster, :pool, :stopped],
+            [:xandra, :cluster, :pool, :restarted]
+          ])
+
+        host = %Host{address: {127, 0, 0, 1}, port: @port}
+
+        cluster_opts = Keyword.merge(start_opts, sync_connect: 1000)
+        assert {:ok, pid} = start_supervised(spec(cluster_opts, pool_opts))
+
+        assert_received {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{}, %{}}
+
+        # Send the DOWN event.
+        send(pid, {:host_down, host})
+
+        assert_receive {[:xandra, :cluster, :pool, :stopped], ^telemetry_ref, %{}, meta}
+        assert %Host{address: {127, 0, 0, 1}, port: @port} = meta.host
+
+        assert %{status: :down, pool_pid: nil, host: %Host{address: {127, 0, 0, 1}, port: @port}} =
+                 get_state(pid).peers[Host.to_peername(host)]
+
+        # Send the UP event.
+        send(pid, {:host_up, host})
+
+        assert_receive {[:xandra, :cluster, :pool, :restarted], ^telemetry_ref, %{}, meta}
+        assert %Host{address: {127, 0, 0, 1}, port: @port} = meta.host
+
+        assert %{
+                 status: :up,
+                 pool_pid: pool_pid,
+                 host: %Host{address: {127, 0, 0, 1}, port: @port}
+               } =
+                 get_state(pid).peers[Host.to_peername(host)]
+
+        assert is_pid(pool_pid)
+      end
+
+      test "multiple :discovered_hosts where hosts are removed",
+           %{start_options: start_opts, pool_options: pool_opts} do
+        telemetry_ref =
+          :telemetry_test.attach_event_handlers(self(), [
+            [:xandra, :cluster, :pool, :started],
+            [:xandra, :cluster, :pool, :stopped],
+            [:xandra, :cluster, :pool, :restarted],
+            [:xandra, :cluster, :change_event]
+          ])
+
+        good_host = %Host{address: {127, 0, 0, 1}, port: @port}
+        bad_host = %Host{address: {127, 0, 0, 1}, port: 8092}
+
+        cluster_opts = Keyword.merge(start_opts, sync_connect: 1000)
+        assert {:ok, pid} = start_supervised(spec(cluster_opts, pool_opts))
+
+        assert_received {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{}, %{}}
+
+        assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
+                        %{event_type: :host_added}}
+
+        send(pid, {:discovered_hosts, [good_host, bad_host]})
+
+        assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
+                        %{
+                          event_type: :host_added,
+                          host: %Host{address: {127, 0, 0, 1}, port: 8092}
+                        }}
+
+        assert_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{},
+                        %{host: %Host{address: {127, 0, 0, 1}, port: 8092}}}
+
+        # Now remove the bad host.
+        send(pid, {:discovered_hosts, [good_host]})
+
+        assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
+                        %{event_type: :host_removed, host: ^bad_host}}
+
+        assert_receive {[:xandra, :cluster, :pool, :stopped], ^telemetry_ref, %{},
+                        %{host: %Host{address: {127, 0, 0, 1}, port: 8092}}}
+
+        assert get_state(pid).pool_supervisor
+               |> Supervisor.which_children()
+               |> List.keyfind({{127, 0, 0, 1}, 8092}, 0) == nil
+      end
+    end
+  end
+
   describe "checkout" do
     # TODO: remove this conditional once we depend on Elixir 1.15+, which depends on OTP 24+.
     if System.otp_release() >= "24" do
