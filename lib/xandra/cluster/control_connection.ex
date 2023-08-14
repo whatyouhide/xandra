@@ -11,9 +11,8 @@ defmodule Xandra.Cluster.ControlConnection do
 
   use GenServer
 
-  alias Xandra.{Frame, Connection.Utils, Transport}
+  alias Xandra.{Frame, Connection.Utils, Simple, Transport}
   alias Xandra.Cluster.{Host, StatusChange, TopologyChange}
-  alias Xandra.Cluster.ControlConnection.{ConnectedNode, Network}
 
   require Logger
 
@@ -145,16 +144,14 @@ defmodule Xandra.Cluster.ControlConnection do
 
   def handle_info(:refresh_topology, %__MODULE__{} = state) do
     with :ok <- Transport.setopts(state.transport, active: false),
-         :ok <- Network.assert_no_transport_message(state.transport.socket),
+         :ok <- assert_no_transport_message(state.transport.socket),
          {:ok, peers} <-
-           Network.fetch_cluster_topology(
-             state.transport.module,
+           fetch_cluster_topology(
+             state.transport,
              state.autodiscovered_nodes_port,
-             %ConnectedNode{
-               ip: state.ip,
-               port: state.port,
-               protocol_module: state.protocol_module
-             }
+             state.protocol_module,
+             state.ip,
+             state.port
            ),
          :ok <- Transport.setopts(state.transport, active: :once) do
       state = refresh_topology(state, peers)
@@ -220,15 +217,12 @@ defmodule Xandra.Cluster.ControlConnection do
              {:ok, {local_address, local_port}} <- Transport.address_and_port(transport),
              state = %__MODULE__{state | ip: local_address, port: local_port},
              {:ok, peers} <-
-               Network.fetch_cluster_topology(
-                 transport.module,
+               fetch_cluster_topology(
+                 transport,
                  state.autodiscovered_nodes_port,
-                 %ConnectedNode{
-                   ip: state.ip,
-                   port: state.port,
-                   protocol_module: state.protocol_module,
-                   socket: state.transport.socket
-                 }
+                 state.protocol_module,
+                 state.ip,
+                 state.port
                ),
              :ok <- register_to_events(state),
              :ok <- Transport.setopts(state.transport, active: :once) do
@@ -281,8 +275,7 @@ defmodule Xandra.Cluster.ControlConnection do
     protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
 
     with :ok <- Transport.send(state.transport, payload),
-         {:ok, %Frame{} = frame} <-
-           Network.recv_frame(state.transport.module, state.transport.socket, protocol_format) do
+         {:ok, %Frame{} = frame} <- recv_frame(state.transport, protocol_format) do
       :ok = state.protocol_module.decode_response(frame)
     else
       {:error, reason} ->
@@ -348,6 +341,116 @@ defmodule Xandra.Cluster.ControlConnection do
 
       {:error, _reason} ->
         state
+    end
+  end
+
+  # https://docs.datastax.com/en/cql-oss/3.3/cql/cql_using/useQuerySystemTableCluster.html
+  @select_peers_query """
+  SELECT * FROM system.peers
+  """
+
+  @select_local_query """
+  SELECT data_center, host_id, rack, release_version, schema_version, tokens FROM system.local
+  """
+
+  @doc """
+  Discover the peers in the same data center as the node we're connected to.
+  """
+  @spec fetch_cluster_topology(
+          Transport.t(),
+          :inet.port_number(),
+          module(),
+          :inet.ip_address(),
+          :inet.port_number()
+        ) ::
+          {:ok, [Host.t()]} | {:error, :closed | :inet.posix()}
+  def fetch_cluster_topology(
+        %Transport{} = transport,
+        autodiscovered_nodes_port,
+        protocol_module,
+        ip,
+        port
+      )
+      when is_integer(autodiscovered_nodes_port) and is_atom(protocol_module) do
+    with {:ok, [local_node_info]} <- query(transport, protocol_module, @select_local_query),
+         {:ok, peers} <- query(transport, protocol_module, @select_peers_query) do
+      local_peer = %Host{
+        queried_peer_to_host(local_node_info)
+        | address: ip,
+          port: port
+      }
+
+      # We filter out the peers with null host_id because they seem to be nodes that are down or
+      # decommissioned but not removed from the cluster. See
+      # https://github.com/lexhide/xandra/pull/196 and
+      # https://user.cassandra.apache.narkive.com/APRtj5hb/system-peers-and-decommissioned-nodes.
+      peers =
+        for peer_attrs <- peers,
+            peer = %Host{queried_peer_to_host(peer_attrs) | port: autodiscovered_nodes_port},
+            not is_nil(peer.host_id),
+            do: peer
+
+      {:ok, [local_peer | peers]}
+    end
+  end
+
+  defp query(%Transport{} = transport, protocol_module, statement)
+       when is_atom(protocol_module) and is_binary(statement) do
+    query = %Simple{statement: statement, values: [], default_consistency: :one}
+
+    payload =
+      Frame.new(:query, _options = [])
+      |> protocol_module.encode_request(query)
+      |> Frame.encode(protocol_module)
+
+    protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
+
+    with :ok <- Transport.send(transport, payload),
+         {:ok, %Frame{} = frame} <- recv_frame(transport, protocol_format) do
+      {%Xandra.Page{} = page, _warnings} = protocol_module.decode_response(frame, query)
+      {:ok, Enum.to_list(page)}
+    end
+  end
+
+  defp assert_no_transport_message(socket) do
+    receive do
+      {kind, ^socket, _data} when kind in [:tcp, :ssl] -> {:error, :data}
+      {kind, ^socket, reason} when kind in [:tcp_error, :ssl_error] -> {:error, reason}
+      {kind, ^socket} when kind in [:tcp_closed, :ssl_closed] -> {:error, :closed}
+    after
+      0 -> :ok
+    end
+  end
+
+  defp queried_peer_to_host(%{"peer" => _} = peer_attrs) do
+    {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
+    peer_attrs = Map.put(peer_attrs, "address", address)
+    queried_peer_to_host(peer_attrs)
+  end
+
+  defp queried_peer_to_host(%{} = peer_attrs) do
+    columns = [
+      "address",
+      "data_center",
+      "host_id",
+      "rack",
+      "release_version",
+      "schema_version",
+      "tokens"
+    ]
+
+    peer_attrs =
+      peer_attrs
+      |> Map.take(columns)
+      |> Enum.map(fn {key, val} -> {String.to_existing_atom(key), val} end)
+
+    struct!(Host, peer_attrs)
+  end
+
+  defp recv_frame(%Transport{} = transport, protocol_format) when is_atom(protocol_format) do
+    case Utils.recv_frame(transport.module, transport.socket, protocol_format, _compressor = nil) do
+      {:ok, frame, ""} -> {:ok, frame}
+      {:error, reason} -> {:error, reason}
     end
   end
 

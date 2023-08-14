@@ -33,7 +33,6 @@ defmodule Xandra.Mixfile do
       # Testing
       preferred_cli_env: [
         "test.scylladb": :test,
-        "test.clustering": :test,
         "test.native_protocols": :test,
         "coveralls.html": :test
       ],
@@ -84,8 +83,7 @@ defmodule Xandra.Mixfile do
       "test.all": fn args ->
         Mix.Task.run(:test, args)
         Mix.Task.run(:"test.scylladb", args)
-      end,
-      "test.clustering": "run test_clustering/run.exs"
+      end
     ]
   end
 
