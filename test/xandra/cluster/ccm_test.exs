@@ -3,6 +3,8 @@ defmodule Xandra.Cluster.CCMTest do
 
   import Xandra.TestHelper, only: [cmd!: 2, wait_for_passing: 2]
 
+  alias Xandra.Cluster.Host
+
   @moduletag :integration
   @moduletag :ccm
 
@@ -10,8 +12,14 @@ defmodule Xandra.Cluster.CCMTest do
   @cassandra_version "4.1.3"
   @node_count 3
 
+  setup_all do
+    on_exit(fn ->
+      ccm("stop")
+    end)
+  end
+
   test "integration" do
-    validate_ifaddresses()
+    validate_ifaddresses_on_macos()
 
     if ccm("list") =~ "#{@cluster_name}" do
       ccm("switch #{@cluster_name}")
@@ -23,53 +31,24 @@ defmodule Xandra.Cluster.CCMTest do
     ccm("start")
     ccm("status")
 
-    on_exit(fn ->
-      ccm("stop")
-    end)
-
-    Process.register(self(), :this_test_process)
-
     cluster =
       start_supervised!(
-        {Xandra.Cluster,
-         nodes: ["127.0.0.1"],
-         target_pools: 2,
-         sync_connect: 5000,
-         registry_listeners: [:this_test_process]}
+        {Xandra.Cluster, nodes: ["127.0.0.1"], target_pools: 2, sync_connect: 5000}
       )
 
-    wait_for_passing(5000, fn ->
-      assert map_size(:sys.get_state(cluster).pools) == 2
-    end)
+    assert {:ok, _} = Xandra.Cluster.execute(cluster, "SELECT * FROM system.local", [])
 
-    cluster_state = :sys.get_state(cluster)
-
-    assert map_size(cluster_state.pools) == 2
-
-    pool_addresses =
-      MapSet.new(cluster_state.pools, fn {{address, port}, _} ->
-        assert port == 9042
-        address
+    connected_hosts =
+      wait_for_passing(5000, fn ->
+        connected_hosts = Xandra.Cluster.connected_hosts(cluster)
+        assert length(connected_hosts) == 2
+        connected_hosts
       end)
 
-    assert [{127, 0, 0, 1}, {127, 0, 0, 2}, {127, 0, 0, 3}]
-           |> MapSet.new()
-           |> MapSet.intersection(pool_addresses) == pool_addresses
-
-    assert {{:connected, _connected_node}, ctrl_conn_state} =
-             :sys.get_state(cluster_state.control_connection)
-
-    assert %{
-             {{127, 0, 0, 1}, 9042} => %{host: _host1, status: :up},
-             {{127, 0, 0, 2}, 9042} => %{host: _host2, status: :up},
-             {{127, 0, 0, 3}, 9042} => %{host: _host3, status: :up}
-           } = ctrl_conn_state.peers
-
-    assert_receive {:register, _registry, {{registry_addr1, 9042}, 1}, _pid1, :up}
-    assert_receive {:register, _registry, {{registry_addr2, 9042}, 1}, _pid2, :up}
+    connected_hosts_set = MapSet.new(connected_hosts, fn %Host{address: address} -> address end)
 
     assert MapSet.subset?(
-             MapSet.new([registry_addr1, registry_addr2]),
+             connected_hosts_set,
              MapSet.new([{127, 0, 0, 1}, {127, 0, 0, 2}, {127, 0, 0, 3}])
            )
   end
@@ -78,7 +57,7 @@ defmodule Xandra.Cluster.CCMTest do
     cmd!("ccm", String.split(args))
   end
 
-  defp validate_ifaddresses do
+  defp validate_ifaddresses_on_macos do
     if :os.type() == {:unix, :darwin} do
       {:ok, addresses} = :inet.getifaddrs()
       assert {~c"lo0", info} = List.keyfind!(addresses, ~c"lo0", 0)

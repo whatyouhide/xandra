@@ -391,7 +391,6 @@ defmodule Xandra do
     ],
 
     # Internal options, used by Xandra.Cluster.
-    registry: [doc: false, type: :atom],
     cluster_pid: [doc: false, type: :pid]
   ]
 

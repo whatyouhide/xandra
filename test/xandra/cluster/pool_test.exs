@@ -18,7 +18,6 @@ defmodule Xandra.Cluster.PoolTest do
       control_connection_module: ControlConnection,
       nodes: [{~c"127.0.0.1", @port}],
       sync_connect: false,
-      registry_listeners: [],
       load_balancing: :random,
       autodiscovered_nodes_port: @port,
       xandra_module: Xandra,

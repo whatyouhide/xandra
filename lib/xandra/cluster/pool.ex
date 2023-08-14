@@ -26,11 +26,36 @@ defmodule Xandra.Cluster.Pool do
 
     alias_or_nil = if sync_connect_timeout, do: alias()
 
-    case :gen_statem.start_link(
-           __MODULE__,
-           {cluster_opts, pool_opts, alias_or_nil},
-           genstatem_opts
-         ) do
+    start_arg = {cluster_opts, pool_opts, alias_or_nil}
+
+    result =
+      case Keyword.fetch(cluster_opts, :name) do
+        :error ->
+          :gen_statem.start_link(__MODULE__, start_arg, genstatem_opts)
+
+        {:ok, atom} when is_atom(atom) ->
+          :gen_statem.start_link({:local, atom}, __MODULE__, start_arg, genstatem_opts)
+
+        {:ok, {:global, _term} = tuple} ->
+          :gen_statem.start_link(tuple, __MODULE__, start_arg, genstatem_opts)
+
+        {:ok, {:via, via_module, _term} = tuple} when is_atom(via_module) ->
+          :gen_statem.start_link(tuple, __MODULE__, start_arg, genstatem_opts)
+
+        {:ok, other} ->
+          raise ArgumentError, """
+          expected :name option to be one of the following:
+
+            * nil
+            * atom
+            * {:global, term}
+            * {:via, module, term}
+
+          Got: #{inspect(other)}
+          """
+      end
+
+    case result do
       {:ok, pid} when sync_connect_timeout == false ->
         {:ok, pid}
 
@@ -62,6 +87,11 @@ defmodule Xandra.Cluster.Pool do
     :gen_statem.call(pid, :checkout)
   end
 
+  @spec connected_hosts(:gen_statem.server_ref()) :: [Host.t()]
+  def connected_hosts(pid) do
+    :gen_statem.call(pid, :connected_hosts)
+  end
+
   ## Data
 
   defstruct [
@@ -89,9 +119,6 @@ defmodule Xandra.Cluster.Pool do
     # The load balancing policy info.
     :load_balancing_module,
     :load_balancing_state,
-
-    # The registry where connections are registered.
-    :registry,
 
     # The number of target pools.
     :target_pools,
@@ -129,16 +156,6 @@ defmodule Xandra.Cluster.Pool do
   def init({cluster_opts, pool_opts, sync_connect_alias_or_nil}) do
     Process.flag(:trap_exit, true)
 
-    registry_name =
-      Module.concat([Xandra.ClusterRegistry, to_string(System.unique_integer([:positive]))])
-
-    {:ok, _} =
-      Registry.start_link(
-        keys: :unique,
-        name: registry_name,
-        listeners: Keyword.fetch!(cluster_opts, :registry_listeners)
-      )
-
     # Start supervisor for the pools.
     {:ok, pool_sup} = Supervisor.start_link([], strategy: :one_for_one)
 
@@ -160,7 +177,6 @@ defmodule Xandra.Cluster.Pool do
         control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module),
         target_pools: Keyword.fetch!(cluster_opts, :target_pools),
         sync_connect_alias: sync_connect_alias_or_nil,
-        registry: registry_name,
         name: Keyword.get(cluster_opts, :name),
         pool_supervisor: pool_sup,
         refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval)
@@ -198,6 +214,16 @@ defmodule Xandra.Cluster.Pool do
       end)
 
     {:keep_state, data, {:reply, from, reply}}
+  end
+
+  def handle_event({:call, from}, :connected_hosts, @state, %__MODULE__{} = data) do
+    connected_hosts =
+      for %{status: :connected, pool_pid: pool_pid, host: host} <- Map.values(data.peers),
+          is_pid(pool_pid) do
+        host
+      end
+
+    {:keep_state_and_data, {:reply, from, connected_hosts}}
   end
 
   def handle_event(:into, {:host_up, %Host{} = host}, @state, %__MODULE__{} = data) do
@@ -288,6 +314,12 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state, data}
   end
 
+  def handle_event(:info, {:EXIT, _pid, reason}, @state, %__MODULE__{} = _data)
+      when reason in [:normal, :shutdown] or
+             (is_tuple(reason) and tuple_size(reason) == 2 and elem(reason, 0) == :shutdown) do
+    :keep_state_and_data
+  end
+
   def handle_event({:timeout, :reconnect_control_connection}, nil, @state, %__MODULE__{} = data) do
     {:keep_state, data, {:next_event, :internal, :start_control_connection}}
   end
@@ -327,11 +359,7 @@ defmodule Xandra.Cluster.Pool do
   # peer, and it'll only start it once.
   defp start_pool(%__MODULE__{} = data, %Host{} = host) do
     conn_options =
-      Keyword.merge(data.pool_options,
-        nodes: [Host.format_address(host)],
-        registry: data.registry,
-        cluster_pid: self()
-      )
+      Keyword.merge(data.pool_options, nodes: [Host.format_address(host)], cluster_pid: self())
 
     peername = Host.to_peername(host)
 

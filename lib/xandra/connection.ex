@@ -22,7 +22,6 @@ defmodule Xandra.Connection do
     :address,
     :port,
     :connection_name,
-    :registry,
     :cluster_pid,
     :pool_index,
     :peername
@@ -58,7 +57,6 @@ defmodule Xandra.Connection do
           address: address,
           port: port,
           connection_name: connection_name,
-          registry: Keyword.get(options, :registry),
           cluster_pid: cluster_pid,
           pool_index: Keyword.fetch!(options, :pool_index),
           peername: peername
@@ -83,8 +81,6 @@ defmodule Xandra.Connection do
             protocol_module: protocol_module,
             supported_options: supported_options
           })
-
-          maybe_register_or_put_value(state, :up)
 
           if cluster_pid do
             send(cluster_pid, {:xandra, :connected, peername, self()})
@@ -389,7 +385,6 @@ defmodule Xandra.Connection do
       send(state.cluster_pid, {:xandra, :disconnected, {state.address, state.port}, self()})
     end
 
-    maybe_register_or_put_value(state, :down)
     :ok = transport.close(socket)
   end
 
@@ -471,23 +466,6 @@ defmodule Xandra.Connection do
         compressor,
         options
       )
-    end
-  end
-
-  defp maybe_register_or_put_value(%__MODULE__{registry: nil}, _value) do
-    :ok
-  end
-
-  defp maybe_register_or_put_value(%__MODULE__{peername: {address, port}} = state, value)
-       when is_tuple(address) do
-    key = {{address, port}, state.pool_index}
-
-    case Registry.register(state.registry, key, value) do
-      {:ok, _owner} ->
-        :ok
-
-      {:error, {:already_registered, _}} ->
-        {_new, _old} = Registry.update_value(state.registry, key, fn _ -> value end)
     end
   end
 
