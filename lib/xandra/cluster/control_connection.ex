@@ -182,7 +182,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
   @impl true
   def handle_cast({:refresh_topology, peers}, %__MODULE__{} = state) do
-    {:keep_state, refresh_topology(state, peers)}
+    {:noreply, refresh_topology(state, peers)}
   end
 
   ## Helper functions
