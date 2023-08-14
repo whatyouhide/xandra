@@ -23,6 +23,7 @@ defmodule Xandra.Connection do
     :port,
     :connection_name,
     :registry,
+    :cluster_pid,
     :pool_index,
     :peername
   ]
@@ -34,6 +35,7 @@ defmodule Xandra.Connection do
     enforced_protocol = Keyword.get(options, :protocol_version)
     transport = if(options[:encryption], do: :ssl, else: :gen_tcp)
     connection_name = options[:name]
+    cluster_pid = Keyword.get(options, :cluster_pid)
 
     transport_options =
       options
@@ -57,6 +59,7 @@ defmodule Xandra.Connection do
           port: port,
           connection_name: connection_name,
           registry: Keyword.get(options, :registry),
+          cluster_pid: cluster_pid,
           pool_index: Keyword.fetch!(options, :pool_index),
           peername: peername
         }
@@ -82,6 +85,11 @@ defmodule Xandra.Connection do
           })
 
           maybe_register_or_put_value(state, :up)
+
+          if cluster_pid do
+            send(cluster_pid, {:xandra, :connected, peername, self()})
+          end
+
           {:ok, state}
         else
           {:error, {:unsupported_protocol, protocol_version}} ->
@@ -112,6 +120,24 @@ defmodule Xandra.Connection do
         end
 
       {:error, reason} ->
+        ipfied_address =
+          case :inet.parse_address(address) do
+            {:ok, ip} -> ip
+            {:error, _reason} -> address
+          end
+
+        :telemetry.execute([:xandra, :failed_to_connect], %{}, %{
+          connection: self(),
+          connection_name: connection_name,
+          address: address,
+          port: port,
+          reason: reason
+        })
+
+        if cluster_pid do
+          send(cluster_pid, {:xandra, :failed_to_connect, {ipfied_address, port}, self()})
+        end
+
         message = if transport == :ssl, do: "TLS/SSL connect", else: "TCP connect"
         {:error, ConnectionError.new(message, reason)}
     end
@@ -358,6 +384,10 @@ defmodule Xandra.Connection do
       port: state.port,
       reason: exception
     })
+
+    if state.cluster_pid do
+      send(state.cluster_pid, {:xandra, :disconnected, {state.address, state.port}, self()})
+    end
 
     maybe_register_or_put_value(state, :down)
     :ok = transport.close(socket)

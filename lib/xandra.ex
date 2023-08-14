@@ -390,11 +390,9 @@ defmodule Xandra do
       """
     ],
 
-    # Internal, used by Xandra.Cluster.
-    registry: [
-      doc: false,
-      type: :atom
-    ]
+    # Internal options, used by Xandra.Cluster.
+    registry: [doc: false, type: :atom],
+    cluster_pid: [doc: false, type: :pid]
   ]
 
   @start_link_opts_keys Keyword.keys(@start_link_opts_schema)
