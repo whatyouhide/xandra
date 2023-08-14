@@ -62,36 +62,34 @@ defmodule Xandra.Cluster.ControlConnectionTest do
         [:xandra, :cluster, :control_connection, :connected]
       ])
 
-    assert_telemetry = fn event ->
-      assert_receive {[:xandra, :cluster, :control_connection, ^event], ^telemetry_ref,
-                      measurements, metadata}
-
-      assert measurements == %{}
-      metadata
-    end
-
     assert {:ok, ctrl_conn} = start_supervised({ControlConnection, start_options})
     monitor_ref = Process.monitor(ctrl_conn)
 
     assert_receive {^mirror_ref, {:discovered_hosts, _peers}}
 
-    assert %{cluster_name: nil, cluster_pid: ^mirror, host: %Host{address: {127, 0, 0, 1}}} =
-             assert_telemetry.(:connected)
+    assert_receive {[:xandra, :cluster, :control_connection, :connected], ^telemetry_ref, %{},
+                    %{
+                      cluster_name: nil,
+                      cluster_pid: ^mirror,
+                      host: %Host{address: {127, 0, 0, 1}}
+                    }}
 
     # Manually simulate closing the socket
     send(ctrl_conn, {:tcp_closed, :sys.get_state(ctrl_conn).transport.socket})
 
     assert_receive {:DOWN, ^monitor_ref, _, _, {:shutdown, :closed}}
 
-    assert %{
-             cluster_name: nil,
-             cluster_pid: ^mirror,
-             host: %Host{address: {127, 0, 0, 1}},
-             reason: :closed
-           } = assert_telemetry.(:disconnected)
+    assert_receive {[:xandra, :cluster, :control_connection, :disconnected], ^telemetry_ref, %{},
+                    %{
+                      cluster_name: nil,
+                      cluster_pid: ^mirror,
+                      host: %Host{address: {127, 0, 0, 1}},
+                      reason: :closed
+                    }}
 
     # Assert that it eventually reconnects
-    assert_telemetry.(:connected)
+    assert_receive {[:xandra, :cluster, :control_connection, :connected], ^telemetry_ref, %{},
+                    %{}}
   end
 
   test "dies if the connected node's socket errors out", %{start_options: start_options} do
