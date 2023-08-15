@@ -16,17 +16,23 @@ defmodule Xandra.Transport do
   @enforce_keys [:module, :options]
   defstruct [:module, :options, :socket]
 
-  @spec connect(t(), :inet.ip_address(), :inet.port_number(), timeout()) ::
-          {:ok, t()} | {:error, error_reason}
+  @spec connect(t(), :inet.ip_address() | charlist(), :inet.port_number(), timeout()) ::
+          {:ok, t()} | {:error, error_reason()}
   def connect(%__MODULE__{socket: nil} = transport, address, port, timeout) do
     with {:ok, socket} <- transport.module.connect(address, port, transport.options, timeout) do
       {:ok, %__MODULE__{transport | socket: socket}}
     end
   end
 
-  @spec send(t(), iodata()) :: :ok | {:error, error_reason}
-  def send(%__MODULE__{socket: socket} = transport, data) when not is_nil(socket) do
-    transport.module.send(socket, data)
+  @spec send(t(), iodata()) :: :ok | {:error, error_reason()}
+  def send(%__MODULE__{socket: socket, module: module}, data) when not is_nil(socket) do
+    module.send(socket, data)
+  end
+
+  @spec recv(t(), integer(), timeout()) :: {:ok, binary()} | {:error, error_reason()}
+  def recv(%__MODULE__{socket: socket, module: module}, bytes, timeout)
+      when not is_nil(socket) and is_integer(bytes) do
+    module.recv(socket, bytes, timeout)
   end
 
   @spec setopts(t(), options()) :: :ok | {:error, error_reason}

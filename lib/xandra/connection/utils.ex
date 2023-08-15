@@ -1,18 +1,16 @@
 defmodule Xandra.Connection.Utils do
   @moduledoc false
 
-  alias Xandra.{ConnectionError, Error, Frame}
+  alias Xandra.{ConnectionError, Error, Frame, Transport}
 
-  @type transport :: :gen_tcp | :ssl
-  @type socket :: :gen_tcp.socket() | :ssl.sslsocket()
-
-  @spec recv_frame(transport, socket, protocol_format :: :v4_or_less | :v5_or_more, module | nil) ::
-          {:ok, Frame.t(), rest :: binary()} | {:error, :closed | :inet.posix()}
-  def recv_frame(transport, socket, protocol_format, compressor)
-      when transport in [:gen_tcp, :ssl] and protocol_format in [:v4_or_less, :v5_or_more] and
-             is_atom(compressor) do
+  @spec recv_frame(Transport.t(), :v4_or_less | :v5_or_more, module | nil) ::
+          {:ok, Frame.t(), rest :: binary()}
+          | {:error, :closed | :inet.posix()}
+  def recv_frame(%Transport{} = transport, protocol_format, compressor)
+      when protocol_format in [:v4_or_less, :v5_or_more] and is_atom(compressor) do
     fetch_bytes_fun = fn fetch_state, byte_count ->
-      with {:ok, binary} <- transport.recv(socket, byte_count), do: {:ok, binary, fetch_state}
+      with {:ok, binary} <- Transport.recv(transport, byte_count, 10_000),
+           do: {:ok, binary, fetch_state}
     end
 
     case protocol_format do
@@ -21,13 +19,12 @@ defmodule Xandra.Connection.Utils do
     end
   end
 
-  @spec request_options(:gen_tcp | :ssl, term, nil | Frame.supported_protocol(), nil | module) ::
+  @spec request_options(Transport.t(), nil | Frame.supported_protocol(), nil | module) ::
           {:ok, map(), negotiated_protocol_module :: module()}
-          | {:error, ConnectionError.t() | Error.t(),
-             {:use_this_protocol_instead, Frame.supported_protocol()}}
-  def request_options(transport, socket, protocol_version, compressor \\ nil)
-      when transport in [:gen_tcp, :ssl] and
-             (is_nil(protocol_version) or protocol_version in unquote(Frame.supported_protocols())) and
+          | {:error, ConnectionError.t() | Error.t()}
+          | {:error, {:use_this_protocol_instead, Frame.supported_protocol()}}
+  def request_options(%Transport{} = transport, protocol_version, compressor \\ nil)
+      when (is_nil(protocol_version) or protocol_version in unquote(Frame.supported_protocols())) and
              is_atom(compressor) do
     tentative_protocol_version = protocol_version || Frame.max_supported_protocol()
     tentative_protocol_module = Frame.protocol_version_to_module(tentative_protocol_version)
@@ -37,8 +34,8 @@ defmodule Xandra.Connection.Utils do
       |> tentative_protocol_module.encode_request(nil)
       |> Frame.encode_v4(tentative_protocol_module)
 
-    with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame, rest} <- recv_frame(transport, socket, :v4_or_less, compressor) do
+    with :ok <- Transport.send(transport, payload),
+         {:ok, %Frame{} = frame, rest} <- recv_frame(transport, :v4_or_less, compressor) do
       "" = rest
 
       case tentative_protocol_module.decode_response(frame) do
@@ -75,12 +72,12 @@ defmodule Xandra.Connection.Utils do
     end
   end
 
-  @spec ping(:gen_tcp | :ssl, term, nil | Frame.supported_protocol(), nil | module) ::
+  @spec ping(Transport.t(), module(), nil | module()) ::
           :ok
-          | {:error, ConnectionError.t() | Error.t(),
-             {:use_this_protocol_instead, Frame.supported_protocol()}}
-  def ping(transport, socket, protocol_module, compressor)
-      when transport in [:gen_tcp, :ssl] and is_atom(protocol_module) and is_atom(compressor) do
+          | {:error, ConnectionError.t() | Error.t()}
+          | {:error, {:use_this_protocol_instead, Frame.supported_protocol()}}
+  def ping(%Transport{} = transport, protocol_module, compressor)
+      when is_atom(protocol_module) and not is_nil(protocol_module) and is_atom(compressor) do
     payload =
       Frame.new(:options, compressor: compressor)
       |> protocol_module.encode_request(nil)
@@ -88,9 +85,8 @@ defmodule Xandra.Connection.Utils do
 
     protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
 
-    with :ok <- transport.send(socket, payload),
-         {:ok, %Frame{} = frame, rest} <-
-           recv_frame(transport, socket, protocol_format, compressor) do
+    with :ok <- Transport.send(transport, payload),
+         {:ok, %Frame{} = frame, rest} <- recv_frame(transport, protocol_format, compressor) do
       "" = rest
 
       case protocol_module.decode_response(frame) do
@@ -103,11 +99,10 @@ defmodule Xandra.Connection.Utils do
     end
   end
 
-  @spec startup_connection(:gen_tcp | :ssl, term, map, module, nil | module) ::
+  @spec startup_connection(Transport.t(), map, module, nil | module) ::
           :ok | {:error, ConnectionError.t()}
   def startup_connection(
-        transport,
-        socket,
+        %Transport{} = transport,
         requested_options,
         protocol_module,
         compressor \\ nil,
@@ -124,10 +119,10 @@ defmodule Xandra.Connection.Utils do
     # However, we need to pass the compressor module around when we
     # receive the response to this frame because if we said we want to use
     # compression, this response is already compressed.
-    with :ok <- transport.send(socket, payload),
+    with :ok <- Transport.send(transport, payload),
          tmtry_meas = %{protocol_module: protocol_module, requested_options: requested_options},
          :telemetry.execute([:xandra, :debug, :sent_frame], tmtry_meas, %{frame_type: :STARTUP}),
-         {:ok, frame, rest} <- recv_frame(transport, socket, :v4_or_less, compressor) do
+         {:ok, frame, rest} <- recv_frame(transport, :v4_or_less, compressor) do
       "" = rest
       # TODO: handle :error frames for things like :protocol_violation.
       case frame do
@@ -140,7 +135,6 @@ defmodule Xandra.Connection.Utils do
 
           authenticate_connection(
             transport,
-            socket,
             requested_options,
             protocol_module,
             compressor,
@@ -157,8 +151,7 @@ defmodule Xandra.Connection.Utils do
   end
 
   defp authenticate_connection(
-         transport,
-         socket,
+         %Transport{} = transport,
          requested_options,
          protocol_module,
          compressor,
@@ -171,8 +164,8 @@ defmodule Xandra.Connection.Utils do
 
     protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
 
-    with :ok <- transport.send(socket, payload),
-         {:ok, frame, rest} <- recv_frame(transport, socket, protocol_format, compressor) do
+    with :ok <- Transport.send(transport, payload),
+         {:ok, frame, rest} <- recv_frame(transport, protocol_format, compressor) do
       "" = rest
 
       case frame do

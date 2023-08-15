@@ -3,7 +3,7 @@ defmodule Xandra.Connection do
 
   use DBConnection
 
-  alias Xandra.{Batch, ConnectionError, Prepared, Frame, Simple, SetKeyspace}
+  alias Xandra.{Batch, ConnectionError, Prepared, Frame, Simple, SetKeyspace, Transport}
   alias __MODULE__.Utils
 
   @default_timeout 5_000
@@ -11,8 +11,6 @@ defmodule Xandra.Connection do
 
   defstruct [
     :transport,
-    :transport_options,
-    :socket,
     :prepared_cache,
     :compressor,
     :default_consistency,
@@ -32,23 +30,23 @@ defmodule Xandra.Connection do
     {address, port} = Keyword.fetch!(options, :node)
     compressor = Keyword.get(options, :compressor)
     enforced_protocol = Keyword.get(options, :protocol_version)
-    transport = if(options[:encryption], do: :ssl, else: :gen_tcp)
     connection_name = options[:name]
     cluster_pid = Keyword.get(options, :cluster_pid)
 
-    transport_options =
-      options
-      |> Keyword.get(:transport_options, [])
-      |> Keyword.merge(@forced_transport_options)
+    transport = %Transport{
+      module: if(options[:encryption], do: :ssl, else: :gen_tcp),
+      options:
+        options
+        |> Keyword.get(:transport_options, [])
+        |> Keyword.merge(@forced_transport_options)
+    }
 
-    case transport.connect(address, port, transport_options, @default_timeout) do
-      {:ok, socket} ->
-        {:ok, peername} = inet_mod(transport).peername(socket)
+    case Transport.connect(transport, address, port, @default_timeout) do
+      {:ok, transport} ->
+        {:ok, peername} = Transport.address_and_port(transport)
 
         state = %__MODULE__{
           transport: transport,
-          transport_options: transport_options,
-          socket: socket,
           prepared_cache: Keyword.fetch!(options, :prepared_cache),
           compressor: compressor,
           default_consistency: Keyword.fetch!(options, :default_consistency),
@@ -63,12 +61,11 @@ defmodule Xandra.Connection do
         }
 
         with {:ok, supported_options, protocol_module} <-
-               Utils.request_options(transport, socket, enforced_protocol),
+               Utils.request_options(transport, enforced_protocol),
              state = %__MODULE__{state | protocol_module: protocol_module},
              :ok <-
                startup_connection(
                  transport,
-                 socket,
                  supported_options,
                  protocol_module,
                  compressor,
@@ -103,7 +100,7 @@ defmodule Xandra.Connection do
               port: port
             })
 
-            :ok = transport.close(socket)
+            :ok = Transport.close(transport)
             options = Keyword.put(options, :protocol_version, protocol_version)
             connect(options)
 
@@ -134,7 +131,7 @@ defmodule Xandra.Connection do
           send(cluster_pid, {:xandra, :failed_to_connect, {ipfied_address, port}, self()})
         end
 
-        message = if transport == :ssl, do: "TLS/SSL connect", else: "TCP connect"
+        message = if transport.module == :ssl, do: "TLS/SSL connect", else: "TCP connect"
         {:error, ConnectionError.new(message, reason)}
     end
   end
@@ -258,8 +255,6 @@ defmodule Xandra.Connection do
   end
 
   defp send_prepared(%Prepared{compressor: compressor} = prepared, options, state) do
-    transport = state.transport
-
     frame_options =
       options
       |> Keyword.take([:tracing, :custom_payload])
@@ -272,9 +267,9 @@ defmodule Xandra.Connection do
 
     protocol_format = Xandra.Protocol.frame_protocol_format(state.protocol_module)
 
-    with :ok <- transport.send(state.socket, payload),
+    with :ok <- Transport.send(state.transport, payload),
          {:ok, %Frame{} = frame, rest} <-
-           Utils.recv_frame(transport, state.socket, protocol_format, state.compressor) do
+           Utils.recv_frame(state.transport, protocol_format, state.compressor) do
       "" = rest
       frame = %Frame{frame | atom_keys?: state.atom_keys?}
 
@@ -328,9 +323,9 @@ defmodule Xandra.Connection do
   defp send_query(query, payload, options, %__MODULE__{} = state) do
     protocol_format = Xandra.Protocol.frame_protocol_format(state.protocol_module)
 
-    with :ok <- state.transport.send(state.socket, payload),
+    with :ok <- Transport.send(state.transport, payload),
          {:ok, %Frame{} = frame, rest} <-
-           Utils.recv_frame(state.transport, state.socket, protocol_format, state.compressor) do
+           Utils.recv_frame(state.transport, protocol_format, state.compressor) do
       "" = rest
       frame = %Frame{frame | atom_keys?: state.atom_keys?}
 
@@ -372,7 +367,7 @@ defmodule Xandra.Connection do
   end
 
   @impl true
-  def disconnect(exception, %__MODULE__{transport: transport, socket: socket} = state) do
+  def disconnect(exception, %__MODULE__{} = state) do
     :telemetry.execute([:xandra, :disconnected], %{}, %{
       connection: self(),
       connection_name: state.connection_name,
@@ -385,12 +380,12 @@ defmodule Xandra.Connection do
       send(state.cluster_pid, {:xandra, :disconnected, {state.address, state.port}, self()})
     end
 
-    :ok = transport.close(socket)
+    :ok = Transport.close(state.transport)
   end
 
   @impl true
-  def ping(%__MODULE__{socket: socket, compressor: compressor} = state) do
-    case Utils.ping(state.transport, socket, state.protocol_module, compressor) do
+  def ping(%__MODULE__{compressor: compressor, transport: transport} = state) do
+    case Utils.ping(transport, state.protocol_module, compressor) do
       :ok ->
         {:ok, state}
 
@@ -422,8 +417,7 @@ defmodule Xandra.Connection do
   end
 
   defp startup_connection(
-         transport,
-         socket,
+         %Transport{} = transport,
          supported_options,
          protocol_module,
          compressor,
@@ -444,7 +438,6 @@ defmodule Xandra.Connection do
 
         Utils.startup_connection(
           transport,
-          socket,
           requested_options,
           protocol_module,
           compressor,
@@ -460,7 +453,6 @@ defmodule Xandra.Connection do
     else
       Utils.startup_connection(
         transport,
-        socket,
         requested_options,
         protocol_module,
         compressor,
@@ -509,7 +501,4 @@ defmodule Xandra.Connection do
               "module (which uses the #{inspect(initial_algorithm)} algorithm)"
     end
   end
-
-  defp inet_mod(:gen_tcp), do: :inet
-  defp inet_mod(:ssl), do: :ssl
 end

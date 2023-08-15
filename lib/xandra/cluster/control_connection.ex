@@ -202,8 +202,7 @@ defmodule Xandra.Cluster.ControlConnection do
       {:ok, transport} ->
         state = %__MODULE__{state | transport: transport}
 
-        with {:ok, supported_opts, proto_mod} <-
-               Utils.request_options(transport.module, transport.socket, proto_vsn),
+        with {:ok, supported_opts, proto_mod} <- Utils.request_options(transport, proto_vsn),
              state = %__MODULE__{state | protocol_module: proto_mod},
              :ok <- startup_connection(state, supported_opts),
              {:ok, {local_address, local_port}} <- Transport.address_and_port(transport),
@@ -249,8 +248,7 @@ defmodule Xandra.Cluster.ControlConnection do
     %{"CQL_VERSION" => [cql_version | _]} = supported_options
 
     Utils.startup_connection(
-      state.transport.module,
-      state.transport.socket,
+      state.transport,
       _requested_options = %{"CQL_VERSION" => cql_version},
       state.protocol_module,
       _compressor = nil,
@@ -440,7 +438,7 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp recv_frame(%Transport{} = transport, protocol_format) when is_atom(protocol_format) do
-    case Utils.recv_frame(transport.module, transport.socket, protocol_format, _compressor = nil) do
+    case Utils.recv_frame(transport, protocol_format, _compressor = nil) do
       {:ok, frame, ""} -> {:ok, frame}
       {:error, reason} -> {:error, reason}
     end
