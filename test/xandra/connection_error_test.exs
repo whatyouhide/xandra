@@ -22,6 +22,11 @@ defmodule Xandra.ConnectionErrorTest do
                ~s(action "connect" failed with reason: socket is closed)
     end
 
+    test "with reason :exit" do
+      assert message("connect", :exit) ==
+        ~s(action "connect" failed with reason: socket closed with exit)
+    end
+
     test "with reason {:cluster, :not_connected}" do
       assert message("connect", {:cluster, :not_connected}) ==
                ~s(action "connect" failed with reason: not connected to any of the nodes)
