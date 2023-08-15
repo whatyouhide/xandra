@@ -14,15 +14,19 @@ defmodule Xandra.Cluster.PoolTest do
   setup :verify_on_exit!
 
   setup do
-    base_start_options = [
+    base_cluster_options = [
       control_connection_module: ControlConnection,
       nodes: [{~c"127.0.0.1", @port}],
-      sync_connect: false,
       load_balancing: :random,
       autodiscovered_nodes_port: @port,
       xandra_module: Xandra,
       target_pools: 2,
-      refresh_topology_interval: 60_000
+      sync_connect: false,
+      refresh_topology_interval: 60_000,
+      queue_before_connecting: [
+        buffer_size: 100,
+        timeout: 5000
+      ]
     ]
 
     pool_opts =
@@ -32,19 +36,19 @@ defmodule Xandra.Cluster.PoolTest do
         []
       end
 
-    %{start_options: base_start_options, pool_options: pool_opts}
+    %{cluster_options: base_cluster_options, pool_options: pool_opts}
   end
 
   describe "startup" do
     test "doesn't fail to start if the control connection fails to connect",
-         %{start_options: start_options, pool_options: pool_options} do
-      cluster_opts = Keyword.put(start_options, :nodes, [{~c"127.0.0.1", _bad_port = 8092}])
+         %{cluster_options: cluster_options, pool_options: pool_options} do
+      cluster_opts = Keyword.put(cluster_options, :nodes, [{~c"127.0.0.1", _bad_port = 8092}])
       assert {:ok, pid} = start_supervised(spec(cluster_opts, pool_options))
       :sys.get_state(pid)
     end
 
     test "tries all the nodes for the control connection (asking the load-balancing policy first)",
-         %{start_options: start_options, pool_options: pool_options} do
+         %{cluster_options: cluster_options, pool_options: pool_options} do
       telemetry_ref =
         :telemetry_test.attach_event_handlers(self(), [
           [:xandra, :cluster, :control_connection, :failed_to_connect]
@@ -55,7 +59,7 @@ defmodule Xandra.Cluster.PoolTest do
       |> expect(:query_plan, fn nil -> {[%Host{address: ~c"127.0.0.1", port: 8091}], nil} end)
 
       cluster_opts =
-        Keyword.merge(start_options,
+        Keyword.merge(cluster_options,
           nodes: [
             {~c"127.0.0.1", _bad_port = 8092},
             {~c"127.0.0.1", _bad_port = 8093},
@@ -88,7 +92,7 @@ defmodule Xandra.Cluster.PoolTest do
     end
 
     test "establishes a control connection and a pool",
-         %{start_options: start_options, pool_options: pool_options} do
+         %{cluster_options: cluster_options, pool_options: pool_options} do
       telemetry_ref =
         :telemetry_test.attach_event_handlers(self(), [
           [:xandra, :cluster, :control_connection, :connected],
@@ -97,7 +101,7 @@ defmodule Xandra.Cluster.PoolTest do
           [:xandra, :connected]
         ])
 
-      assert {:ok, pid} = start_supervised(spec(start_options, pool_options))
+      assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
 
       assert %{
                cluster_pid: ^pid,
@@ -130,27 +134,9 @@ defmodule Xandra.Cluster.PoolTest do
       assert %Host{address: {127, 0, 0, 1}, port: @port, data_center: "datacenter1"} = host
     end
 
-    # TODO: remove this conditional once we depend on Elixir 1.15+, which depends on OTP 24+.
-    if System.otp_release() >= "24" do
-      test "supports :sync_connect option",
-           %{start_options: start_options, pool_options: pool_options} do
-        telemetry_ref =
-          :telemetry_test.attach_event_handlers(self(), [
-            [:xandra, :connected]
-          ])
-
-        start_options = Keyword.merge(start_options, sync_connect: 1000)
-        start_supervised!(spec(start_options, pool_options))
-
-        # We check that the message was _already_ received here.
-        assert_received {[:xandra, :connected], ^telemetry_ref, %{},
-                         %{address: ~c"127.0.0.1", port: @port}}
-      end
-    end
-
     @tag :capture_log
     test "starts a pool to a node that is reported in the cluster, but is not up",
-         %{start_options: start_options, pool_options: pool_options} do
+         %{cluster_options: cluster_options, pool_options: pool_options} do
       telemetry_ref =
         :telemetry_test.attach_event_handlers(self(), [
           [:xandra, :cluster, :control_connection, :connected],
@@ -161,7 +147,7 @@ defmodule Xandra.Cluster.PoolTest do
           [:xandra, :failed_to_connect]
         ])
 
-      assert {:ok, pid} = start_supervised(spec(start_options, pool_options))
+      assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
 
       assert %{
                event_type: :host_added,
@@ -191,118 +177,113 @@ defmodule Xandra.Cluster.PoolTest do
     end
   end
 
-  # TODO: remove this conditional once we depend on Elixir 1.15+, which depends on OTP 24+.
-  if System.otp_release() >= "24" do
-    describe "handling change events" do
-      test ":host_down followed by :host_up", %{
-        start_options: start_opts,
-        pool_options: pool_opts
-      } do
-        telemetry_ref =
-          :telemetry_test.attach_event_handlers(self(), [
-            [:xandra, :cluster, :pool, :started],
-            [:xandra, :cluster, :pool, :stopped],
-            [:xandra, :cluster, :pool, :restarted]
-          ])
+  describe "handling change events" do
+    test ":host_down followed by :host_up", %{
+      cluster_options: cluster_opts,
+      pool_options: pool_opts
+    } do
+      telemetry_ref =
+        :telemetry_test.attach_event_handlers(self(), [
+          [:xandra, :cluster, :pool, :started],
+          [:xandra, :cluster, :pool, :stopped],
+          [:xandra, :cluster, :pool, :restarted]
+        ])
 
-        host = %Host{address: {127, 0, 0, 1}, port: @port}
+      host = %Host{address: {127, 0, 0, 1}, port: @port}
 
-        cluster_opts = Keyword.merge(start_opts, sync_connect: 1000)
-        assert {:ok, pid} = start_supervised(spec(cluster_opts, pool_opts))
+      assert {:ok, pid} = start_supervised(spec(cluster_opts, pool_opts))
 
-        assert_received {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{}, %{}}
+      assert_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{}, %{}}
 
-        # Send the DOWN event.
-        send(pid, {:host_down, host})
+      # Send the DOWN event.
+      send(pid, {:host_down, host})
 
-        assert_receive {[:xandra, :cluster, :pool, :stopped], ^telemetry_ref, %{}, meta}
-        assert %Host{address: {127, 0, 0, 1}, port: @port} = meta.host
+      assert_receive {[:xandra, :cluster, :pool, :stopped], ^telemetry_ref, %{}, meta}
+      assert %Host{address: {127, 0, 0, 1}, port: @port} = meta.host
 
-        assert %{status: :down, pool_pid: nil, host: %Host{address: {127, 0, 0, 1}, port: @port}} =
-                 get_state(pid).peers[Host.to_peername(host)]
+      assert %{status: :down, pool_pid: nil, host: %Host{address: {127, 0, 0, 1}, port: @port}} =
+               get_state(pid).peers[Host.to_peername(host)]
 
-        # Send the UP event.
-        send(pid, {:host_up, host})
+      # Send the UP event.
+      send(pid, {:host_up, host})
 
-        assert_receive {[:xandra, :cluster, :pool, :restarted], ^telemetry_ref, %{}, meta}
-        assert %Host{address: {127, 0, 0, 1}, port: @port} = meta.host
+      assert_receive {[:xandra, :cluster, :pool, :restarted], ^telemetry_ref, %{}, meta}
+      assert %Host{address: {127, 0, 0, 1}, port: @port} = meta.host
 
-        assert %{
-                 status: :up,
-                 pool_pid: pool_pid,
-                 host: %Host{address: {127, 0, 0, 1}, port: @port}
-               } =
-                 get_state(pid).peers[Host.to_peername(host)]
+      assert %{
+               status: :up,
+               pool_pid: pool_pid,
+               host: %Host{address: {127, 0, 0, 1}, port: @port}
+             } =
+               get_state(pid).peers[Host.to_peername(host)]
 
-        assert is_pid(pool_pid)
-      end
+      assert is_pid(pool_pid)
+    end
 
-      test "multiple :discovered_hosts where hosts are removed",
-           %{start_options: start_opts, pool_options: pool_opts} do
-        telemetry_ref =
-          :telemetry_test.attach_event_handlers(self(), [
-            [:xandra, :cluster, :pool, :started],
-            [:xandra, :cluster, :pool, :stopped],
-            [:xandra, :cluster, :pool, :restarted],
-            [:xandra, :cluster, :change_event]
-          ])
+    test "multiple :discovered_hosts where hosts are removed",
+         %{cluster_options: cluster_opts, pool_options: pool_opts} do
+      telemetry_ref =
+        :telemetry_test.attach_event_handlers(self(), [
+          [:xandra, :cluster, :pool, :started],
+          [:xandra, :cluster, :pool, :stopped],
+          [:xandra, :cluster, :pool, :restarted],
+          [:xandra, :cluster, :change_event]
+        ])
 
-        good_host = %Host{address: {127, 0, 0, 1}, port: @port}
-        bad_host = %Host{address: {127, 0, 0, 1}, port: 8092}
+      good_host = %Host{address: {127, 0, 0, 1}, port: @port}
+      bad_host = %Host{address: {127, 0, 0, 1}, port: 8092}
 
-        cluster_opts = Keyword.merge(start_opts, sync_connect: 1000)
-        assert {:ok, pid} = start_supervised(spec(cluster_opts, pool_opts))
+      assert {:ok, pid} = start_supervised(spec(cluster_opts, pool_opts))
 
-        assert_received {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{}, %{}}
+      assert_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{}, %{}}
 
-        assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
-                        %{event_type: :host_added}}
+      assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
+                      %{event_type: :host_added}}
 
-        send(pid, {:discovered_hosts, [good_host, bad_host]})
+      send(pid, {:discovered_hosts, [good_host, bad_host]})
 
-        assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
-                        %{
-                          event_type: :host_added,
-                          host: %Host{address: {127, 0, 0, 1}, port: 8092}
-                        }}
+      assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
+                      %{
+                        event_type: :host_added,
+                        host: %Host{address: {127, 0, 0, 1}, port: 8092}
+                      }}
 
-        assert_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{},
-                        %{host: %Host{address: {127, 0, 0, 1}, port: 8092}}}
+      assert_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{},
+                      %{host: %Host{address: {127, 0, 0, 1}, port: 8092}}}
 
-        # Now remove the bad host.
-        send(pid, {:discovered_hosts, [good_host]})
+      # Now remove the bad host.
+      send(pid, {:discovered_hosts, [good_host]})
 
-        assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
-                        %{event_type: :host_removed, host: ^bad_host}}
+      assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
+                      %{event_type: :host_removed, host: ^bad_host}}
 
-        assert_receive {[:xandra, :cluster, :pool, :stopped], ^telemetry_ref, %{},
-                        %{host: %Host{address: {127, 0, 0, 1}, port: 8092}}}
+      assert_receive {[:xandra, :cluster, :pool, :stopped], ^telemetry_ref, %{},
+                      %{host: %Host{address: {127, 0, 0, 1}, port: 8092}}}
 
-        assert get_state(pid).pool_supervisor
-               |> Supervisor.which_children()
-               |> List.keyfind({{127, 0, 0, 1}, 8092}, 0) == nil
-      end
+      assert get_state(pid).pool_supervisor
+             |> Supervisor.which_children()
+             |> List.keyfind({{127, 0, 0, 1}, 8092}, 0) == nil
     end
   end
 
   describe "checkout" do
-    # TODO: remove this conditional once we depend on Elixir 1.15+, which depends on OTP 24+.
-    if System.otp_release() >= "24" do
-      test "returns the right pool", %{start_options: start_options, pool_options: pool_options} do
-        start_options = Keyword.merge(start_options, sync_connect: 1000)
-        assert {:ok, pid} = start_supervised(spec(start_options, pool_options))
+    test "returns the right pool",
+         %{cluster_options: cluster_options, pool_options: pool_options} do
+      assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
 
-        assert {:ok, pool_pid} = Pool.checkout(pid)
-        assert is_pid(pool_pid)
-      end
+      assert {:ok, pool_pid} = Pool.checkout(pid)
+      assert is_pid(pool_pid)
     end
 
     test "returns {:error, :empty} when there are no pools",
-         %{start_options: start_options, pool_options: pool_options} do
-      start_options =
-        Keyword.merge(start_options, nodes: [{~c"127.0.0.1", 8092}])
+         %{cluster_options: cluster_options, pool_options: pool_options} do
+      cluster_options =
+        Keyword.merge(cluster_options,
+          nodes: [{~c"127.0.0.1", 8092}],
+          queue_before_connecting: [timeout: 0, buffer_size: 0]
+        )
 
-      assert {:ok, pid} = start_supervised(spec(start_options, pool_options))
+      assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
 
       assert {:error, :empty} = Pool.checkout(pid)
     end
@@ -316,8 +297,8 @@ defmodule Xandra.Cluster.PoolTest do
   end
 
   defp get_state(cluster) do
-    assert {:no_state, state} = :sys.get_state(cluster)
-    state
+    assert {_state, data} = :sys.get_state(cluster)
+    data
   end
 
   defp assert_telemetry(ref, postfix) do

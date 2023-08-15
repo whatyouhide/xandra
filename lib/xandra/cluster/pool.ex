@@ -12,42 +12,41 @@ defmodule Xandra.Cluster.Pool do
   alias Xandra.Cluster.{Host, LoadBalancingPolicy}
 
   @genstatem_opts [:debug, :hibernate_after, :spawn_opt]
-  @state :no_state
 
   ## Public API
 
-  @spec start_link(keyword(), keyword()) :: GenServer.on_start()
+  @spec start_link(keyword(), keyword()) :: :gen_statem.start_ret()
   def start_link(cluster_opts, pool_opts) do
     {sync_connect_timeout, cluster_opts} = Keyword.pop!(cluster_opts, :sync_connect)
 
-    # Split out GenServer-specific options from the cluster options.
+    # Split out gen_statem-specific options from the cluster options.
     {genstatem_opts, cluster_opts} = Keyword.split(cluster_opts, @genstatem_opts)
     genstatem_opts = Keyword.merge(genstatem_opts, Keyword.take(cluster_opts, [:name]))
 
-    alias_or_nil = if sync_connect_timeout, do: alias()
+    sync_connect_ref_or_nil = if sync_connect_timeout, do: make_ref(), else: nil
 
-    start_arg = {cluster_opts, pool_opts, alias_or_nil}
+    start_arg = {cluster_opts, pool_opts, self(), sync_connect_ref_or_nil}
 
     cluster_opts
     |> Keyword.fetch(:name)
     |> case do
-      :error -> :gen_statem.start_link(__MODULE__, start_arg, genstatem_opts)
       {:ok, name} -> :gen_statem.start_link(name, __MODULE__, start_arg, genstatem_opts)
+      :error -> :gen_statem.start_link(__MODULE__, start_arg, genstatem_opts)
     end
     |> case do
-      {:ok, pid} when sync_connect_timeout == false ->
-        {:ok, pid}
-
-      {:ok, pid} ->
+      {:ok, pid} when is_integer(sync_connect_timeout) ->
         ref = Process.monitor(pid)
 
         receive do
-          :connected -> {:ok, pid}
-          {:DOWN, ^ref, _, _, reason} -> {:error, reason}
+          {^sync_connect_ref_or_nil, :connected} ->
+            Process.demonitor(ref, [:flush])
+            {:ok, pid}
+
+          {:DOWN, ^ref, _, _, _} ->
+            {:error, :sync_connect_timeout}
         after
           sync_connect_timeout ->
             Process.demonitor(ref, [:flush])
-            unalias(alias_or_nil)
             {:error, :sync_connect_timeout}
         end
 
@@ -102,10 +101,8 @@ defmodule Xandra.Cluster.Pool do
     # The number of target pools.
     :target_pools,
 
-    # A process alias if the :sync_connect is true. This process alias is the
-    # destination for the :connected message. If the :sync_connect is false,
-    # this is nil.
-    :sync_connect_alias,
+    # {ref, pid} to send back the ":connected" message to make :sync_connect_work.
+    :sync_connect_ref,
 
     # The name of the cluster (if present), only used for Telemetry events.
     :name,
@@ -114,6 +111,13 @@ defmodule Xandra.Cluster.Pool do
     # Each info map is:
     # %{pool_pid: pid(), host: Host.t(), status: :up | :down | :connected}
     peers: %{},
+
+    # A queue of requests that were received by this process *before* connecting
+    # to *any* node. We "buffer" these for a while until we establish a connection.
+    reqs_before_connecting: %{
+      queue: :queue.new(),
+      max_size: nil
+    },
 
     # Modules to swap processes when testing.
     xandra_mod: nil,
@@ -132,7 +136,7 @@ defmodule Xandra.Cluster.Pool do
   def callback_mode, do: :handle_event_function
 
   @impl true
-  def init({cluster_opts, pool_opts, sync_connect_alias_or_nil}) do
+  def init({cluster_opts, pool_opts, parent, sync_connect_ref_or_nil}) do
     Process.flag(:trap_exit, true)
 
     # Start supervisor for the pools.
@@ -145,6 +149,9 @@ defmodule Xandra.Cluster.Pool do
         {mod, opts} -> {mod, opts}
       end
 
+    queue_before_connecting_opts = Keyword.fetch!(cluster_opts, :queue_before_connecting)
+    queue_before_connecting_timeout = Keyword.fetch!(queue_before_connecting_opts, :timeout)
+
     data =
       %__MODULE__{
         pool_options: pool_opts,
@@ -155,19 +162,28 @@ defmodule Xandra.Cluster.Pool do
         xandra_mod: Keyword.fetch!(cluster_opts, :xandra_module),
         control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module),
         target_pools: Keyword.fetch!(cluster_opts, :target_pools),
-        sync_connect_alias: sync_connect_alias_or_nil,
         name: Keyword.get(cluster_opts, :name),
         pool_supervisor: pool_sup,
-        refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval)
+        refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval),
+        reqs_before_connecting: %{
+          queue: :queue.new(),
+          max_size: Keyword.fetch!(queue_before_connecting_opts, :buffer_size)
+        },
+        sync_connect_ref: sync_connect_ref_or_nil && {parent, sync_connect_ref_or_nil}
       }
 
-    {:ok, @state, data, {:next_event, :internal, :start_control_connection}}
+    actions = [
+      {:next_event, :internal, :start_control_connection},
+      {{:timeout, :flush_queue_before_connecting}, queue_before_connecting_timeout, nil}
+    ]
+
+    {:ok, :never_connected, data, actions}
   end
 
   @impl true
   def handle_event(type, event, state, data)
 
-  def handle_event(:internal, :start_control_connection, @state, data) do
+  def handle_event(:internal, :start_control_connection, _state, data) do
     case start_control_connection(data) do
       {:ok, data} ->
         {:keep_state, data}
@@ -177,25 +193,83 @@ defmodule Xandra.Cluster.Pool do
     end
   end
 
-  def handle_event({:call, from}, :checkout, @state, %__MODULE__{} = data) do
-    {query_plan, data} =
-      get_and_update_in(data.load_balancing_state, fn lb_state ->
-        data.load_balancing_module.query_plan(lb_state)
-      end)
-
-    # Find the first host in the plan for which we have a pool.
-    reply =
-      query_plan
-      |> Stream.map(fn %Host{} = host -> Map.fetch(data.peers, Host.to_peername(host)) end)
-      |> Enum.find_value(_default = {:error, :empty}, fn
-        {:ok, %{pool_pid: pid}} when is_pid(pid) -> {:ok, pid}
-        _other -> nil
-      end)
-
-    {:keep_state, data, {:reply, from, reply}}
+  def handle_event(
+        :internal,
+        :flush_queue_before_connecting,
+        _state = :has_connected_once,
+        %__MODULE__{reqs_before_connecting: nil}
+      ) do
+    :keep_state_and_data
   end
 
-  def handle_event({:call, from}, :connected_hosts, @state, %__MODULE__{} = data) do
+  def handle_event(
+        :internal,
+        :flush_queue_before_connecting,
+        _state = :has_connected_once,
+        %__MODULE__{reqs_before_connecting: %{queue: queue}} = data
+      ) do
+    {reply_actions, data} =
+      Enum.map_reduce(:queue.to_list(queue), data, fn from, data ->
+        {data, reply_action} = checkout_connection(data, from)
+        {reply_action, data}
+      end)
+
+    {:keep_state, data, reply_actions}
+  end
+
+  # If we connected once, we already flush this queue, so we ignore this timeout.
+  def handle_event(
+        {:timeout, :flush_queue_before_connecting},
+        nil,
+        _state = :has_connected_once,
+        %__MODULE__{}
+      ) do
+    :keep_state_and_data
+  end
+
+  def handle_event(
+        {:timeout, :flush_queue_before_connecting},
+        nil,
+        _state = :never_connected,
+        %__MODULE__{} = data
+      ) do
+    actions =
+      for from <- :queue.to_list(data.reqs_before_connecting.queue) do
+        {:reply, from, {:error, :empty}}
+      end
+
+    data = put_in(data.reqs_before_connecting, nil)
+
+    {:keep_state, data, actions}
+  end
+
+  # We already flushed once, so we won't keep adding requests to the queue.
+  def handle_event(
+        {:call, from},
+        :checkout,
+        _state = :never_connected,
+        %__MODULE__{reqs_before_connecting: nil}
+      ) do
+    {:keep_state_and_data, {:reply, from, {:error, :empty}}}
+  end
+
+  def handle_event({:call, from}, :checkout, _state = :never_connected, %__MODULE__{} = data) do
+    %{queue: queue, max_size: max_size} = data.reqs_before_connecting
+
+    if :queue.len(queue) == max_size do
+      {:keep_state_and_data, {:reply, from, {:error, :empty}}}
+    else
+      data = update_in(data.reqs_before_connecting.queue, &:queue.in(from, &1))
+      {:keep_state, data}
+    end
+  end
+
+  def handle_event({:call, from}, :checkout, _state = :has_connected_once, %__MODULE__{} = data) do
+    {data, reply_action} = checkout_connection(data, from)
+    {:keep_state, data, reply_action}
+  end
+
+  def handle_event({:call, from}, :connected_hosts, _state, %__MODULE__{} = data) do
     connected_hosts =
       for %{status: :connected, pool_pid: pool_pid, host: host} <- Map.values(data.peers),
           is_pid(pool_pid) do
@@ -205,7 +279,7 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state_and_data, {:reply, from, connected_hosts}}
   end
 
-  def handle_event(:info, {:host_up, %Host{} = host}, @state, %__MODULE__{} = data) do
+  def handle_event(:info, {:host_up, %Host{} = host}, _state, %__MODULE__{} = data) do
     data = update_in(data.load_balancing_state, &data.load_balancing_module.host_up(&1, host))
 
     data =
@@ -218,7 +292,7 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state, data}
   end
 
-  def handle_event(:info, {:host_down, %Host{} = host}, @state, %__MODULE__{} = data) do
+  def handle_event(:info, {:host_down, %Host{} = host}, _state, %__MODULE__{} = data) do
     data =
       update_in(data.load_balancing_state, &data.load_balancing_module.host_down(&1, host))
 
@@ -229,7 +303,7 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state, data}
   end
 
-  def handle_event(:info, {:discovered_hosts, new_peers}, @state, %__MODULE__{} = data)
+  def handle_event(:info, {:discovered_hosts, new_peers}, _state, %__MODULE__{} = data)
       when is_list(new_peers) do
     execute_telemetry(data, [:discovered_peers], %{peers: new_peers}, _extra_meta = %{})
 
@@ -259,7 +333,7 @@ defmodule Xandra.Cluster.Pool do
   def handle_event(
         :info,
         {:xandra, :connected, peername, _pid},
-        @state,
+        _state,
         %__MODULE__{} = data
       )
       when is_peername(peername) do
@@ -270,22 +344,20 @@ defmodule Xandra.Cluster.Pool do
     data =
       update_in(data.load_balancing_state, &data.load_balancing_module.host_connected(&1, host))
 
-    data =
-      if alias = data.sync_connect_alias do
-        send(alias, :connected)
-        %__MODULE__{data | sync_connect_alias: nil}
-      else
-        data
-      end
+    if data.sync_connect_ref do
+      {pid, ref} = data.sync_connect_ref
+      send(pid, {ref, :connected})
+    end
 
-    {:keep_state, data}
+    actions = [{:next_event, :internal, :flush_queue_before_connecting}]
+    {:next_state, :has_connected_once, data, actions}
   end
 
   # Sent by the connection itself.
   def handle_event(
         :info,
         {:xandra, :failed_to_connect, peername, _pid},
-        @state,
+        _state,
         %__MODULE__{} = data
       ) do
     data = put_in(data.peers[peername].status, :down)
@@ -293,17 +365,35 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state, data}
   end
 
-  def handle_event(:info, {:EXIT, _pid, reason}, @state, %__MODULE__{} = _data)
+  def handle_event(:info, {:EXIT, _pid, reason}, _state, %__MODULE__{} = _data)
       when reason in [:normal, :shutdown] or
              (is_tuple(reason) and tuple_size(reason) == 2 and elem(reason, 0) == :shutdown) do
     :keep_state_and_data
   end
 
-  def handle_event({:timeout, :reconnect_control_connection}, nil, @state, %__MODULE__{} = data) do
+  def handle_event({:timeout, :reconnect_control_connection}, nil, _state, %__MODULE__{} = data) do
     {:keep_state, data, {:next_event, :internal, :start_control_connection}}
   end
 
   ## Helpers
+
+  defp checkout_connection(data, from) do
+    {query_plan, data} =
+      get_and_update_in(data.load_balancing_state, fn lb_state ->
+        data.load_balancing_module.query_plan(lb_state)
+      end)
+
+    # Find the first host in the plan for which we have a pool.
+    reply =
+      query_plan
+      |> Stream.map(fn %Host{} = host -> Map.fetch(data.peers, Host.to_peername(host)) end)
+      |> Enum.find_value(_default = {:error, :empty}, fn
+        {:ok, %{pool_pid: pid}} when is_pid(pid) -> {:ok, pid}
+        _other -> nil
+      end)
+
+    {data, {:reply, from, reply}}
+  end
 
   defp handle_host_added(%__MODULE__{} = data, %Host{} = host) do
     data =
@@ -443,18 +533,5 @@ defmodule Xandra.Cluster.Pool do
   defp execute_telemetry(%__MODULE__{} = state, event_postfix, measurements, extra_meta) do
     meta = Map.merge(%{cluster_name: state.name, cluster_pid: self()}, extra_meta)
     :telemetry.execute([:xandra, :cluster] ++ event_postfix, measurements, meta)
-  end
-
-  # TODO: remove this check once we depend on Elixir 1.15+, which requires OTP 24+,
-  # where aliases were introduced.
-  if function_exported?(:erlang, :alias, 1) do
-    defp alias, do: :erlang.alias([:reply])
-    defp unalias(alias), do: :erlang.unalias(alias)
-  else
-    defp alias do
-      raise ArgumentError, "the :sync_connect option is only supported on Erlang/OTP 24+"
-    end
-
-    defp unalias(alias), do: raise(ArgumentError, "should never reach this")
   end
 end

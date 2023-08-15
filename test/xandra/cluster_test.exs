@@ -90,14 +90,6 @@ defmodule Xandra.ClusterTest do
       end
     end
 
-    test "validates the :sync_connect option" do
-      message = ~r/invalid value for :sync_connect option/
-
-      assert_raise NimbleOptions.ValidationError, message, fn ->
-        Xandra.Cluster.start_link(nodes: ["example.com:9042"], sync_connect: :foo)
-      end
-    end
-
     test "validates the :name option" do
       message = ~r/invalid value for :name option/
 
@@ -119,134 +111,131 @@ defmodule Xandra.ClusterTest do
     end
   end
 
-  # TODO: remove this conditional once we depend on Elixir 1.15+, which depends on OTP 24+.
-  if System.otp_release() >= "24" do
-    describe "connected_hosts/1" do
-      test "returns a list of connected %Host{} structs" do
-        opts = [
-          nodes: ["127.0.0.1:#{@port}"],
-          sync_connect: 1000
-        ]
+  describe "connected_hosts/1" do
+    test "returns a list of connected %Host{} structs" do
+      opts = [
+        nodes: ["127.0.0.1:#{@port}"],
+        sync_connect: 1000
+      ]
 
-        opts =
-          if @protocol_version do
-            Keyword.put(opts, :protocol_version, @protocol_version)
-          else
-            opts
-          end
+      opts =
+        if @protocol_version do
+          Keyword.put(opts, :protocol_version, @protocol_version)
+        else
+          opts
+        end
 
-        cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
-        assert [%Host{} = host] = Xandra.Cluster.connected_hosts(cluster)
+      assert [%Host{} = host] = Xandra.Cluster.connected_hosts(cluster)
 
-        assert host.address == {127, 0, 0, 1}
-        assert host.port == @port
-        assert host.data_center == "datacenter1"
-        assert host.rack == "rack1"
-        assert is_binary(host.release_version)
-        assert is_binary(host.host_id)
-        assert is_binary(host.schema_version)
-        assert is_struct(host.tokens, MapSet)
-      end
+      assert host.address == {127, 0, 0, 1}
+      assert host.port == @port
+      assert host.data_center == "datacenter1"
+      assert host.rack == "rack1"
+      assert is_binary(host.release_version)
+      assert is_binary(host.host_id)
+      assert is_binary(host.schema_version)
+      assert is_struct(host.tokens, MapSet)
+    end
+  end
+
+  describe "execute/3" do
+    test "executes a query" do
+      opts = [
+        nodes: ["127.0.0.1:#{@port}"],
+        sync_connect: 1000
+      ]
+
+      opts =
+        if @protocol_version do
+          Keyword.put(opts, :protocol_version, @protocol_version)
+        else
+          opts
+        end
+
+      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+
+      assert {:ok, %Xandra.Page{}} =
+               Xandra.Cluster.execute(cluster, "SELECT * FROM system.local")
+
+      assert {:ok, %Xandra.Page{}} =
+               Xandra.Cluster.execute(
+                 cluster,
+                 "SELECT * FROM system.local WHERE key = ?",
+                 _params = [{"varchar", "local"}],
+                 _options = []
+               )
     end
 
-    describe "execute/3" do
-      test "executes a query" do
-        opts = [
-          nodes: ["127.0.0.1:#{@port}"],
-          sync_connect: 1000
-        ]
+    test "returns the result directly for the bang! version" do
+      opts = [
+        nodes: ["127.0.0.1:#{@port}"],
+        sync_connect: 1000
+      ]
 
-        opts =
-          if @protocol_version do
-            Keyword.put(opts, :protocol_version, @protocol_version)
-          else
-            opts
-          end
+      opts =
+        if @protocol_version do
+          Keyword.put(opts, :protocol_version, @protocol_version)
+        else
+          opts
+        end
 
-        cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
-        assert {:ok, %Xandra.Page{}} =
-                 Xandra.Cluster.execute(cluster, "SELECT * FROM system.local")
+      assert %Xandra.Page{} = Xandra.Cluster.execute!(cluster, "SELECT * FROM system.local")
 
-        assert {:ok, %Xandra.Page{}} =
-                 Xandra.Cluster.execute(
-                   cluster,
-                   "SELECT * FROM system.local WHERE key = ?",
-                   _params = [{"varchar", "local"}],
-                   _options = []
-                 )
-      end
+      assert %Xandra.Page{} =
+               Xandra.Cluster.execute!(
+                 cluster,
+                 "SELECT * FROM system.local WHERE key = ?",
+                 _params = [{"varchar", "local"}],
+                 _options = []
+               )
+    end
+  end
 
-      test "returns the result directly for the bang! version" do
-        opts = [
-          nodes: ["127.0.0.1:#{@port}"],
-          sync_connect: 1000
-        ]
+  describe "prepare/3" do
+    test "prepares a query" do
+      opts = [
+        nodes: ["127.0.0.1:#{@port}"],
+        sync_connect: 1000
+      ]
 
-        opts =
-          if @protocol_version do
-            Keyword.put(opts, :protocol_version, @protocol_version)
-          else
-            opts
-          end
+      opts =
+        if @protocol_version do
+          Keyword.put(opts, :protocol_version, @protocol_version)
+        else
+          opts
+        end
 
-        cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
-        assert %Xandra.Page{} = Xandra.Cluster.execute!(cluster, "SELECT * FROM system.local")
+      assert {:ok, %Xandra.Prepared{} = prepared} =
+               Xandra.Cluster.prepare(cluster, "SELECT * FROM system.local")
 
-        assert %Xandra.Page{} =
-                 Xandra.Cluster.execute!(
-                   cluster,
-                   "SELECT * FROM system.local WHERE key = ?",
-                   _params = [{"varchar", "local"}],
-                   _options = []
-                 )
-      end
+      assert {:ok, _page} = Xandra.Cluster.execute(cluster, prepared)
     end
 
-    describe "prepare/3" do
-      test "prepares a query" do
-        opts = [
-          nodes: ["127.0.0.1:#{@port}"],
-          sync_connect: 1000
-        ]
+    test "returns the result directly for the bang! version" do
+      opts = [
+        nodes: ["127.0.0.1:#{@port}"],
+        sync_connect: 1000
+      ]
 
-        opts =
-          if @protocol_version do
-            Keyword.put(opts, :protocol_version, @protocol_version)
-          else
-            opts
-          end
+      opts =
+        if @protocol_version do
+          Keyword.put(opts, :protocol_version, @protocol_version)
+        else
+          opts
+        end
 
-        cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
-        assert {:ok, %Xandra.Prepared{} = prepared} =
-                 Xandra.Cluster.prepare(cluster, "SELECT * FROM system.local")
+      assert %Xandra.Prepared{} =
+               prepared = Xandra.Cluster.prepare!(cluster, "SELECT * FROM system.local")
 
-        assert {:ok, _page} = Xandra.Cluster.execute(cluster, prepared)
-      end
-
-      test "returns the result directly for the bang! version" do
-        opts = [
-          nodes: ["127.0.0.1:#{@port}"],
-          sync_connect: 1000
-        ]
-
-        opts =
-          if @protocol_version do
-            Keyword.put(opts, :protocol_version, @protocol_version)
-          else
-            opts
-          end
-
-        cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
-
-        assert %Xandra.Prepared{} =
-                 prepared = Xandra.Cluster.prepare!(cluster, "SELECT * FROM system.local")
-
-        assert {:ok, _page} = Xandra.Cluster.execute(cluster, prepared)
-      end
+      assert {:ok, _page} = Xandra.Cluster.execute(cluster, prepared)
     end
   end
 
