@@ -315,7 +315,7 @@ defmodule Xandra.Frame do
           fetch_state,
           module() | nil,
           (fetch_state -> binary())
-        ) :: {:ok, t()} | {:error, reason}
+        ) :: {:ok, t(), rest :: binary()} | {:error, reason}
         when fetch_state: term(), reason: term()
   def decode_v5(fetch_bytes_fun, fetch_state, compressor, rest_fun \\ fn _ -> "" end)
       when is_function(fetch_bytes_fun, 2) and is_atom(compressor) do
@@ -362,15 +362,11 @@ defmodule Xandra.Frame do
          rest_fun
        ) do
     if v4_fetched_body_bytes >= v4_frame_length do
-      {:ok, IO.iodata_to_binary(payload_acc)}
+      {:ok, IO.iodata_to_binary(payload_acc), rest_fun.(fetch_state)}
     else
       case decode_next_v5_wrapper(fetch_bytes_fun, fetch_state, compressor) do
         {:error, reason} ->
           {:error, reason}
-
-        {:not_self_contained, chunk, fetch_state}
-        when byte_size(chunk) + v4_fetched_body_bytes >= v4_frame_length ->
-          {:ok, IO.iodata_to_binary([payload_acc | chunk]), rest_fun.(fetch_state)}
 
         {:not_self_contained, chunk, fetch_state} ->
           decode_v5_wrapper_not_self_contained(
@@ -389,63 +385,66 @@ defmodule Xandra.Frame do
   defp decode_next_v5_wrapper(fetch_bytes_fun, fetch_state, compressor)
        when is_function(fetch_bytes_fun, 2) do
     header_size_in_bytes = if compressor, do: 8, else: 6
+    header_contents_size = header_size_in_bytes - @v5_header_crc_bytes
 
-    with {:ok, header, fetch_state} <- fetch_bytes_fun.(fetch_state, header_size_in_bytes) do
-      header_contents_size = header_size_in_bytes - @v5_header_crc_bytes
+    {:ok, header, fetch_state} =
+      fetch_bytes_fun!(fetch_bytes_fun, fetch_state, header_size_in_bytes)
 
-      <<header_contents::size(header_contents_size)-bytes,
-        crc24_of_header::@v5_header_crc_bytes-unit(8)-integer-little>> = header
+    <<header_contents::size(header_contents_size)-bytes,
+      crc24_of_header::@v5_header_crc_bytes-unit(8)-integer-little>> = header
 
-      <<header_data::size(header_contents_size)-unit(8)-integer-little>> = header_contents
+    <<header_data::size(header_contents_size)-unit(8)-integer-little>> = header_contents
 
-      if crc24_of_header != CRC.crc24(header_contents) do
-        raise "mismatching CRC24 for header"
+    if crc24_of_header != CRC.crc24(header_contents) do
+      raise "mismatching CRC24 for header"
+    end
+
+    # Cap the payload length to a max of 17 bits from header_contents.
+    payload_length = header_data &&& @max_v5_payload_size_in_bytes
+
+    # Shift the first 17 bits.
+    header_data = header_data >>> @v5_payload_length_bits
+
+    {uncompressed_payload_length, header_data} =
+      if compressor do
+        {header_data &&& @max_v5_payload_size_in_bytes, header_data >>> @v5_payload_length_bits}
+      else
+        {nil, header_data}
       end
 
-      # Cap the payload length to a max of 17 bits from header_contents.
-      payload_length = header_data &&& @max_v5_payload_size_in_bytes
+    self_contained? = (header_data &&& 1) == 1
 
-      # Shift the first 17 bits.
-      header_data = header_data >>> @v5_payload_length_bits
+    {:ok, <<payload::size(payload_length)-bytes, crc32_of_payload::32-integer-little>>,
+     fetch_state} = fetch_bytes_fun!(fetch_bytes_fun, fetch_state, payload_length + 4)
 
-      {uncompressed_payload_length, header_data} =
-        if compressor do
-          {header_data &&& @max_v5_payload_size_in_bytes, header_data >>> @v5_payload_length_bits}
-        else
-          {nil, header_data}
-        end
+    if crc32_of_payload != CRC.crc32(payload) do
+      raise "mismatching CRC32 for payload"
+    end
 
-      self_contained? = (header_data &&& 1) == 1
-
-      case fetch_bytes_fun.(fetch_state, payload_length + 4) do
-        {:ok, <<payload::size(payload_length)-bytes, crc32_of_payload::32-integer-little>>,
-         fetch_state} ->
-          if crc32_of_payload != CRC.crc32(payload) do
-            raise "mismatching CRC32 for payload"
-          end
-
-          # We should not try to decompress the payload if the uncompressed payload size
-          # is 0, apparently, which happens for stuff like void results (from empirical
-          # experience). See the Python driver as an example:
-          # https://github.com/datastax/python-driver/blob/9a645c58ca0ec57f775251f94e55c30aa837b2ad/cassandra/segment.py#L221
-          uncompressed_payload =
-            if compressor && uncompressed_payload_length > 0 do
-              compressor.decompress(
-                <<uncompressed_payload_length::32-big-unsigned, payload::binary>>
-              )
-            else
-              payload
-            end
-
-          if self_contained? do
-            {:done, uncompressed_payload, fetch_state}
-          else
-            {:not_self_contained, uncompressed_payload, fetch_state}
-          end
-
-        {:error, reason} ->
-          {:error, reason}
+    # We should not try to decompress the payload if the uncompressed payload size
+    # is 0, apparently, which happens for stuff like void results (from empirical
+    # experience). See the Python driver as an example:
+    # https://github.com/datastax/python-driver/blob/9a645c58ca0ec57f775251f94e55c30aa837b2ad/cassandra/segment.py#L221
+    uncompressed_payload =
+      if compressor && uncompressed_payload_length > 0 do
+        compressor.decompress(<<uncompressed_payload_length::32-big-unsigned, payload::binary>>)
+      else
+        payload
       end
+
+    if self_contained? do
+      {:done, uncompressed_payload, fetch_state}
+    else
+      {:not_self_contained, uncompressed_payload, fetch_state}
+    end
+  catch
+    {:error, _reason} = error -> error
+  end
+
+  defp fetch_bytes_fun!(fetch_bytes_fun, fetch_state, size) do
+    case fetch_bytes_fun.(fetch_state, size) do
+      {:ok, _, _} = result -> result
+      {:error, _reason} = error -> throw(error)
     end
   end
 

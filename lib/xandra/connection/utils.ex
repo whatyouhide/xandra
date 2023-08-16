@@ -8,7 +8,7 @@ defmodule Xandra.Connection.Utils do
           | {:error, :closed | :inet.posix()}
   def recv_frame(%Transport{} = transport, protocol_format, compressor)
       when protocol_format in [:v4_or_less, :v5_or_more] and is_atom(compressor) do
-    fetch_bytes_fun = fn fetch_state, byte_count ->
+    fetch_bytes_fun = fn :no_fetch_state = fetch_state, byte_count ->
       with {:ok, binary} <- Transport.recv(transport, byte_count, 10_000),
            do: {:ok, binary, fetch_state}
     end
