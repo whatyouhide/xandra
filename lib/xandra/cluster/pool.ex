@@ -109,7 +109,7 @@ defmodule Xandra.Cluster.Pool do
 
     # A map of peername ({address, port}) to info about that peer.
     # Each info map is:
-    # %{pool_pid: pid(), host: Host.t(), status: :up | :down | :connected}
+    # %{pool_pid: pid(), pool_ref: ref(), host: Host.t(), status: :up | :down | :connected}
     peers: %{},
 
     # A queue of requests that were received by this process *before* connecting
@@ -369,10 +369,21 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state, data}
   end
 
-  def handle_event(:info, {:EXIT, _pid, reason}, _state, %__MODULE__{} = _data)
-      when reason in [:normal, :shutdown] or
-             (is_tuple(reason) and tuple_size(reason) == 2 and elem(reason, 0) == :shutdown) do
-    :keep_state_and_data
+  # Propagate all exits by exiting with the same reason. After all, if the control
+  # connection process or the pool supervisor crash, we want to crash this so that
+  # the whole thing is restarted.
+  def handle_event(:info, {:EXIT, _pid, reason}, _state, %__MODULE__{} = _data) do
+    exit(reason)
+  end
+
+  def handle_event(:info, {:DOWN, ref, _, _, _reason}, _state, %__MODULE__{} = data) do
+    # Find the pool that went down, so that we can clean it up.
+    {peername, _info} = Enum.find(data.peers, fn {_peername, info} -> info.pool_ref == ref end)
+    data = put_in(data.peers[peername].pool_pid, nil)
+    data = put_in(data.peers[peername].pool_ref, nil)
+    data = put_in(data.peers[peername].status, :up)
+    data = maybe_start_pools(data)
+    {:keep_state, data}
   end
 
   def handle_event({:timeout, :reconnect_control_connection}, nil, _state, %__MODULE__{} = data) do
@@ -406,7 +417,12 @@ defmodule Xandra.Cluster.Pool do
     data =
       update_in(
         data.peers,
-        &Map.put(&1, Host.to_peername(host), %{host: host, status: :up, pool_pid: nil})
+        &Map.put(&1, Host.to_peername(host), %{
+          host: host,
+          status: :up,
+          pool_pid: nil,
+          pool_ref: nil
+        })
       )
 
     execute_telemetry(data, [:change_event], %{}, %{event_type: :host_added, host: host})
@@ -442,13 +458,17 @@ defmodule Xandra.Cluster.Pool do
     case Supervisor.start_child(data.pool_supervisor, pool_spec) do
       {:ok, pool} ->
         execute_telemetry(data, [:pool, :started], %{}, %{host: host})
-        put_in(data.peers[peername].pool_pid, pool)
+        pool_ref = Process.monitor(pool)
+        data = put_in(data.peers[peername].pool_pid, pool)
+        put_in(data.peers[peername].pool_ref, pool_ref)
 
       {:error, :already_present} ->
         case Supervisor.restart_child(data.pool_supervisor, _id = peername) do
           {:ok, pool} ->
             execute_telemetry(data, [:pool, :restarted], %{}, %{host: host})
-            put_in(data.peers[peername].pool_pid, pool)
+            pool_ref = Process.monitor(pool)
+            data = put_in(data.peers[peername].pool_pid, pool)
+            put_in(data.peers[peername].pool_ref, pool_ref)
 
           {:error, reason} when reason in [:running, :restarting] ->
             data
@@ -465,10 +485,15 @@ defmodule Xandra.Cluster.Pool do
   defp stop_pool(data, %Host{} = host) do
     peername = Host.to_peername(host)
 
+    Process.demonitor(data.peers[peername].pool_ref, [:flush])
+
     execute_telemetry(data, [:pool, :stopped], %{}, %{host: host})
     _ = Supervisor.terminate_child(data.pool_supervisor, peername)
 
-    put_in(data.peers[peername].pool_pid, nil)
+    data = put_in(data.peers[peername].pool_pid, nil)
+    data = put_in(data.peers[peername].pool_ref, nil)
+
+    data
   end
 
   defp maybe_start_pools(%__MODULE__{target_pools: target} = data) do
