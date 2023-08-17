@@ -50,9 +50,10 @@ services:
       context: ./test/docker
       dockerfile: scylladb.dockerfile
       args:
-        SCYLLA_VERSION: ${SCYLLA_VERSION:-2.3.1}
+        SCYLLA_VERSION: ${SCYLLA_VERSION:-5.1.6}
     ports:
       - "9062:9042"
+      - "10000:10000"
     command:
       - "--smp"
       - "1"
@@ -71,7 +72,7 @@ services:
       context: ./test/docker
       dockerfile: scylladb.dockerfile
       args:
-        SCYLLA_VERSION: ${SCYLLA_VERSION:-2.3.1}
+        SCYLLA_VERSION: ${SCYLLA_VERSION:-5.1.6}
         AUTHENTICATION: "true"
     ports:
       - "9063:9042"

@@ -73,12 +73,13 @@ defmodule Xandra.Mixfile do
 
   defp aliases() do
     [
+      test: "test --exclude scylla_specific",
       "test.scylladb": [
         fn _args ->
           System.put_env("CASSANDRA_PORT", "9062")
           System.put_env("CASSANDRA_WITH_AUTH_PORT", "9063")
         end,
-        "test --exclude cassandra_specific --exclude encryption --exclude ccm"
+        "test --exclude cassandra_specific --exclude encryption --exclude ccm --include scylla_specific"
       ],
       "test.all": fn args ->
         Mix.Task.run(:test, args)
