@@ -152,7 +152,7 @@ defmodule Xandra.Cluster.ControlConnection do
       {:noreply, state}
     else
       {:error, reason} ->
-        Transport.close(state.transport)
+        state = update_in(state.transport, &Transport.close/1)
         {:noreply, state, {:continue, {:disconnected, reason}}}
     end
   end
@@ -222,11 +222,8 @@ defmodule Xandra.Cluster.ControlConnection do
           {:ok, state, peers}
         else
           {:error, {:use_this_protocol_instead, _failed_protocol_version, proto_vsn}} ->
-            Transport.close(state.transport)
-
-            state =
-              update_in(state.connection_options, &Keyword.put(&1, :protocol_version, proto_vsn))
-
+            state = update_in(state.transport, &Transport.close/1)
+            state = put_in(state.connection_options[:protocol_version], proto_vsn)
             connect(state)
 
           {:error, reason} ->

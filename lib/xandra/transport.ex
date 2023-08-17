@@ -46,9 +46,10 @@ defmodule Xandra.Transport do
     inet_mod(transport.module).peername(socket)
   end
 
-  @spec close(t()) :: :ok
+  @spec close(t()) :: t()
   def close(%__MODULE__{} = transport) do
-    transport.module.close(transport.socket)
+    _ = transport.module.close(transport.socket)
+    %__MODULE__{transport | socket: nil}
   end
 
   defp inet_mod(:gen_tcp), do: :inet

@@ -100,7 +100,7 @@ defmodule Xandra.Connection do
               port: port
             })
 
-            :ok = Transport.close(transport)
+            _transport = Transport.close(transport)
             options = Keyword.put(options, :protocol_version, protocol_version)
             connect(options)
 
