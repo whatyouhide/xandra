@@ -377,7 +377,7 @@ defmodule Xandra.Connection do
     })
 
     if state.cluster_pid do
-      send(state.cluster_pid, {:xandra, :disconnected, {state.address, state.port}, self()})
+      send(state.cluster_pid, {:xandra, :disconnected, state.peername, self()})
     end
 
     :ok = Transport.close(state.transport)
