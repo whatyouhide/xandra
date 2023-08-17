@@ -360,6 +360,20 @@ defmodule Xandra.Cluster.Pool do
   # Sent by the connection itself.
   def handle_event(
         :info,
+        {:xandra, :disconnected, peername, _pid},
+        _state,
+        %__MODULE__{} = data
+      )
+      when is_peername(peername) do
+    # Not connected anymore, but we're not really sure if the whole host is down.
+    data = put_in(data.peers[peername].status, :up)
+    data = stop_pool(data, data.peers[peername].host)
+    {:keep_state, data}
+  end
+
+  # Sent by the connection itself.
+  def handle_event(
+        :info,
         {:xandra, :failed_to_connect, peername, _pid},
         _state,
         %__MODULE__{} = data
