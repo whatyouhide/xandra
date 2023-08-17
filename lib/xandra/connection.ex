@@ -380,7 +380,8 @@ defmodule Xandra.Connection do
       send(state.cluster_pid, {:xandra, :disconnected, state.peername, self()})
     end
 
-    :ok = Transport.close(state.transport)
+    _transport = Transport.close(state.transport)
+    :ok
   end
 
   @impl true

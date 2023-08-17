@@ -223,7 +223,10 @@ defmodule Xandra.Cluster.ControlConnection do
         else
           {:error, {:use_this_protocol_instead, _failed_protocol_version, proto_vsn}} ->
             state = update_in(state.transport, &Transport.close/1)
-            state = put_in(state.connection_options[:protocol_version], proto_vsn)
+
+            state =
+              update_in(state.connection_options, &Keyword.put(&1, :protocol_version, proto_vsn))
+
             connect(state)
 
           {:error, reason} ->

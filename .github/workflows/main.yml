@@ -75,13 +75,11 @@ jobs:
 
   test:
     name: >-
-      Test (
-      Elixir ${{ matrix.elixir }},
+      Test (Elixir ${{ matrix.elixir }},
       OTP ${{ matrix.otp }},
       C* ${{ matrix.server_versions.cassandra }},
       Scylla ${{ matrix.server_versions.scylla }},
-      Native protocol ${{ matrix.cassandra_native_protocol }}
-      )
+      Native protocol ${{ matrix.cassandra_native_protocol }})
 
     runs-on: ubuntu-20.04
 
