@@ -196,7 +196,7 @@ defmodule Xandra.Cluster.PoolTest do
       assert_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{}, %{}}
 
       # Send the DOWN event.
-      send(pid, {:host_down, host})
+      send(pid, {:host_down, host.address, host.port})
 
       assert_receive {[:xandra, :cluster, :pool, :stopped], ^telemetry_ref, %{}, meta}
       assert %Host{address: {127, 0, 0, 1}, port: @port} = meta.host
@@ -205,7 +205,7 @@ defmodule Xandra.Cluster.PoolTest do
                get_state(pid).peers[Host.to_peername(host)]
 
       # Send the UP event.
-      send(pid, {:host_up, host})
+      send(pid, {:host_up, host.address, host.port})
 
       assert_receive {[:xandra, :cluster, :pool, :restarted], ^telemetry_ref, %{}, meta}
       assert %Host{address: {127, 0, 0, 1}, port: @port} = meta.host

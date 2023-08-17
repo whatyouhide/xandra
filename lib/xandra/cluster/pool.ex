@@ -279,24 +279,28 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state_and_data, {:reply, from, connected_hosts}}
   end
 
-  def handle_event(:info, {:host_up, %Host{} = host}, _state, %__MODULE__{} = data) do
-    data = update_in(data.load_balancing_state, &data.load_balancing_module.host_up(&1, host))
-
-    data =
-      update_in(data.peers[Host.to_peername(host)], fn
-        %{status: :down} = peer -> %{peer | status: :up}
-        peer -> peer
+  def handle_event(:info, {:host_up, address, port}, _state, %__MODULE__{} = data) do
+    # Set the host's status as :up if its state had been previously marked as :down.
+    {%Host{} = host, data} =
+      get_and_update_in(data.peers[{address, port}], fn
+        %{status: :down, host: host} = peer -> {host, %{peer | status: :up}}
+        %{host: host} = peer -> {host, peer}
       end)
+
+    data = update_in(data.load_balancing_state, &data.load_balancing_module.host_up(&1, host))
 
     data = maybe_start_pools(data)
     {:keep_state, data}
   end
 
-  def handle_event(:info, {:host_down, %Host{} = host}, _state, %__MODULE__{} = data) do
-    data =
-      update_in(data.load_balancing_state, &data.load_balancing_module.host_down(&1, host))
+  def handle_event(:info, {:host_down, address, port}, _state, %__MODULE__{} = data) do
+    # Set the host's status as :down, regardless of its current state.
+    {%Host{} = host, data} =
+      get_and_update_in(data.peers[{address, port}], fn %{host: host} = peer ->
+        {host, %{peer | status: :down}}
+      end)
 
-    data = put_in(data.peers[Host.to_peername(host)].status, :down)
+    data = update_in(data.load_balancing_state, &data.load_balancing_module.host_down(&1, host))
 
     data = stop_pool(data, host)
     data = maybe_start_pools(data)
