@@ -41,24 +41,25 @@ defmodule Xandra.Connection do
         |> Keyword.merge(@forced_transport_options)
     }
 
+    state = %__MODULE__{
+      transport: transport,
+      prepared_cache: Keyword.fetch!(options, :prepared_cache),
+      compressor: compressor,
+      default_consistency: Keyword.fetch!(options, :default_consistency),
+      atom_keys?: Keyword.fetch!(options, :atom_keys),
+      current_keyspace: nil,
+      address: address,
+      port: port,
+      connection_name: connection_name,
+      cluster_pid: cluster_pid,
+      pool_index: Keyword.fetch!(options, :pool_index)
+    }
+
     case Transport.connect(transport, address, port, @default_timeout) do
       {:ok, transport} ->
         {:ok, peername} = Transport.address_and_port(transport)
 
-        state = %__MODULE__{
-          transport: transport,
-          prepared_cache: Keyword.fetch!(options, :prepared_cache),
-          compressor: compressor,
-          default_consistency: Keyword.fetch!(options, :default_consistency),
-          atom_keys?: Keyword.fetch!(options, :atom_keys),
-          current_keyspace: nil,
-          address: address,
-          port: port,
-          connection_name: connection_name,
-          cluster_pid: cluster_pid,
-          pool_index: Keyword.fetch!(options, :pool_index),
-          peername: peername
-        }
+        state = %__MODULE__{state | transport: transport, peername: peername}
 
         with {:ok, supported_options, protocol_module} <-
                Utils.request_options(transport, enforced_protocol),
@@ -71,13 +72,14 @@ defmodule Xandra.Connection do
                  compressor,
                  options
                ) do
-          :telemetry.execute([:xandra, :connected], %{}, %{
-            connection_name: connection_name,
-            address: address,
-            port: port,
-            protocol_module: protocol_module,
-            supported_options: supported_options
-          })
+          :telemetry.execute(
+            [:xandra, :connected],
+            %{},
+            telemetry_meta(state, %{
+              protocol_module: protocol_module,
+              supported_options: supported_options
+            })
+          )
 
           if cluster_pid do
             send(cluster_pid, {:xandra, :connected, peername, self()})
@@ -93,12 +95,14 @@ defmodule Xandra.Connection do
             """
 
           {:error, {:use_this_protocol_instead, failed_protocol_version, protocol_version}} ->
-            :telemetry.execute([:xandra, :debug, :downgrading_protocol], %{}, %{
-              failed_version: failed_protocol_version,
-              new_version: protocol_version,
-              address: address,
-              port: port
-            })
+            :telemetry.execute(
+              [:xandra, :debug, :downgrading_protocol],
+              %{},
+              telemetry_meta(state, %{
+                failed_version: failed_protocol_version,
+                new_version: protocol_version
+              })
+            )
 
             _transport = Transport.close(transport)
             options = Keyword.put(options, :protocol_version, protocol_version)
@@ -119,13 +123,11 @@ defmodule Xandra.Connection do
             {:error, _reason} -> address
           end
 
-        :telemetry.execute([:xandra, :failed_to_connect], %{}, %{
-          connection: self(),
-          connection_name: connection_name,
-          address: address,
-          port: port,
-          reason: reason
-        })
+        :telemetry.execute(
+          [:xandra, :failed_to_connect],
+          %{},
+          telemetry_meta(state, %{reason: reason})
+        )
 
         if cluster_pid do
           send(cluster_pid, {:xandra, :failed_to_connect, {ipfied_address, port}, self()})
@@ -193,14 +195,7 @@ defmodule Xandra.Connection do
     force? = Keyword.fetch!(options, :force)
 
     telemetry_metadata = Keyword.fetch!(options, :telemetry_metadata)
-
-    metadata = %{
-      query: prepared,
-      connection_name: state.connection_name,
-      address: state.address,
-      port: state.port,
-      extra_metadata: telemetry_metadata
-    }
+    metadata = telemetry_meta(state, %{query: prepared, extra_metadata: telemetry_metadata})
 
     case prepared_cache_lookup(state, prepared, force?) do
       {:ok, prepared} ->
@@ -293,14 +288,7 @@ defmodule Xandra.Connection do
     assert_valid_compressor(state.compressor, options[:compressor])
 
     telemetry_metadata = Keyword.fetch!(options, :telemetry_metadata)
-
-    metadata = %{
-      query: query,
-      connection_name: state.connection_name,
-      address: state.address,
-      port: state.port,
-      extra_metadata: telemetry_metadata
-    }
+    metadata = telemetry_meta(state, %{query: query, extra_metadata: telemetry_metadata})
 
     :telemetry.span(
       [:xandra, :execute_query],
@@ -354,7 +342,7 @@ defmodule Xandra.Connection do
     if warnings != [] do
       metadata =
         state
-        |> Map.take([:address, :port, :current_keyspace])
+        |> telemetry_meta(Map.take(state, [:current_keyspace]))
         |> Map.put(:query, query)
 
       :telemetry.execute([:xandra, :server_warnings], %{warnings: warnings}, metadata)
@@ -368,13 +356,7 @@ defmodule Xandra.Connection do
 
   @impl true
   def disconnect(exception, %__MODULE__{} = state) do
-    :telemetry.execute([:xandra, :disconnected], %{}, %{
-      connection: self(),
-      connection_name: state.connection_name,
-      address: state.address,
-      port: state.port,
-      reason: exception
-    })
+    :telemetry.execute([:xandra, :disconnected], %{}, telemetry_meta(state, %{reason: exception}))
 
     if state.cluster_pid do
       send(state.cluster_pid, {:xandra, :disconnected, state.peername, self()})
@@ -501,5 +483,17 @@ defmodule Xandra.Connection do
               "connection was initialized with the #{inspect(initial)} compressor " <>
               "module (which uses the #{inspect(initial_algorithm)} algorithm)"
     end
+  end
+
+  defp telemetry_meta(%__MODULE__{} = state, extra_meta) do
+    Map.merge(
+      %{
+        connection: self(),
+        connection_name: state.connection_name,
+        address: state.address,
+        port: state.port
+      },
+      extra_meta
+    )
   end
 end

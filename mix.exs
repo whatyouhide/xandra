@@ -50,7 +50,8 @@ defmodule Xandra.Mixfile do
         source_url: @repo_url,
         extras: [
           "pages/Data types comparison table.md",
-          "pages/Compatibility.md"
+          "pages/Compatibility.md",
+          "pages/Telemetry events.md"
         ]
       ]
     ]
@@ -84,7 +85,11 @@ defmodule Xandra.Mixfile do
       "test.all": fn args ->
         Mix.Task.run(:test, args)
         Mix.Task.run(:"test.scylladb", args)
-      end
+      end,
+      docs: [
+        "run pages/generate_telemetry_events_page.exs",
+        "docs"
+      ]
     ]
   end
 

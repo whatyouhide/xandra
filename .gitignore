@@ -5,3 +5,4 @@
 /priv/plts
 erl_crash.dump
 *.ez
+/pages/Telemetry events.md

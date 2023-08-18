@@ -239,7 +239,6 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp refresh_topology(%__MODULE__{} = state, new_peers) do
-    :telemetry.execute([:xandra, :cluster, :discovered_peers], %{peers: new_peers}, %{})
     send(state.cluster_pid, {:discovered_hosts, new_peers})
     state
   end
