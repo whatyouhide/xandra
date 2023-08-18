@@ -145,33 +145,6 @@ defmodule Xandra.Telemetry do
   ### Cluster Events
 
   See the "Telemetry" section in the documentation for `Xandra.Cluster`.
-
-  ### Debugging Events
-
-  These events are mostly meant for *debugging* Xandra itself and its internals.
-  You can use these events to monitor exchanges of *Cassandra Native Protocol* frames
-  between Xandra and the Cassandra server, for example.
-
-    * `[:xandra, :debug, :received_frame]` (since v0.17.0)
-      * Measurements: none
-      * Metadata:
-        * `:frame_type` - the type of the frame, for example `:READY` or `:AUTHENTICATE`
-
-    * `[:xandra, :debug, :sent_frame]` (since v0.17.0)
-      * Measurements:
-        * `:requested_options` - only for `STARTUP` frames
-        * `:protocol_module` - only for `STARTUP` frames
-      * Metadata:
-        * `:frame_type` - the type of the frame, for example `:STARTUP`
-
-    * `[:xandra, :debug, :downgrading_protocol]` (since v0.17.0)
-      * Measurements: none
-      * Metadata:
-        * `:failed_version` - the protocol version that failed
-        * `:new_version` - the protocol that we're downgrading to
-        * `:address` - the address of the node the connection is connecting to
-        * `:port` - the port of the node the connection is connecting to
-
   """
   @moduledoc since: "0.15.0"
 
