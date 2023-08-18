@@ -412,11 +412,17 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  defp queried_peer_to_host(%{"peer" => _} = peer_attrs) do
-    {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
+  defp queried_peer_to_host(%{"rpc_address" => _} = peer_attrs) do
+    {address, peer_attrs} = Map.pop!(peer_attrs, "rpc_address")
     peer_attrs = Map.put(peer_attrs, "address", address)
     queried_peer_to_host(peer_attrs)
   end
+
+  # defp queried_peer_to_host(%{"peer" => _} = peer_attrs) do
+  #   {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
+  #   peer_attrs = Map.put(peer_attrs, "address", address)
+  #   queried_peer_to_host(peer_attrs)
+  # end
 
   defp queried_peer_to_host(%{} = peer_attrs) do
     columns = [
