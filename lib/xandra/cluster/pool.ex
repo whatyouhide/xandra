@@ -467,6 +467,7 @@ defmodule Xandra.Cluster.Pool do
   defp start_pool(%__MODULE__{} = data, %Host{} = host) do
     conn_options =
       Keyword.merge(data.pool_options, nodes: [Host.format_address(host)], cluster_pid: self())
+      # Keyword.merge(data.pool_options, nodes: [host], cluster_pid: self())
 
     peername = Host.to_peername(host)
 

@@ -422,14 +422,14 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  defp queried_peer_to_host(%{"rpc_address" => rpc_address} = peer_attrs, true = use_rpc_address) when is_tuple(rpc_address) do
+  defp queried_peer_to_host(%{"rpc_address" => rpc_address} = peer_attrs, use_rpc_address) when is_tuple(rpc_address) do
     {address, peer_attrs} = Map.pop!(peer_attrs, "rpc_address")
     peer_attrs = Map.delete(peer_attrs, "peer")
     peer_attrs = Map.put(peer_attrs, "address", address)
     queried_peer_to_host(peer_attrs, use_rpc_address)
   end
 
-  defp queried_peer_to_host(%{"rpc_address" => _} = peer_attrs, true = use_rpc_address) do
+  defp queried_peer_to_host(%{"rpc_address" => _} = peer_attrs, use_rpc_address) do
     {address, peer_attrs} = Map.pop!(peer_attrs, "rpc_address")
     peer_attrs = Map.delete(peer_attrs, "peer")
     peer_attrs =
@@ -446,30 +446,55 @@ defmodule Xandra.Cluster.ControlConnection do
     queried_peer_to_host(peer_attrs, use_rpc_address)
   end
 
-  defp queried_peer_to_host(%{"peer" => peer} = peer_attrs, use_rpc_address) when is_tuple(peer) do
-    {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
-    peer_attrs = Map.delete(peer_attrs, "rpc_address")
-    peer_attrs = Map.put(peer_attrs, "address", address)
-    queried_peer_to_host(peer_attrs, use_rpc_address)
-  end
 
-  defp queried_peer_to_host(%{"peer" => _} = peer_attrs, use_rpc_address) do
-    {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
-    peer_attrs = Map.delete(peer_attrs, "rpc_address")
-    peer_attrs =
-    case :inet.parse_address(address) do
-      {:ok, valid_address_tuple} ->
-        Map.put(peer_attrs, "address", valid_address_tuple)
+  # defp queried_peer_to_host(%{"rpc_address" => rpc_address} = peer_attrs, true = use_rpc_address) when is_tuple(rpc_address) do
+  #   {address, peer_attrs} = Map.pop!(peer_attrs, "rpc_address")
+  #   peer_attrs = Map.delete(peer_attrs, "peer")
+  #   peer_attrs = Map.put(peer_attrs, "address", address)
+  #   queried_peer_to_host(peer_attrs, use_rpc_address)
+  # end
 
-      error ->
-        Logger.error("queried_peer_to_host: error converting address (#{inspect(address)}) to tuple, error: #{inspect(error)}")
-        # failed to parse, however, use what was returned in the table, see if
-        # node_validation will pass on it
-        Map.put(peer_attrs, "address", address)
-    end
+  # defp queried_peer_to_host(%{"rpc_address" => _} = peer_attrs, true = use_rpc_address) do
+  #   {address, peer_attrs} = Map.pop!(peer_attrs, "rpc_address")
+  #   peer_attrs = Map.delete(peer_attrs, "peer")
+  #   peer_attrs =
+  #   case :inet.parse_address(address) do
+  #     {:ok, valid_address_tuple} ->
+  #       Map.put(peer_attrs, "address", valid_address_tuple)
 
-    queried_peer_to_host(peer_attrs, use_rpc_address)
-  end
+  #     error ->
+  #       Logger.error("queried_peer_to_host: error converting address (#{inspect(address)}) to tuple, error: #{inspect(error)}")
+  #       # failed to parse, however, use what was returned in the table, see if
+  #       # node_validation will pass on it
+  #       Map.put(peer_attrs, "address", address)
+  #   end
+  #   queried_peer_to_host(peer_attrs, use_rpc_address)
+  # end
+
+  # defp queried_peer_to_host(%{"peer" => peer} = peer_attrs, use_rpc_address) when is_tuple(peer) do
+  #   {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
+  #   peer_attrs = Map.delete(peer_attrs, "rpc_address")
+  #   peer_attrs = Map.put(peer_attrs, "address", address)
+  #   queried_peer_to_host(peer_attrs, use_rpc_address)
+  # end
+
+  # defp queried_peer_to_host(%{"peer" => _} = peer_attrs, use_rpc_address) do
+  #   {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
+  #   peer_attrs = Map.delete(peer_attrs, "rpc_address")
+  #   peer_attrs =
+  #   case :inet.parse_address(address) do
+  #     {:ok, valid_address_tuple} ->
+  #       Map.put(peer_attrs, "address", valid_address_tuple)
+
+  #     error ->
+  #       Logger.error("queried_peer_to_host: error converting address (#{inspect(address)}) to tuple, error: #{inspect(error)}")
+  #       # failed to parse, however, use what was returned in the table, see if
+  #       # node_validation will pass on it
+  #       Map.put(peer_attrs, "address", address)
+  #   end
+
+  #   queried_peer_to_host(peer_attrs, use_rpc_address)
+  # end
 
   defp queried_peer_to_host(%{} = peer_attrs, _) do
     columns = [
