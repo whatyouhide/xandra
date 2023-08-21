@@ -44,6 +44,8 @@ defmodule Xandra.Transport do
           {:ok, {:inet.ip_address(), :inet.port_number()}} | {:error, error_reason}
   def address_and_port(%__MODULE__{socket: socket} = transport) when not is_nil(socket) do
     IO.puts("inet_mod(transport.module).peername(socket) transport.module: #{inspect(transport.module)}, socket #{inspect(socket)}")
+    IO.puts("\tinet_mod(transport.module).peername(socket): #{inspect(inet_mod(transport.module).peername(socket))}")
+
     inet_mod(transport.module).peername(socket)
   end
 
