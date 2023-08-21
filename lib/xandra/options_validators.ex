@@ -62,6 +62,28 @@ defmodule Xandra.OptionsValidators do
     end
   end
 
+  def validate_node(%Xandra.Cluster.Host{address: address, port: port}) when is_tuple(address) do
+    case :inet.ntoa(address) do
+      {:error, :einval} ->
+        {:error,
+         "expected valid address tuple, got: address: #{inspect(address)} and port: #{inspect(port)}, with error: :einval"}
+
+      _valid_address ->
+        {:ok, {address, port}}
+    end
+  end
+
+  def validate_node(%Xandra.Cluster.Host{address: address, port: port}) when is_list(address) do
+    case :inet.parse_address(address) do
+      {:ok, valid_address} ->
+        {:ok, {valid_address, port}}
+
+      error ->
+        {:error,
+         "expected valid address char list, got: address: #{inspect(address)} and port: #{inspect(port)}, with error: #{inspect(error)}"}
+    end
+  end
+
   def validate_node(other) do
     {:error, "expected node to be a string or a {ip, port} tuple, got: #{inspect(other)}"}
   end
