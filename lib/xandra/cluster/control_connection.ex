@@ -30,7 +30,7 @@ defmodule Xandra.Cluster.ControlConnection do
     connection_options: [type: :keyword_list, required: true],
     autodiscovered_nodes_port: [type: :non_neg_integer, required: true],
     refresh_topology_interval: [type: :timeout, required: true],
-    use_rpc_address_for_peer_address: [type: :boolean, default: false, required: false]
+    use_rpc_address_for_peer_address: [type: :boolean, required: true]
   ]
 
   defstruct [

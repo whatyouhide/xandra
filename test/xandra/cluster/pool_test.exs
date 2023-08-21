@@ -26,7 +26,8 @@ defmodule Xandra.Cluster.PoolTest do
       queue_before_connecting: [
         buffer_size: 100,
         timeout: 5000
-      ]
+      ],
+      use_rpc_address_for_peer_address: true
     ]
 
     pool_opts =

@@ -173,7 +173,8 @@ defmodule Xandra.Cluster.Pool do
           queue: :queue.new(),
           max_size: Keyword.fetch!(queue_before_connecting_opts, :buffer_size)
         },
-        sync_connect_ref: sync_connect_ref_or_nil && {parent, sync_connect_ref_or_nil}
+        sync_connect_ref: sync_connect_ref_or_nil && {parent, sync_connect_ref_or_nil},
+        use_rpc_address_for_peer_address: Keyword.fetch!(cluster_opts, :use_rpc_address_for_peer_address)
       }
 
     actions = [
