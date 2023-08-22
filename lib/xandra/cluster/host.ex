@@ -67,7 +67,6 @@ defmodule Xandra.Cluster.Host do
           String.t()
   def format_peername({address, port}) do
     if ip_address?(address) do
-      IO.puts("DEBUG -- format_peername - input #{inspect({address, port})} return #{:inet.ntoa(address)}:#{port}}")
       "#{:inet.ntoa(address)}:#{port}"
     else
       "#{address}:#{port}"
