@@ -34,7 +34,7 @@ defmodule Xandra.TestHelper do
     end
   end
 
-  @spec wait_for_passing(pos_integer, (() -> result)) :: result when result: var
+  @spec wait_for_passing(pos_integer, (-> result)) :: result when result: var
   def wait_for_passing(time_left, fun)
 
   def wait_for_passing(time_left, fun) when time_left < 0, do: fun.()
