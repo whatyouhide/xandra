@@ -355,7 +355,6 @@ defmodule Xandra.Cluster do
       required: false
     ],
 
-
     # Internal for testing, not exposed.
     xandra_module: [type: :atom, default: Xandra, doc: false],
     control_connection_module: [type: :atom, default: ControlConnection, doc: false],
