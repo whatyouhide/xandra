@@ -29,7 +29,8 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       refresh_topology_interval: 60_000,
       autodiscovered_nodes_port: @port,
       connection_options: [protocol_version: @protocol_version],
-      contact_node: {~c"127.0.0.1", @port}
+      contact_node: {~c"127.0.0.1", @port},
+      use_rpc_address_for_peer_address: false
     ]
 
     %{mirror_ref: mirror_ref, mirror: mirror, start_options: start_options}
