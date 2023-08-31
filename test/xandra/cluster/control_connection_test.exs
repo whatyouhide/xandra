@@ -43,6 +43,15 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert %Host{address: {127, 0, 0, 1}, data_center: "datacenter1", rack: "rack1"} = local_peer
   end
 
+  test "reports data upon successful connection with use_rpc_address_for_peer_address = true",
+       %{mirror_ref: mirror_ref, start_options: start_options} do
+    start_options = Keyword.merge(start_options, use_rpc_address_for_peer_address: true)
+
+    start_control_connection!(start_options)
+    assert_receive {^mirror_ref, {:discovered_hosts, [local_peer]}}
+    assert %Host{address: {127, 0, 0, 1}, data_center: "datacenter1", rack: "rack1"} = local_peer
+  end
+
   test "fails to start if it can't connect to the contact point node",
        %{start_options: start_options} do
     telemetry_event = [:xandra, :cluster, :control_connection, :failed_to_connect]
@@ -183,6 +192,25 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
   test "sends :discovered_hosts message when refreshing the cluster topology",
        %{mirror_ref: mirror_ref, start_options: start_options} do
+    ctrl_conn = start_control_connection!(start_options)
+    assert_receive {^mirror_ref, {:discovered_hosts, [%Host{address: {127, 0, 0, 1}}]}}
+
+    new_peers = [
+      %Host{address: {192, 168, 1, 1}, port: @port, data_center: "datacenter1"},
+      %Host{address: {192, 168, 1, 2}, port: @port, data_center: "datacenter2"}
+    ]
+
+    GenServer.cast(ctrl_conn, {:refresh_topology, new_peers})
+
+    assert_receive {^mirror_ref,
+                    {:discovered_hosts,
+                     [%Host{address: {192, 168, 1, 1}}, %Host{address: {192, 168, 1, 2}}]}}
+  end
+
+  test "sends :discovered_hosts message when refreshing the cluster topology with use_rpc_address_for_peer_address = true",
+       %{mirror_ref: mirror_ref, start_options: start_options} do
+    start_options = Keyword.merge(start_options, use_rpc_address_for_peer_address: true)
+
     ctrl_conn = start_control_connection!(start_options)
     assert_receive {^mirror_ref, {:discovered_hosts, [%Host{address: {127, 0, 0, 1}}]}}
 
