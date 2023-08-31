@@ -91,48 +91,52 @@ defmodule Xandra.Cluster.PoolTest do
                         }}
       end
     end
+    for use_rpc_address <- [true, false] do
+      test "establishes a control connection and a pool when use_rpc_address_for_peer_address is #{use_rpc_address}",
+          %{cluster_options: cluster_options, pool_options: pool_options} do
+        telemetry_ref =
+          :telemetry_test.attach_event_handlers(self(), [
+            [:xandra, :cluster, :control_connection, :connected],
+            [:xandra, :cluster, :pool, :started],
+            [:xandra, :cluster, :change_event],
+            [:xandra, :connected]
+          ])
 
-    test "establishes a control connection and a pool",
-         %{cluster_options: cluster_options, pool_options: pool_options} do
-      telemetry_ref =
-        :telemetry_test.attach_event_handlers(self(), [
-          [:xandra, :cluster, :control_connection, :connected],
-          [:xandra, :cluster, :pool, :started],
-          [:xandra, :cluster, :change_event],
-          [:xandra, :connected]
-        ])
+        use_rpc_address = unquote(use_rpc_address)
+        cluster_options = Keyword.merge(cluster_options, use_rpc_address_for_peer_address: use_rpc_address)
 
-      assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
+        assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
 
-      assert %{
-               cluster_pid: ^pid,
-               host: %Host{address: {127, 0, 0, 1}, port: @port}
-             } = assert_telemetry(telemetry_ref, [:control_connection, :connected])
+        assert %{
+                cluster_pid: ^pid,
+                host: %Host{address: {127, 0, 0, 1}, port: @port}
+              } = assert_telemetry(telemetry_ref, [:control_connection, :connected])
 
-      assert %{
-               cluster_pid: ^pid,
-               host: %Host{address: {127, 0, 0, 1}, port: @port}
-             } = assert_telemetry(telemetry_ref, [:pool, :started])
+        assert %{
+                cluster_pid: ^pid,
+                host: %Host{address: {127, 0, 0, 1}, port: @port}
+              } = assert_telemetry(telemetry_ref, [:pool, :started])
 
-      assert %{
-               event_type: :host_added,
-               cluster_pid: ^pid,
-               host: %Host{address: {127, 0, 0, 1}, port: @port}
-             } = assert_telemetry(telemetry_ref, [:change_event])
+        assert %{
+                event_type: :host_added,
+                cluster_pid: ^pid,
+                host: %Host{address: {127, 0, 0, 1}, port: @port}
+              } = assert_telemetry(telemetry_ref, [:change_event])
 
-      assert_receive {[:xandra, :connected], ^telemetry_ref, %{},
-                      %{address: ~c"127.0.0.1", port: @port}}
+        assert_receive {[:xandra, :connected], ^telemetry_ref, %{},
+                        %{address: ~c"127.0.0.1", port: @port}}
 
-      cluster_state = get_state(pid)
-      assert map_size(cluster_state.peers) == 1
+        cluster_state = get_state(pid)
+        assert map_size(cluster_state.peers) == 1
 
-      assert %{status: status, pool_pid: pool_pid, host: host} =
-               cluster_state.peers[{{127, 0, 0, 1}, @port}]
+        assert %{status: status, pool_pid: pool_pid, host: host} =
+                cluster_state.peers[{{127, 0, 0, 1}, @port}]
 
-      # Let's avoid race conditions...
-      assert status in [:up, :connected]
-      assert is_pid(pool_pid)
-      assert %Host{address: {127, 0, 0, 1}, port: @port, data_center: "datacenter1"} = host
+        # Let's avoid race conditions...
+        assert status in [:up, :connected]
+        assert is_pid(pool_pid)
+        assert %Host{address: {127, 0, 0, 1}, port: @port, data_center: "datacenter1"} = host
+      end
     end
 
     @tag :capture_log
