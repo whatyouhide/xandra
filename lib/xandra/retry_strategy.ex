@@ -139,12 +139,15 @@ defmodule Xandra.RetryStrategy do
               :error | {:retry, connection :: pid(), new_options :: keyword, new_state :: state}
 
   @doc false
-  @spec run_with_retrying(keyword, nonempty_list({pid(), Host.t()}), (-> result)) :: result when result: var
+  @spec run_with_retrying(keyword, nonempty_list({pid(), Host.t()}), (() -> result)) :: result
+        when result: var
   def run_with_retrying(options, connected_hosts, fun) do
     {conn, _host} = List.first(connected_hosts)
 
     case Keyword.pop(options, :retry_strategy) do
-      {nil, _options} -> fun.(conn)
+      {nil, _options} ->
+        fun.(conn)
+
       {retry_strategy, options} ->
         run_with_retrying(conn, connected_hosts, options, retry_strategy, fun)
     end

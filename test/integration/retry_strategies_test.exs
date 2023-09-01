@@ -4,7 +4,8 @@ defmodule Xandra.RetryStrategiesTest do
   alias Xandra.Error
 
   setup_all do
-    options = XandraTest.IntegrationCase.default_start_options()
+    options =
+      XandraTest.IntegrationCase.default_start_options()
       |> Keyword.put(:sync_connect, 1000)
 
     conn = start_supervised!({Xandra.Cluster, options})

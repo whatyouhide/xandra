@@ -75,7 +75,8 @@ defmodule Xandra.Cluster.Pool do
     :gen_statem.stop(pid, reason, timeout)
   end
 
-  @spec checkout(:gen_statem.server_ref()) :: {:ok, nonempty_list({pid(), Host.t()})} | {:error, :empty}
+  @spec checkout(:gen_statem.server_ref()) ::
+          {:ok, nonempty_list({pid(), Host.t()})} | {:error, :empty}
   def checkout(pid) do
     :gen_statem.call(pid, :checkout)
   end
