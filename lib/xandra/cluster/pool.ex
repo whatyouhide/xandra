@@ -75,7 +75,7 @@ defmodule Xandra.Cluster.Pool do
     :gen_statem.stop(pid, reason, timeout)
   end
 
-  @spec checkout(:gen_statem.server_ref()) :: {:ok, pid()} | {:error, :empty}
+  @spec checkout(:gen_statem.server_ref()) :: {:ok, nonempty_list({pid(), Host.t()})} | {:error, :empty}
   def checkout(pid) do
     :gen_statem.call(pid, :checkout)
   end
@@ -457,14 +457,24 @@ defmodule Xandra.Cluster.Pool do
         data.load_balancing_module.query_plan(lb_state)
       end)
 
-    # Find the first host in the plan for which we have a pool.
-    reply =
+    # Find all connected hosts
+    connected_hosts =
       query_plan
-      |> Stream.map(fn %Host{} = host -> Map.fetch(data.peers, Host.to_peername(host)) end)
-      |> Enum.find_value(_default = {:error, :empty}, fn
-        {:ok, %{pool_pid: pid}} when is_pid(pid) -> {:ok, pid}
-        _other -> nil
+      |> Enum.map(fn %Host{} = host -> Map.fetch(data.peers, Host.to_peername(host)) end)
+      |> Enum.map(fn
+        {:ok, %{pool_pid: pid, host: host}} ->
+          {pid, host}
+
+        _other ->
+          nil
       end)
+      |> Enum.reject(&is_nil/1)
+
+    reply =
+      case connected_hosts do
+        [] -> {:error, :empty}
+        connected_hosts -> {:ok, connected_hosts}
+      end
 
     {data, {:reply, from, reply}}
   end

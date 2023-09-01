@@ -297,7 +297,7 @@ defmodule Xandra.Cluster.PoolTest do
          %{cluster_options: cluster_options, pool_options: pool_options} do
       assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
 
-      assert {:ok, pool_pid} = Pool.checkout(pid)
+      assert {:ok, [{pool_pid, %Host{}}]} = Pool.checkout(pid)
       assert is_pid(pool_pid)
     end
 
@@ -321,7 +321,7 @@ defmodule Xandra.Cluster.PoolTest do
       cluster_options = Keyword.merge(cluster_options, sync_connect: 1000)
       cluster = start_supervised!(spec(cluster_options, pool_options))
 
-      assert {:ok, pool_pid} = Pool.checkout(cluster)
+      assert {:ok, [{pool_pid, %Host{}}]} = Pool.checkout(cluster)
       ref = Process.monitor(pool_pid)
 
       Process.exit(pool_pid, :kill)
