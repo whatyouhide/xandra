@@ -228,7 +228,6 @@ defmodule Xandra do
     Prepared,
     Page,
     PageStream,
-    RetryStrategy,
     Simple
   }
 
