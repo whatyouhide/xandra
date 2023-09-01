@@ -60,7 +60,7 @@ defmodule Xandra.Cluster.Pool do
     :gen_statem.stop(pid, reason, timeout)
   end
 
-  @spec checkout(:gen_statem.server_ref()) :: {:ok, pid()} | {:error, :empty}
+  @spec checkout(:gen_statem.server_ref()) :: {:ok, nonempty_list({pid(), Host.t()})} | {:error, :empty}
   def checkout(pid) do
     :gen_statem.call(pid, :checkout)
   end
@@ -152,25 +152,24 @@ defmodule Xandra.Cluster.Pool do
     queue_before_connecting_opts = Keyword.fetch!(cluster_opts, :queue_before_connecting)
     queue_before_connecting_timeout = Keyword.fetch!(queue_before_connecting_opts, :timeout)
 
-    data =
-      %__MODULE__{
-        pool_options: pool_opts,
-        contact_nodes: Keyword.fetch!(cluster_opts, :nodes),
-        load_balancing_module: lb_mod,
-        load_balancing_state: lb_mod.init(lb_opts),
-        autodiscovered_nodes_port: Keyword.fetch!(cluster_opts, :autodiscovered_nodes_port),
-        xandra_mod: Keyword.fetch!(cluster_opts, :xandra_module),
-        control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module),
-        target_pools: Keyword.fetch!(cluster_opts, :target_pools),
-        name: Keyword.get(cluster_opts, :name),
-        pool_supervisor: pool_sup,
-        refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval),
-        reqs_before_connecting: %{
-          queue: :queue.new(),
-          max_size: Keyword.fetch!(queue_before_connecting_opts, :buffer_size)
-        },
-        sync_connect_ref: sync_connect_ref_or_nil && {parent, sync_connect_ref_or_nil}
-      }
+    data = %__MODULE__{
+      pool_options: pool_opts,
+      contact_nodes: Keyword.fetch!(cluster_opts, :nodes),
+      load_balancing_module: lb_mod,
+      load_balancing_state: lb_mod.init(lb_opts),
+      autodiscovered_nodes_port: Keyword.fetch!(cluster_opts, :autodiscovered_nodes_port),
+      xandra_mod: Keyword.fetch!(cluster_opts, :xandra_module),
+      control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module),
+      target_pools: Keyword.fetch!(cluster_opts, :target_pools),
+      name: Keyword.get(cluster_opts, :name),
+      pool_supervisor: pool_sup,
+      refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval),
+      reqs_before_connecting: %{
+        queue: :queue.new(),
+        max_size: Keyword.fetch!(queue_before_connecting_opts, :buffer_size)
+      },
+      sync_connect_ref: sync_connect_ref_or_nil && {parent, sync_connect_ref_or_nil}
+    }
 
     actions = [
       {:next_event, :internal, :start_control_connection},
@@ -412,21 +411,30 @@ defmodule Xandra.Cluster.Pool do
         data.load_balancing_module.query_plan(lb_state)
       end)
 
-    # Find the first host in the plan for which we have a pool.
-    reply =
+    # Find all connected hosts
+    connected_hosts =
       query_plan
-      |> Stream.map(fn %Host{} = host -> Map.fetch(data.peers, Host.to_peername(host)) end)
-      |> Enum.find_value(_default = {:error, :empty}, fn
-        {:ok, %{pool_pid: pid}} when is_pid(pid) -> {:ok, pid}
-        _other -> nil
+      |> Enum.map(fn %Host{} = host -> Map.fetch(data.peers, Host.to_peername(host)) end)
+      |> Enum.map(fn
+        {:ok, %{pool_pid: pid, host: host}} ->
+          {pid, host}
+
+        _other ->
+          nil
       end)
+      |> Enum.reject(&is_nil/1)
+
+    reply =
+      case connected_hosts do
+        [] -> {:error, :empty}
+        connected_hosts -> {:ok, connected_hosts}
+      end
 
     {data, {:reply, from, reply}}
   end
 
   defp handle_host_added(%__MODULE__{} = data, %Host{} = host) do
-    data =
-      update_in(data.load_balancing_state, &data.load_balancing_module.host_added(&1, host))
+    data = update_in(data.load_balancing_state, &data.load_balancing_module.host_added(&1, host))
 
     data =
       update_in(

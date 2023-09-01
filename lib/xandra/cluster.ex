@@ -508,17 +508,24 @@ defmodule Xandra.Cluster do
   end
 
   defp with_conn_and_retrying(cluster, options, fun) do
-    RetryStrategy.run_with_retrying(options, fn -> with_conn(cluster, fun) end)
+    case Pool.checkout(cluster) do
+      {:error, :empty} ->
+        action = "checkout from cluster #{inspect(cluster)}"
+        {:error, ConnectionError.new(action, {:cluster, :not_connected})}
+
+      {:ok, connected_hosts} ->
+        RetryStrategy.run_with_retrying(options, connected_hosts, fun)
+    end
   end
 
   defp with_conn(cluster, fun) do
     case Pool.checkout(cluster) do
-      {:ok, pool} ->
-        fun.(pool)
-
       {:error, :empty} ->
         action = "checkout from cluster #{inspect(cluster)}"
         {:error, ConnectionError.new(action, {:cluster, :not_connected})}
+
+      {:ok, [{pool, _host} | _connected_hosts]} ->
+        fun.(pool)
     end
   end
 end

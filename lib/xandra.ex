@@ -1220,9 +1220,7 @@ defmodule Xandra do
     xandra_opts = NimbleOptions.validate!(xandra_opts, @execute_opts_schema)
     options = xandra_opts ++ db_conn_opts
 
-    RetryStrategy.run_with_retrying(options, fn ->
-      execute_without_retrying(conn, query, params, options)
-    end)
+    execute_without_retrying(conn, query, params, options)
   end
 
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
