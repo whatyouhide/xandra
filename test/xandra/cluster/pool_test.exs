@@ -231,8 +231,7 @@ defmodule Xandra.Cluster.PoolTest do
                status: :up,
                pool_pid: pool_pid,
                host: %Host{address: {127, 0, 0, 1}, port: @port}
-             } =
-               get_state(pid).peers[Host.to_peername(host)]
+             } = get_state(pid).peers[Host.to_peername(host)]
 
       assert is_pid(pool_pid)
     end
