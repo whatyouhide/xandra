@@ -767,7 +767,7 @@ defmodule Xandra do
   end
 
   def execute(conn, %Batch{} = batch, options) when is_list(options) do
-    execute_with_retrying(conn, batch, nil, options)
+    execute_query(conn, batch, nil, options)
   end
 
   @execute_opts_schema [
@@ -1071,12 +1071,12 @@ defmodule Xandra do
   def execute(conn, statement, params, options) when is_binary(statement) do
     query = %Simple{statement: statement}
     assert_valid_paging_state(options)
-    execute_with_retrying(conn, query, params, options)
+    execute_query(conn, query, params, options)
   end
 
   def execute(conn, %Prepared{} = prepared, params, options) do
     assert_valid_paging_state(options)
-    execute_with_retrying(conn, prepared, params, options)
+    execute_query(conn, prepared, params, options)
   end
 
   @doc """
@@ -1177,7 +1177,7 @@ defmodule Xandra do
     {xandra_opts, other_opts} = Keyword.split(options, @execute_opts_keys)
     options = NimbleOptions.validate!(xandra_opts, @execute_opts_schema) ++ other_opts
 
-    execute_without_retrying(conn, query, params, options)
+    do_execute_query(conn, query, params, options)
   end
 
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
