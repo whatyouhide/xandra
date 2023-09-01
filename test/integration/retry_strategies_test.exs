@@ -37,7 +37,9 @@ defmodule Xandra.RetryStrategiesTest do
     end
 
     assert_raise KeyError, fn ->
-      Xandra.Cluster.execute(conn, "USE nonexistent_keyspace", [], retry_strategy: CounterStrategy)
+      Xandra.Cluster.execute(conn, "USE nonexistent_keyspace", [],
+        retry_strategy: CounterStrategy
+      )
     end
 
     options = [retry_strategy: CounterStrategy, retry_count: 2]
@@ -63,7 +65,9 @@ defmodule Xandra.RetryStrategiesTest do
         "retry strategy Xandra.RetryStrategiesTest.InvalidStrategy with state %{}"
 
     assert_raise ArgumentError, message, fn ->
-      Xandra.Cluster.execute(conn, "USE nonexistend_keyspace", [], retry_strategy: InvalidStrategy)
+      Xandra.Cluster.execute(conn, "USE nonexistend_keyspace", [],
+        retry_strategy: InvalidStrategy
+      )
     end
   after
     :code.delete(InvalidStrategy)
