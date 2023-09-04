@@ -520,12 +520,12 @@ defmodule Xandra.Cluster do
 
   defp with_conn(cluster, fun) do
     case Pool.checkout(cluster) do
+      {:ok, [{pool, _host} | _connected_hosts]} ->
+        fun.(pool)
+
       {:error, :empty} ->
         action = "checkout from cluster #{inspect(cluster)}"
         {:error, ConnectionError.new(action, {:cluster, :not_connected})}
-
-      {:ok, [{pool, _host} | _connected_hosts]} ->
-        fun.(pool)
     end
   end
 end

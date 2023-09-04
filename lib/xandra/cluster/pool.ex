@@ -460,16 +460,11 @@ defmodule Xandra.Cluster.Pool do
 
     # Find all connected hosts
     connected_hosts =
-      query_plan
-      |> Enum.map(fn %Host{} = host -> Map.fetch(data.peers, Host.to_peername(host)) end)
-      |> Enum.map(fn
-        {:ok, %{pool_pid: pid, host: host}} ->
-          {pid, host}
-
-        _other ->
-          nil
-      end)
-      |> Enum.reject(&is_nil/1)
+      for host <- query_plan,
+        %{pool_pid: pid, host: host} = Map.get(data.peers, Host.to_peername(host)),
+        not is_nil(host),
+        is_pid(pid),
+        do: {pid, host}
 
     reply =
       case connected_hosts do
@@ -481,7 +476,8 @@ defmodule Xandra.Cluster.Pool do
   end
 
   defp handle_host_added(%__MODULE__{} = data, %Host{} = host) do
-    data = update_in(data.load_balancing_state, &data.load_balancing_module.host_added(&1, host))
+    data =
+      update_in(data.load_balancing_state, &data.load_balancing_module.host_added(&1, host))
 
     data =
       put_in(data.peers[Host.to_peername(host)], %{
