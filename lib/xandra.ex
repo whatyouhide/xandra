@@ -223,6 +223,7 @@ defmodule Xandra do
     Prepared,
     Page,
     PageStream,
+    RetryStrategy,
     Simple
   }
 
@@ -783,7 +784,7 @@ defmodule Xandra do
   end
 
   def execute(conn, %Batch{} = batch, options) when is_list(options) do
-    execute_query(conn, batch, nil, options)
+    execute_with_retrying(conn, batch, nil, options)
   end
 
   @execute_opts_schema [
@@ -1089,12 +1090,12 @@ defmodule Xandra do
   def execute(conn, statement, params, options) when is_binary(statement) do
     query = %Simple{statement: statement}
     assert_valid_paging_state(options)
-    execute_query(conn, query, params, options)
+    execute_with_retrying(conn, query, params, options)
   end
 
   def execute(conn, %Prepared{} = prepared, params, options) do
     assert_valid_paging_state(options)
-    execute_query(conn, prepared, params, options)
+    execute_with_retrying(conn, prepared, params, options)
   end
 
   @doc """
@@ -1214,15 +1215,17 @@ defmodule Xandra do
     end
   end
 
-  defp execute_query(conn, query, params, options) do
+  defp execute_with_retrying(conn, query, params, options) do
     {xandra_opts, db_conn_opts} = Keyword.split(options, @execute_opts_keys)
     xandra_opts = NimbleOptions.validate!(xandra_opts, @execute_opts_schema)
     options = xandra_opts ++ db_conn_opts
 
-    do_execute_query(conn, query, params, options)
+    RetryStrategy.run_with_retrying(options, fn ->
+      execute_without_retrying(conn, query, params, options)
+    end)
   end
 
-  defp do_execute_query(conn, %Batch{} = batch, nil, options) do
+  defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
     run(conn, options, fn conn ->
       case DBConnection.prepare_execute(conn, batch, nil, options) do
         {:ok, _query, %Error{reason: :unprepared}} ->
@@ -1246,7 +1249,7 @@ defmodule Xandra do
       {:error, error}
   end
 
-  defp do_execute_query(conn, %Simple{} = query, params, options) do
+  defp execute_without_retrying(conn, %Simple{} = query, params, options) do
     case DBConnection.prepare_execute(conn, query, params, options) do
       {:ok, _query, %Error{} = error} ->
         {:error, error}
@@ -1263,7 +1266,7 @@ defmodule Xandra do
       {:error, error}
   end
 
-  defp do_execute_query(conn, %Prepared{} = prepared, params, options) do
+  defp execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
     run(conn, options, fn conn ->
       case DBConnection.execute(conn, prepared, params, options) do
         {:ok, _query, %Error{reason: :unprepared}} ->

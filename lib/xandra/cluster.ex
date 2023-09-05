@@ -514,7 +514,7 @@ defmodule Xandra.Cluster do
         {:error, ConnectionError.new(action, {:cluster, :not_connected})}
 
       {:ok, connected_hosts} ->
-        RetryStrategy.run_with_retrying(options, connected_hosts, fun)
+        RetryStrategy.run_cluster_with_retrying(options, connected_hosts, fun)
     end
   end
 

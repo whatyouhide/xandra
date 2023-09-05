@@ -104,7 +104,7 @@ defmodule Xandra.RetryStrategy do
   information to the state as applicable to your retry logic in order to select the next
   host in `c:retry/3`. See ##Examples about an example.
   """
-  @callback new(connected_hosts :: [{pid(), Host.t()}], options :: keyword) :: state
+  @callback new(options :: keyword) :: state
 
   @doc """
   Determines whether to retry the failed query or return the error.
@@ -136,37 +136,96 @@ defmodule Xandra.RetryStrategy do
   access to it in this callback.
   """
   @callback retry(error :: term, options :: keyword, state) ::
-              :error | {:retry, connection :: pid(), new_options :: keyword, new_state :: state}
+              :error | {:retry, new_options :: keyword, new_state :: state}
 
   @doc false
-  @spec run_with_retrying(keyword, [{pid(), Host.t()}, ...], (-> result)) :: result
+  @spec run_with_retrying(keyword, (-> result)) :: result
         when result: var
-  def run_with_retrying(options, connected_hosts, fun) do
-    {conn, _host} = List.first(connected_hosts)
+  def run_with_retrying(options, fun) do
+    options = Keyword.put(options, :execution_level, :xandra)
 
     case Keyword.pop(options, :retry_strategy) do
       {nil, _options} ->
-        fun.(conn)
+        fun.()
 
       {retry_strategy, options} ->
-        run_with_retrying(conn, connected_hosts, options, retry_strategy, fun)
+        run_with_retrying(options, retry_strategy, fun)
     end
   end
 
-  defp run_with_retrying(conn, connected_hosts, options, retry_strategy, fun) do
-    with {:error, reason} <- fun.(conn) do
+  def run_with_retrying(options, retry_strategy, fun) do
+    with {:error, reason} <- fun.() do
       {retry_state, options} =
         Keyword.pop_lazy(options, :retrying_state, fn ->
-          retry_strategy.new(connected_hosts, options)
+          retry_strategy.new(options)
         end)
 
       case retry_strategy.retry(reason, options, retry_state) do
         :error ->
           {:error, reason}
 
-        {:retry, conn, new_options, new_retry_state} ->
+        {:retry, new_options, new_retry_state} ->
           new_options = Keyword.put(new_options, :retrying_state, new_retry_state)
-          run_with_retrying(conn, connected_hosts, new_options, retry_strategy, fun)
+          run_with_retrying(new_options, retry_strategy, fun)
+
+        other ->
+          raise ArgumentError,
+                "invalid return value #{inspect(other)} from " <>
+                  "retry strategy #{inspect(retry_strategy)} " <>
+                  "with state #{inspect(retry_state)}"
+      end
+    end
+  end
+
+  @spec run_cluster_with_retrying(Keyword.t(), [{pid(), Host.t()}, ...], (pid() -> result)) ::
+          result
+        when result: var
+  def run_cluster_with_retrying(options, connected_hosts, fun) do
+    [{conn, _host} | _connected_hosts] = connected_hosts
+
+    options =
+      Keyword.merge(options,
+        execution_level: :cluster,
+        connected_hosts: connected_hosts,
+        target_connection: conn
+      )
+
+    case Keyword.pop(options, :retry_strategy) do
+      {nil, _options} ->
+        fun.(conn)
+
+      {retry_strategy, options} ->
+        run_cluster_with_retrying(options, connected_hosts, retry_strategy, fun)
+    end
+  end
+
+  defp run_cluster_with_retrying(options, connected_hosts, retry_strategy, fun) do
+    {conn, options} =
+      case Keyword.pop(options, :target_connection) do
+        {conn, options} when is_pid(conn) ->
+          {conn, options}
+
+        {:random, options} ->
+          [{conn, _host}] = Enum.take_random(connected_hosts, 1)
+          {conn, options}
+      end
+
+    with {:error, reason} <- fun.(conn) do
+      {retry_state, options} =
+        Keyword.pop_lazy(options, :retrying_state, fn ->
+          retry_strategy.new(options)
+        end)
+
+      case retry_strategy.retry(reason, options, retry_state) do
+        :error ->
+          {:error, reason}
+
+        {:retry, new_options, new_retry_state} ->
+          new_options =
+            Keyword.put(new_options, :retrying_state, new_retry_state)
+            |> Keyword.put_new(:target_connection, :random)
+
+          run_cluster_with_retrying(new_options, connected_hosts, retry_strategy, fun)
 
         other ->
           raise ArgumentError,
