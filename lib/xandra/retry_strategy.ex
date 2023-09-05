@@ -16,51 +16,45 @@ defmodule Xandra.RetryStrategy do
   When a query fails and a retry strategy module was passed as an option, Xandra
   will:
 
-    1. invoke the `c:new/2` callback with the currently connected hosts and options
-       passed to the failing function to initialize the given retry strategy
+    1. invoke the `c:new/1` callback with options passed to the failing function
+       to initialize the given retry strategy
 
     2. ask the retry strategy whether to retry or error out (`c:retry/3`) until
        either the query succeeds or `c:retry/3` says to error out
 
-  The `c:new/2` and `c:retry/3` callbacks will be invoked in the same
+  The `c:new/1` and `c:retry/3` callbacks will be invoked in the same
   process that executed the original query.
 
-  The first argument of `c:new/2` is a list of tuples, where the first element is the
-  Xandra connection pid and the second is of `Host.t()` describing the host.
+  There are two levels where RetryStrategy is invoked, distinguishable with the
+  `:execution_level` key in the options passed to `c:new/1` and `c:retry/3`,
+  namely `:cluster` level and `:xandra` level. On `:cluster` level, you have the option
+  to select a `:target_connection` from the list of `:connected_hosts`, in order to
+  retry on a different node for instance. The `:connected_hosts` in `options` is a
+  list of tuples, where the first element is the Xandra connection pid and the
+  second is of `Host.t()` describing the host.
 
-  If `c:retry/3` says to retry a query, such query will be retried on the
-  Xandra connection that is returned by `c:retry/3`. You will need to specify which
-  host is to be retried on. For more information, see the documentation for `c:retry/3`.
+  If on `:cluster` level `c:retry/3` says to retry a query, such query can be retried on the
+  Xandra connection that is returned in the new `option` by `c:retry/3` under the `:target_connection`
+  key.
 
   ## Examples
 
-  This is an example of a retry strategy that retries a fixed number of times on
-  different hosts that are connected before failing. It reads the allowed number
-  of retries from the options.
+  This is an example of a retry strategy that retries a fixed number of times
+  before failing. It reads the allowed number of retries from the options.
 
       defmodule MyApp.CounterRetryStrategy do
         @behaviour Xandra.RetryStrategy
 
-        def new(connected_hosts, options) do
-          retries_left = Keyword.fetch!(options, :retry_count)
-
-          [_already_tried_host | remaining_hosts] = connected_hosts
-
-          %{remaining_hosts: remaining_hosts, retries_left: retries_left}
+        def new(options) do
+          Keyword.fetch!(options, :retry_count)
         end
 
-        def retry(_error, _options, %{retries_left: 0}) do
+        def retry(_error, _options, _retries_left = 0) do
           :error
         end
 
-        def retry(_error, _options, %{remaining_hosts: []}) do
-          :error
-        end
-
-        def retry(_error, options, %{remaining_hosts: remaining_hosts, retries_left: retries_left}) do
-          [{conn, _host} | remaining_hosts] = remaining_hosts
-
-          {:retry, conn, options, %{remaining_hosts: remaining_hosts, retries_left: retries_left - 1}}
+        def retry(_error, options, retries_left) do
+          {:retry, options, retries_left - 1}
         end
       end
 
@@ -72,24 +66,56 @@ defmodule Xandra.RetryStrategy do
       defmodule MyApp.DowngradingConsistencyRetryStrategy do
         @behaviour Xandra.RetryStrategy
 
-        def new(connected_hosts, options) do
-          [{conn, _host} | _rest_of_hosts] = connected_hosts
-          conn
+        def new(_options) do
+          :no_state
         end
 
-        def retry(_error, options, conn) do
+        def retry(_error, options, :no_state) do
           case Keyword.fetch(options, :consistency) do
             # No consistency was specified, so we don't bother to retry.
             :error ->
               :error
             {:ok, :all} ->
-              {:retry, conn, Keyword.put(options, :consistency, :quorum), conn}
+              {:retry, Keyword.put(options, :consistency, :quorum), :no_state}
             {:ok, _other} ->
               :error
           end
         end
       end
 
+  A particularly useful application is to retry on queries on different hosts
+  when using `Xandra.Cluster`. We can even choose not to execute on certain hosts
+  (because they may be in a different datacenter). Following example retries on all hosts
+  after the first `:connected_node` has failed:
+
+        defmodule AllNodesStrategy do
+        @behaviour Xandra.RetryStrategy
+
+        def new(options) do
+          if options[:execution_level] == :cluster do
+            [_already_tried_node | rest_of_nodes] = options[:connected_hosts]
+
+            rest_of_nodes
+          end
+        end
+
+        def retry(_error, options, state) do
+          case options[:execution_level] do
+            :xandra ->
+              :error
+
+            :cluster ->
+              case state do
+                [] ->
+                  :error
+
+                [{conn, _host} | rest_of_nodes] ->
+                  options = Keyword.put(options, :target_connection, conn)
+                  {:retry, options, rest_of_nodes}
+              end
+          end
+        end
+      end
   """
 
   alias Xandra.Cluster.Host
@@ -120,20 +146,18 @@ defmodule Xandra.RetryStrategy do
   If `:error` is returned, the function that was trying to execute the query
   will return the error to the caller instead of retrying.
 
-  If `{:retry, conn, new_options, new_state}` is returned, the function that was
+  If `{:retry, new_options, new_state}` is returned, the function that was
   trying to execute the query will be invoked again with the same query and
   `new_options` as its options. `new_state` will be used if the query fails
   again: in that case, `c:retry/3` will be invoked again with `new_state` as its
   third argument. This process will continue until either the query is executed
   successfully or this callback returns `:error`.
 
-  Note that when `{:retry, conn, new_options, new_state}` is returned, the query will
-  be executed again on the returned `conn`. This behaviour is particularly useful with
-  pooled connections, where you can specify on which Xandra connection the query should be
-  retried on by examining the `Host.t()` information to select which node to try next,
-  or on which nodes not to retry at all. Note that initially, you will need to return the
-  connections of interest in `c:new/2` as part of `state` in order to be able to have
-  access to it in this callback.
+  Note that when `execution_level: :cluster` if we would return a `:target_connection` pid,
+  the query would be retried on the specified `Xandra` connection. To select a connection pid,
+  you may use `:connected_hosts` in `options`.
+
+  When retrying on `execution_level: :xandra`, we are retrying with the exact same connection.
   """
   @callback retry(error :: term, options :: keyword, state) ::
               :error | {:retry, new_options :: keyword, new_state :: state}
