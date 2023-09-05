@@ -75,7 +75,7 @@ defmodule Xandra.RetryStrategiesTest do
 
       @impl true
       def handle_info(info, state) do
-        reply = send(state.conn, info)
+        send(state.conn, info)
         send(state.client, {:received_request, self()})
         {:noreply, state}
       end
@@ -149,7 +149,7 @@ defmodule Xandra.RetryStrategiesTest do
       {:ok, mock_cluster} =
         start_supervised({MockCluster, [nodes_count: 3, conn: conn, client: self()]})
 
-      assert {:ok, [{pid1, _host1}, {pid2, _host2}, {pid3, _host3}] = hosts} =
+      assert {:ok, [{pid1, _host1}, {pid2, _host2}, {pid3, _host3}]} =
                Xandra.Cluster.Pool.checkout(mock_cluster)
 
       assert {:error, %Xandra.Error{reason: :invalid}} =
@@ -160,6 +160,9 @@ defmodule Xandra.RetryStrategiesTest do
       assert_receive({:received_request, ^pid1})
       assert_receive({:received_request, ^pid2})
       assert_receive({:received_request, ^pid3})
+    after
+      :code.delete(AllNodesStrategy)
+      :code.purge(AllNodesStrategy)
     end
   end
 end
