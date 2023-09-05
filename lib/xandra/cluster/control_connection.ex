@@ -29,8 +29,7 @@ defmodule Xandra.Cluster.ControlConnection do
     contact_node: [type: {:tuple, [{:or, [:string, :any]}, :non_neg_integer]}, required: true],
     connection_options: [type: :keyword_list, required: true],
     autodiscovered_nodes_port: [type: :non_neg_integer, required: true],
-    refresh_topology_interval: [type: :timeout, required: true],
-    use_rpc_address_for_peer_address: [type: :boolean, required: true]
+    refresh_topology_interval: [type: :timeout, required: true]
   ]
 
   defstruct [
@@ -52,10 +51,6 @@ defmodule Xandra.Cluster.ControlConnection do
 
     # The interval at which to refresh the cluster topology.
     :refresh_topology_interval,
-
-    # In the system.peers table use the `rpc_address` column for the
-    # peer/Host address and not the `peer` column
-    :use_rpc_address_for_peer_address,
 
     # The protocol module of the node we're connected to.
     :protocol_module,
@@ -88,8 +83,6 @@ defmodule Xandra.Cluster.ControlConnection do
       contact_node: contact_node,
       autodiscovered_nodes_port: Keyword.fetch!(options, :autodiscovered_nodes_port),
       refresh_topology_interval: Keyword.fetch!(options, :refresh_topology_interval),
-      use_rpc_address_for_peer_address:
-        Keyword.fetch!(options, :use_rpc_address_for_peer_address),
       connection_options: connection_opts,
       transport: transport
     }
@@ -151,8 +144,7 @@ defmodule Xandra.Cluster.ControlConnection do
              state.autodiscovered_nodes_port,
              state.protocol_module,
              state.ip,
-             state.port,
-             state.use_rpc_address_for_peer_address
+             state.port
            ),
          :ok <- Transport.setopts(state.transport, active: :once) do
       state = refresh_topology(state, peers)
@@ -221,8 +213,7 @@ defmodule Xandra.Cluster.ControlConnection do
                  state.autodiscovered_nodes_port,
                  state.protocol_module,
                  state.ip,
-                 state.port,
-                 state.use_rpc_address_for_peer_address
+                 state.port
                ),
              :ok <- register_to_events(state),
              :ok <- Transport.setopts(state.transport, active: :once) do
@@ -360,8 +351,7 @@ defmodule Xandra.Cluster.ControlConnection do
           :inet.port_number(),
           module(),
           :inet.ip_address(),
-          :inet.port_number(),
-          boolean()
+          :inet.port_number()
         ) ::
           {:ok, [Host.t()]} | {:error, :closed | :inet.posix()}
   def fetch_cluster_topology(
@@ -369,14 +359,13 @@ defmodule Xandra.Cluster.ControlConnection do
         autodiscovered_nodes_port,
         protocol_module,
         ip,
-        port,
-        use_rpc_address
+        port
       )
       when is_integer(autodiscovered_nodes_port) and is_atom(protocol_module) do
     with {:ok, [local_node_info]} <- query(transport, protocol_module, @select_local_query),
          {:ok, peers} <- query(transport, protocol_module, @select_peers_query) do
       local_peer = %Host{
-        queried_peer_to_host(local_node_info, use_rpc_address)
+        queried_peer_to_host(local_node_info)
         | address: ip,
           port: port
       }
@@ -388,7 +377,7 @@ defmodule Xandra.Cluster.ControlConnection do
       peers =
         for peer_attrs <- peers,
             peer = %Host{
-              queried_peer_to_host(peer_attrs, use_rpc_address)
+              queried_peer_to_host(peer_attrs)
               | port: autodiscovered_nodes_port
             },
             not is_nil(peer.host_id),
@@ -426,15 +415,15 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  defp queried_peer_to_host(%{"rpc_address" => rpc_address} = peer_attrs, true = use_rpc_address)
+  defp queried_peer_to_host(%{"rpc_address" => rpc_address} = peer_attrs)
        when is_tuple(rpc_address) do
     {address, peer_attrs} = Map.pop!(peer_attrs, "rpc_address")
     peer_attrs = Map.delete(peer_attrs, "peer")
     peer_attrs = Map.put(peer_attrs, "address", address)
-    queried_peer_to_host(peer_attrs, use_rpc_address)
+    queried_peer_to_host(peer_attrs)
   end
 
-  defp queried_peer_to_host(%{"rpc_address" => _} = peer_attrs, true = use_rpc_address) do
+  defp queried_peer_to_host(%{"rpc_address" => _} = peer_attrs) do
     {address, peer_attrs} = Map.pop!(peer_attrs, "rpc_address")
     peer_attrs = Map.delete(peer_attrs, "peer")
 
@@ -453,18 +442,18 @@ defmodule Xandra.Cluster.ControlConnection do
           Map.put(peer_attrs, "address", address)
       end
 
-    queried_peer_to_host(peer_attrs, use_rpc_address)
+    queried_peer_to_host(peer_attrs)
   end
 
-  defp queried_peer_to_host(%{"peer" => peer} = peer_attrs, use_rpc_address)
+  defp queried_peer_to_host(%{"peer" => peer} = peer_attrs)
        when is_tuple(peer) do
     {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
     peer_attrs = Map.delete(peer_attrs, "rpc_address")
     peer_attrs = Map.put(peer_attrs, "address", address)
-    queried_peer_to_host(peer_attrs, use_rpc_address)
+    queried_peer_to_host(peer_attrs)
   end
 
-  defp queried_peer_to_host(%{"peer" => _} = peer_attrs, use_rpc_address) do
+  defp queried_peer_to_host(%{"peer" => _} = peer_attrs) do
     {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
     peer_attrs = Map.delete(peer_attrs, "rpc_address")
 
@@ -483,10 +472,10 @@ defmodule Xandra.Cluster.ControlConnection do
           Map.put(peer_attrs, "address", address)
       end
 
-    queried_peer_to_host(peer_attrs, use_rpc_address)
+    queried_peer_to_host(peer_attrs)
   end
 
-  defp queried_peer_to_host(%{} = peer_attrs, _) do
+  defp queried_peer_to_host(%{} = peer_attrs) do
     columns = [
       "address",
       "data_center",

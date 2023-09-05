@@ -107,10 +107,6 @@ defmodule Xandra.Cluster.Pool do
     # The name of the cluster (if present), only used for Telemetry events.
     :name,
 
-    # In the system.peers table use the `rpc_address` column for the
-    # peer/Host address and not the `peer` column
-    use_rpc_address_for_peer_address: false,
-
     # A map of peername ({address, port}) to info about that peer.
     # Each info map is:
     # %{pool_pid: pid(), pool_ref: ref(), host: Host.t(), status: :up | :down | :connected}
@@ -172,9 +168,7 @@ defmodule Xandra.Cluster.Pool do
         queue: :queue.new(),
         max_size: Keyword.fetch!(queue_before_connecting_opts, :buffer_size)
       },
-      sync_connect_ref: sync_connect_ref_or_nil && {parent, sync_connect_ref_or_nil},
-      use_rpc_address_for_peer_address:
-        Keyword.fetch!(cluster_opts, :use_rpc_address_for_peer_address)
+      sync_connect_ref: sync_connect_ref_or_nil && {parent, sync_connect_ref_or_nil}
     }
 
     actions = [
@@ -568,8 +562,7 @@ defmodule Xandra.Cluster.Pool do
       contact_node: {host.address, host.port},
       connection_options: data.pool_options,
       autodiscovered_nodes_port: data.autodiscovered_nodes_port,
-      refresh_topology_interval: data.refresh_topology_interval,
-      use_rpc_address_for_peer_address: data.use_rpc_address_for_peer_address
+      refresh_topology_interval: data.refresh_topology_interval
     ]
 
     case data.control_conn_mod.start_link(control_conn_opts) do

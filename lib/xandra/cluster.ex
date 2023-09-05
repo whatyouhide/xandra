@@ -345,15 +345,6 @@ defmodule Xandra.Cluster do
       *Available since v0.18.0*.
       """
     ],
-    use_rpc_address_for_peer_address: [
-      type: :boolean,
-      doc: """
-      In the system.peers table use the `rpc_address` column for the
-      peer/Host address and not the `peer` column
-      """,
-      default: false,
-      required: false
-    ],
 
     # Internal for testing, not exposed.
     xandra_module: [type: :atom, default: Xandra, doc: false],
