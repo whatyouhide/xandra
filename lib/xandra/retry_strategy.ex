@@ -155,7 +155,7 @@ defmodule Xandra.RetryStrategy do
 
   Note that when `execution_level: :cluster` if we would return a `:target_connection` pid,
   the query would be retried on the specified `Xandra` connection. To select a connection pid,
-  you may use `:connected_hosts` in `options`.
+  we can use `:connected_hosts` key in `options`.
 
   When retrying on `execution_level: :xandra`, we are retrying with the exact same connection.
   """
