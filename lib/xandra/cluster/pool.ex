@@ -358,7 +358,7 @@ defmodule Xandra.Cluster.Pool do
             current_state = data_acc.load_balancing_module.host_added(current_state, host)
             m = data_acc.load_balancing_module
             f = String.to_existing_atom("host_" <> Atom.to_string(status))
-            a = [current_state, host] |> IO.inspect(label: :current_state)
+            a = [current_state, host]
             apply(m, f, a)
           end)
 
