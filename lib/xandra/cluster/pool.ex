@@ -416,10 +416,10 @@ defmodule Xandra.Cluster.Pool do
     # Find all connected hosts
     connected_hosts =
       for host <- query_plan,
-        %{pool_pid: pid, host: host} = Map.get(data.peers, Host.to_peername(host)),
-        not is_nil(host),
-        is_pid(pid),
-        do: {pid, host}
+          %{pool_pid: pid, host: host} = Map.get(data.peers, Host.to_peername(host)),
+          not is_nil(host),
+          is_pid(pid),
+          do: {pid, host}
 
     reply =
       case connected_hosts do

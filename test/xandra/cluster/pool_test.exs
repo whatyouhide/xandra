@@ -315,8 +315,7 @@ defmodule Xandra.Cluster.PoolTest do
         load_balancing_state = load_balancing_state ++ new_load_balancing
         peers = Map.merge(peers, new_peers)
 
-        new_pool =
-          %Pool{pool | load_balancing_state: load_balancing_state, peers: peers}
+        new_pool = %Pool{pool | load_balancing_state: load_balancing_state, peers: peers}
 
         {:has_connected_once, new_pool}
       end)
@@ -324,8 +323,13 @@ defmodule Xandra.Cluster.PoolTest do
       assert {:ok, pids_with_hosts} = Pool.checkout(pid)
 
       assert Enum.all?(pids_with_hosts, fn {conn, %Host{}} -> is_pid(conn) end)
-      expected_set_of_connected_hosts = MapSet.new([{{127, 0, 0, 1}, @port}, {{127, 0, 0, 1}, 8092}])
-      existing_set_of_connected_hosts = MapSet.new(pids_with_hosts, fn {_, host}-> Host.to_peername(host) end)
+
+      expected_set_of_connected_hosts =
+        MapSet.new([{{127, 0, 0, 1}, @port}, {{127, 0, 0, 1}, 8092}])
+
+      existing_set_of_connected_hosts =
+        MapSet.new(pids_with_hosts, fn {_, host} -> Host.to_peername(host) end)
+
       assert existing_set_of_connected_hosts == expected_set_of_connected_hosts
     end
 
