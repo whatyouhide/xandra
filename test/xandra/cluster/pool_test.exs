@@ -294,38 +294,23 @@ defmodule Xandra.Cluster.PoolTest do
     test "returns all connected pools",
          %{cluster_options: cluster_options, pool_options: pool_options} do
       assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
-      new_hosts = Enum.map(2..4, fn n -> %Host{address: {127, 0, 0, 1}, port: 8090 + n} end)
-      statuses = [:connected, :up, :down]
-      new_load_balancing = Enum.zip(new_hosts, statuses)
 
-      new_peers =
-        Enum.map(new_hosts, fn host ->
-          {Host.to_peername(host),
-           %{host: host, pool_pid: Process.spawn(fn -> nil end, []), pool_ref: make_ref()}}
-        end)
-        |> Map.new()
+      hosts_with_statuses = [
+        {%Host{address: {127, 0, 0, 1}, port: 8091}, :up},
+        {%Host{address: {127, 0, 0, 1}, port: 8092}, :down},
+        {%Host{address: {127, 0, 0, 1}, port: 8093}, :connected}
+      ]
 
-      assert :ok = wait_until_connected(pid)
-
-      :sys.replace_state(pid, fn {:has_connected_once,
-                                  %Pool{
-                                    load_balancing_state: load_balancing_state,
-                                    peers: peers
-                                  } = pool} ->
-        load_balancing_state = load_balancing_state ++ new_load_balancing
-        peers = Map.merge(peers, new_peers)
-
-        new_pool = %Pool{pool | load_balancing_state: load_balancing_state, peers: peers}
-
-        {:has_connected_once, new_pool}
-      end)
+      wait_until_connected(pid)
+      send(pid, {:add_test_hosts, hosts_with_statuses})
 
       assert {:ok, pids_with_hosts} = Pool.checkout(pid)
+      assert is_list(pids_with_hosts)
 
       assert Enum.all?(pids_with_hosts, fn {conn, %Host{}} -> is_pid(conn) end)
 
       expected_set_of_connected_hosts =
-        MapSet.new([{{127, 0, 0, 1}, @port}, {{127, 0, 0, 1}, 8092}])
+        MapSet.new([{{127, 0, 0, 1}, @port}, {{127, 0, 0, 1}, 8093}])
 
       existing_set_of_connected_hosts =
         MapSet.new(pids_with_hosts, fn {_, host} -> Host.to_peername(host) end)
@@ -400,11 +385,6 @@ defmodule Xandra.Cluster.PoolTest do
   defp wait_until_connected(pid, 0), do: :error
 
   defp wait_until_connected(pid, retries) do
-    if is_nil(:sys.get_status(pid)) do
-      Process.sleep(10)
-      wait_until_connected(pid, retries - 1)
-    end
-
     case :sys.get_state(pid) do
       {:has_connected_once, _} ->
         :ok

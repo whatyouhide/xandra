@@ -334,6 +334,33 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state, data}
   end
 
+  # For testing purposes
+  def handle_event(:info, {:add_test_hosts, hosts_with_status}, _state, %__MODULE__{} = data) do
+    data =
+      Enum.reduce(hosts_with_status, data, fn {%Host{} = host, status}, data_acc ->
+        data_acc =
+          update_in(data_acc.load_balancing_state, fn current_state ->
+            current_state = data_acc.load_balancing_module.host_added(current_state, host)
+            m = data_acc.load_balancing_module
+            f = String.to_existing_atom("host_" <> Atom.to_string(status))
+            a = [current_state, host] |> IO.inspect(label: :current_state)
+            apply(m, f, a)
+          end)
+
+        update_in(
+          data_acc.peers,
+          &Map.put(&1, Host.to_peername(host), %{
+            host: host,
+            status: status,
+            pool_pid: Process.spawn(fn -> nil end, []),
+            pool_ref: make_ref()
+          })
+        )
+      end)
+
+    {:keep_state, data}
+  end
+
   # Sent by the connection itself.
   def handle_event(
         :info,
