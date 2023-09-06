@@ -158,7 +158,7 @@ defmodule Xandra.ClusterTest do
       cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
       assert {:ok, %Xandra.Page{}} =
-        Xandra.Cluster.execute(cluster, "SELECT * FROM system.local")
+               Xandra.Cluster.execute(cluster, "SELECT * FROM system.local")
 
       assert {:ok, %Xandra.Page{}} =
                Xandra.Cluster.execute(
