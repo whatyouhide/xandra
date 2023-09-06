@@ -84,12 +84,14 @@ defmodule Xandra.RetryStrategy do
       end
 
   A particularly useful application is to retry on queries on different hosts
-  when using `Xandra.Cluster`. We can even choose not to execute on certain hosts
+  when using `Xandra.Cluster`. We can even choose not to execute on certain `Host.t()`s
   (because they may be in a different datacenter). Following example retries on all hosts
   after the first `:connected_node` has failed:
 
-        defmodule AllNodesStrategy do
+      defmodule AllNodesStrategy do
         @behaviour Xandra.RetryStrategy
+
+        alias Xandra.Cluster.Host
 
         def new(options) do
           if options[:execution_level] == :cluster do
@@ -109,7 +111,7 @@ defmodule Xandra.RetryStrategy do
                 [] ->
                   :error
 
-                [{conn, _host} | rest_of_nodes] ->
+                [{conn, %Host{}} | rest_of_nodes] ->
                   options = Keyword.put(options, :target_connection, conn)
                   {:retry, options, rest_of_nodes}
               end
