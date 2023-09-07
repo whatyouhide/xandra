@@ -382,7 +382,7 @@ defmodule Xandra.Cluster.PoolTest do
 
   defp wait_until_connected(pid, retries \\ 10)
 
-  defp wait_until_connected(pid, 0), do: :error
+  defp wait_until_connected(_pid, 0), do: :error
 
   defp wait_until_connected(pid, retries) do
     case :sys.get_state(pid) do
