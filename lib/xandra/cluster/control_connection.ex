@@ -418,7 +418,11 @@ defmodule Xandra.Cluster.ControlConnection do
   defp queried_peer_to_host(%{"rpc_address" => rpc_address} = peer_attrs)
        when is_tuple(rpc_address) do
     {address, peer_attrs} = Map.pop!(peer_attrs, "rpc_address")
-    IO.puts("!!! peer_attrs rpc_address tuple #{address} -- type #{inspect(IEx.Helpers.i(address))}")
+
+    IO.puts(
+      "!!! peer_attrs rpc_address tuple #{address} -- type #{inspect(IEx.Helpers.i(address))}"
+    )
+
     peer_attrs = Map.delete(peer_attrs, "peer")
     peer_attrs = Map.put(peer_attrs, "address", address)
     queried_peer_to_host(peer_attrs)

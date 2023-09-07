@@ -92,7 +92,7 @@ defmodule Xandra.Cluster.PoolTest do
     end
 
     test "establishes a control connection and a pool",
-          %{cluster_options: cluster_options, pool_options: pool_options} do
+         %{cluster_options: cluster_options, pool_options: pool_options} do
       telemetry_ref =
         :telemetry_test.attach_event_handlers(self(), [
           [:xandra, :cluster, :control_connection, :connected],
@@ -104,20 +104,20 @@ defmodule Xandra.Cluster.PoolTest do
       assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
 
       assert %{
-                cluster_pid: ^pid,
-                host: %Host{address: {127, 0, 0, 1}, port: @port}
-              } = assert_telemetry(telemetry_ref, [:control_connection, :connected])
+               cluster_pid: ^pid,
+               host: %Host{address: {127, 0, 0, 1}, port: @port}
+             } = assert_telemetry(telemetry_ref, [:control_connection, :connected])
 
       assert %{
-                cluster_pid: ^pid,
-                host: %Host{address: {127, 0, 0, 1}, port: @port}
-              } = assert_telemetry(telemetry_ref, [:pool, :started])
+               cluster_pid: ^pid,
+               host: %Host{address: {127, 0, 0, 1}, port: @port}
+             } = assert_telemetry(telemetry_ref, [:pool, :started])
 
       assert %{
-                event_type: :host_added,
-                cluster_pid: ^pid,
-                host: %Host{address: {127, 0, 0, 1}, port: @port}
-              } = assert_telemetry(telemetry_ref, [:change_event])
+               event_type: :host_added,
+               cluster_pid: ^pid,
+               host: %Host{address: {127, 0, 0, 1}, port: @port}
+             } = assert_telemetry(telemetry_ref, [:change_event])
 
       assert_receive {[:xandra, :connected], ^telemetry_ref, %{},
                       %{address: ~c"127.0.0.1", port: @port}}
@@ -126,7 +126,7 @@ defmodule Xandra.Cluster.PoolTest do
       assert map_size(cluster_state.peers) == 1
 
       assert %{status: status, pool_pid: pool_pid, host: host} =
-                cluster_state.peers[{{127, 0, 0, 1}, @port}]
+               cluster_state.peers[{{127, 0, 0, 1}, @port}]
 
       # Let's avoid race conditions...
       assert status in [:up, :connected]
