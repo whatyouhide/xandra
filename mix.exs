@@ -105,7 +105,7 @@ defmodule Xandra.Mixfile do
       {:ex_doc, "~> 0.28", only: :dev},
       {:excoveralls, "~> 0.17", only: :test},
       {:mox, "~> 1.0", only: :test},
-      {:stream_data, "~> 0.5.0", only: [:dev, :test]},
+      {:stream_data, "~> 0.6.0", only: [:dev, :test]},
       {:nimble_lz4, "~> 0.1.3", only: [:dev, :test]}
     ]
   end
