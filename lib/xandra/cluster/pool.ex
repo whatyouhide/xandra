@@ -23,9 +23,9 @@ defmodule Xandra.Cluster.Pool do
     {genstatem_opts, cluster_opts} = Keyword.split(cluster_opts, @genstatem_opts)
     genstatem_opts = Keyword.merge(genstatem_opts, Keyword.take(cluster_opts, [:name]))
 
-    sync_connect_ref_or_nil = if sync_connect_timeout, do: make_ref(), else: nil
+    sync_connect_alias_or_nil = if sync_connect_timeout, do: erlang_alias([:reply]), else: nil
 
-    start_arg = {cluster_opts, pool_opts, self(), sync_connect_ref_or_nil}
+    start_arg = {cluster_opts, pool_opts, sync_connect_alias_or_nil}
 
     cluster_opts
     |> Keyword.fetch(:name)
@@ -38,20 +38,35 @@ defmodule Xandra.Cluster.Pool do
         ref = Process.monitor(pid)
 
         receive do
-          {^sync_connect_ref_or_nil, :connected} ->
+          {^sync_connect_alias_or_nil, :connected} ->
             Process.demonitor(ref, [:flush])
             {:ok, pid}
 
           {:DOWN, ^ref, _, _, _} ->
+            erlang_unalias(sync_connect_alias_or_nil)
             {:error, :sync_connect_timeout}
         after
           sync_connect_timeout ->
+            if sync_connect_alias_or_nil, do: erlang_unalias(sync_connect_alias_or_nil)
             Process.demonitor(ref, [:flush])
             {:error, :sync_connect_timeout}
         end
 
       other ->
         other
+    end
+  end
+
+  if function_exported?(:erlang, :alias, 1) do
+    defp erlang_alias(options), do: :erlang.alias(options)
+    defp erlang_unalias(options), do: :erlang.unalias(options)
+  else
+    defp erlang_alias(_options) do
+      raise ArgumentError, "the :sync_connect option requires OTP 24+"
+    end
+
+    defp erlang_unalias(_options) do
+      raise ArgumentError, "the :sync_connect option requires OTP 24+"
     end
   end
 
@@ -101,8 +116,9 @@ defmodule Xandra.Cluster.Pool do
     # The number of target pools.
     :target_pools,
 
-    # {ref, pid} to send back the ":connected" message to make :sync_connect_work.
-    :sync_connect_ref,
+    # Erlang alias to send back the ":connected" message to make :sync_connect work.
+    # This is nil if :sync_connect was not used.
+    :sync_connect_alias,
 
     # The name of the cluster (if present), only used for Telemetry events.
     :name,
@@ -136,7 +152,7 @@ defmodule Xandra.Cluster.Pool do
   def callback_mode, do: :handle_event_function
 
   @impl true
-  def init({cluster_opts, pool_opts, parent, sync_connect_ref_or_nil}) do
+  def init({cluster_opts, pool_opts, sync_connect_alias_or_nil}) do
     Process.flag(:trap_exit, true)
 
     # Start supervisor for the pools.
@@ -168,7 +184,7 @@ defmodule Xandra.Cluster.Pool do
         queue: :queue.new(),
         max_size: Keyword.fetch!(queue_before_connecting_opts, :buffer_size)
       },
-      sync_connect_ref: sync_connect_ref_or_nil && {parent, sync_connect_ref_or_nil}
+      sync_connect_alias: sync_connect_alias_or_nil
     }
 
     actions = [
@@ -347,9 +363,8 @@ defmodule Xandra.Cluster.Pool do
     data =
       update_in(data.load_balancing_state, &data.load_balancing_module.host_connected(&1, host))
 
-    if data.sync_connect_ref do
-      {pid, ref} = data.sync_connect_ref
-      send(pid, {ref, :connected})
+    if alias = data.sync_connect_alias do
+      send(alias, {alias, :connected})
     end
 
     actions = [{:next_event, :internal, :flush_queue_before_connecting}]
@@ -377,9 +392,13 @@ defmodule Xandra.Cluster.Pool do
         _state,
         %__MODULE__{} = data
       ) do
-    data = put_in(data.peers[peername].status, :down)
-    data = stop_pool(data, data.peers[peername].host)
-    {:keep_state, data}
+    if data.peers[peername] do
+      data = put_in(data.peers[peername].status, :down)
+      data = stop_pool(data, data.peers[peername].host)
+      {:keep_state, data}
+    else
+      {:keep_state, data}
+    end
   end
 
   # Handle the control connection shutting itself down.
@@ -413,6 +432,23 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state, data, {:next_event, :internal, :start_control_connection}}
   end
 
+  @impl true
+  def terminate(reason, _state, %__MODULE__{} = data) do
+    try do
+      Supervisor.stop(data.pool_supervisor)
+    catch
+      :exit, {:noproc, _} -> :ok
+    end
+
+    try do
+      data.control_conn_mod.stop(data.control_connection)
+    catch
+      :exit, {:noproc, _} -> :ok
+    end
+
+    reason
+  end
+
   ## Helpers
 
   defp checkout_connection(data, from) do
@@ -437,15 +473,12 @@ defmodule Xandra.Cluster.Pool do
     data = update_in(data.load_balancing_state, &data.load_balancing_module.host_added(&1, host))
 
     data =
-      update_in(
-        data.peers,
-        &Map.put(&1, Host.to_peername(host), %{
-          host: host,
-          status: :up,
-          pool_pid: nil,
-          pool_ref: nil
-        })
-      )
+      put_in(data.peers[Host.to_peername(host)], %{
+        host: host,
+        status: :up,
+        pool_pid: nil,
+        pool_ref: nil
+      })
 
     execute_telemetry(data, [:change_event], %{}, %{event_type: :host_added, host: host})
 

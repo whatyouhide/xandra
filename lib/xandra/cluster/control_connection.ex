@@ -96,6 +96,11 @@ defmodule Xandra.Cluster.ControlConnection do
     GenServer.start_link(__MODULE__, state, [])
   end
 
+  @spec stop(pid()) :: :ok
+  def stop(pid) do
+    GenServer.stop(pid)
+  end
+
   defp transport_from_connection_opts(connection_opts) do
     module = if connection_opts[:encryption], do: :ssl, else: :gen_tcp
 

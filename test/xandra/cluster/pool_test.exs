@@ -8,6 +8,15 @@ defmodule Xandra.Cluster.PoolTest do
   alias Xandra.Cluster.Pool
   alias Xandra.TestHelper
 
+  defmacrop assert_telemetry(postfix, meta) do
+    quote do
+      event = [:xandra, :cluster] ++ unquote(postfix)
+      telemetry_ref = var!(telemetry_ref)
+      assert_receive {^event, ^telemetry_ref, measurements, unquote(meta)}
+      assert measurements == %{}
+    end
+  end
+
   @protocol_version XandraTest.IntegrationCase.protocol_version()
   @port String.to_integer(System.get_env("CASSANDRA_PORT", "9052"))
 
@@ -102,23 +111,23 @@ defmodule Xandra.Cluster.PoolTest do
           [:xandra, :connected]
         ])
 
-      assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
+      pid = TestHelper.start_link_supervised!(spec(cluster_options, pool_options))
 
-      assert %{
-               cluster_pid: ^pid,
-               host: %Host{address: {127, 0, 0, 1}, port: @port}
-             } = assert_telemetry(telemetry_ref, [:control_connection, :connected])
+      assert_telemetry [:control_connection, :connected], %{
+        cluster_pid: ^pid,
+        host: %Host{address: {127, 0, 0, 1}, port: @port}
+      }
 
-      assert %{
-               cluster_pid: ^pid,
-               host: %Host{address: {127, 0, 0, 1}, port: @port}
-             } = assert_telemetry(telemetry_ref, [:pool, :started])
+      assert_telemetry [:pool, :started], %{
+        cluster_pid: ^pid,
+        host: %Host{address: {127, 0, 0, 1}, port: @port}
+      }
 
-      assert %{
-               event_type: :host_added,
-               cluster_pid: ^pid,
-               host: %Host{address: {127, 0, 0, 1}, port: @port}
-             } = assert_telemetry(telemetry_ref, [:change_event])
+      assert_telemetry [:change_event], %{
+        cluster_pid: ^pid,
+        event_type: :host_added,
+        host: %Host{address: {127, 0, 0, 1}, port: @port}
+      }
 
       assert_receive {[:xandra, :connected], ^telemetry_ref, %{},
                       %{address: ~c"127.0.0.1", port: @port}}
@@ -150,28 +159,28 @@ defmodule Xandra.Cluster.PoolTest do
 
       assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
 
-      assert %{
-               event_type: :host_added,
-               cluster_pid: ^pid,
-               host: %Host{address: {127, 0, 0, 1}, port: @port} = existing_host
-             } = assert_telemetry(telemetry_ref, [:change_event])
+      assert_telemetry [:change_event], %{
+        event_type: :host_added,
+        cluster_pid: ^pid,
+        host: %Host{address: {127, 0, 0, 1}, port: @port} = existing_host
+      }
 
       bad_host = %Host{address: {127, 0, 0, 1}, port: 8092}
       send(pid, {:discovered_hosts, [existing_host, bad_host]})
 
-      assert %{
-               event_type: :host_added,
-               cluster_pid: ^pid,
-               host: ^bad_host
-             } = assert_telemetry(telemetry_ref, [:change_event])
+      assert_telemetry [:change_event], %{
+        event_type: :host_added,
+        cluster_pid: ^pid,
+        host: ^bad_host
+      }
 
       assert_receive {[:xandra, :failed_to_connect], ^telemetry_ref, %{},
                       %{address: ~c"127.0.0.1", port: 8092}}
 
-      assert %{
-               cluster_pid: ^pid,
-               host: %Host{address: {127, 0, 0, 1}, port: 8092}
-             } = assert_telemetry(telemetry_ref, [:pool, :stopped])
+      assert_telemetry [:pool, :stopped], %{
+        cluster_pid: ^pid,
+        host: %Host{address: {127, 0, 0, 1}, port: 8092}
+      }
 
       cluster_state = get_state(pid)
       assert %{status: :down} = cluster_state.peers[{{127, 0, 0, 1}, 8092}]
@@ -365,17 +374,17 @@ defmodule Xandra.Cluster.PoolTest do
       cluster_options = Keyword.merge(cluster_options, sync_connect: 1000)
       cluster = TestHelper.start_link_supervised!(spec(cluster_options, pool_options))
 
-      assert_telemetry(telemetry_ref, [:control_connection, :connected])
+      assert_telemetry [:control_connection, :connected], _meta
 
       control_conn = get_state(cluster).control_connection
       control_conn_ref = Process.monitor(control_conn)
 
       :ok = :gen_tcp.shutdown(:sys.get_state(control_conn).transport.socket, :read_write)
-      assert_telemetry(telemetry_ref, [:control_connection, :disconnected])
+      assert_telemetry [:control_connection, :disconnected], _meta
       assert_receive {:DOWN, ^control_conn_ref, _, _, _}
 
       # Make sure we reconnect to the control connection.
-      assert_telemetry(telemetry_ref, [:control_connection, :connected])
+      assert_telemetry [:control_connection, :connected], _meta
     end
   end
 
@@ -389,12 +398,5 @@ defmodule Xandra.Cluster.PoolTest do
   defp get_state(cluster) do
     assert {_state, data} = :sys.get_state(cluster)
     data
-  end
-
-  defp assert_telemetry(ref, postfix) do
-    event = [:xandra, :cluster] ++ postfix
-    assert_receive {^event, ^ref, measurements, metadata}
-    assert measurements == %{}
-    metadata
   end
 end
