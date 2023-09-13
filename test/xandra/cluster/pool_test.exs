@@ -6,6 +6,7 @@ defmodule Xandra.Cluster.PoolTest do
   alias Xandra.Cluster.ControlConnection
   alias Xandra.Cluster.Host
   alias Xandra.Cluster.Pool
+  alias Xandra.TestHelper
 
   @protocol_version XandraTest.IntegrationCase.protocol_version()
   @port String.to_integer(System.get_env("CASSANDRA_PORT", "9052"))
@@ -345,11 +346,36 @@ defmodule Xandra.Cluster.PoolTest do
       cluster_ref = Process.monitor(cluster)
 
       control_conn = get_state(cluster).control_connection
-      ref = Process.monitor(control_conn)
+      control_conn_ref = Process.monitor(control_conn)
       Process.exit(control_conn, :kill)
-      assert_receive {:DOWN, ^ref, _, _, _}
+      assert_receive {:DOWN, ^control_conn_ref, _, _, _}
 
       assert_receive {:DOWN, ^cluster_ref, _, _, :killed}
+    end
+
+    @tag :capture_log
+    test "if the control connection shuts down with :closed, the pool is fine and starts a new one",
+         %{cluster_options: cluster_options, pool_options: pool_options} do
+      telemetry_ref =
+        :telemetry_test.attach_event_handlers(self(), [
+          [:xandra, :cluster, :control_connection, :connected],
+          [:xandra, :cluster, :control_connection, :disconnected]
+        ])
+
+      cluster_options = Keyword.merge(cluster_options, sync_connect: 1000)
+      cluster = TestHelper.start_link_supervised!(spec(cluster_options, pool_options))
+
+      assert_telemetry(telemetry_ref, [:control_connection, :connected])
+
+      control_conn = get_state(cluster).control_connection
+      control_conn_ref = Process.monitor(control_conn)
+
+      :ok = :gen_tcp.shutdown(:sys.get_state(control_conn).transport.socket, :read_write)
+      assert_telemetry(telemetry_ref, [:control_connection, :disconnected])
+      assert_receive {:DOWN, ^control_conn_ref, _, _, _}
+
+      # Make sure we reconnect to the control connection.
+      assert_telemetry(telemetry_ref, [:control_connection, :connected])
     end
   end
 

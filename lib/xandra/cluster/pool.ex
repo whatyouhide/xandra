@@ -382,8 +382,18 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state, data}
   end
 
-  # Propagate all exits by exiting with the same reason. After all, if the control
-  # connection process or the pool supervisor crash, we want to crash this so that
+  # Handle the control connection shutting itself down.
+  def handle_event(
+        :info,
+        {:EXIT, control_connection_pid, {:shutdown, _reason}},
+        _state,
+        %__MODULE__{control_connection: control_connection_pid}
+      ) do
+    {:keep_state_and_data, {:next_event, :internal, :start_control_connection}}
+  end
+
+  # Propagate all unhandled exits by exiting with the same reason. After all, if the control
+  # connection process or the pool supervisor *crash*, we want to crash this so that
   # the whole thing is restarted.
   def handle_event(:info, {:EXIT, _pid, reason}, _state, %__MODULE__{} = _data) do
     exit(reason)

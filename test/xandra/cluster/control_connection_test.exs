@@ -1,5 +1,7 @@
 defmodule Xandra.Cluster.ControlConnectionTest do
-  use ExUnit.Case, async: true
+  # We keep this as not async because we could have Telemetry events from other
+  # tests that interfere with this one.
+  use ExUnit.Case, async: false
 
   import ExUnit.CaptureLog
 
