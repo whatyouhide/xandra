@@ -7,6 +7,38 @@ defmodule Xandra.Cluster.Host do
   """
   @moduledoc since: "0.15.0"
 
+  @typedoc """
+  The type for the host struct.
+
+  ## Fields
+
+    * `:address` - the address of the host. It can be either an IP address
+      or a hostname. If Xandra managed to *connect* to this host, then the `:address` will
+      be the actual IP peer (see `:inet.peername/1`). Otherwise, the `:address` will be
+      the parsed IP or the charlist hostname. For example, if you pass `~c"10.0.2.1"` as
+      the address, Xandra will normalize it to `{10, 0, 2, 1}`.
+
+    * `:port` - the port of the host.
+
+    * `:data_center` - the data center of the host, as found in the `system.local` or
+      `system.peers` table.
+
+    * `:host_id` - the ID of the host, as found in the `system.local` or
+      `system.peers` table.
+
+    * `:rack` - the rack of the host, as found in the `system.local` or
+      `system.peers` table.
+
+    * `:release_version` - the release version of the host, as found in the `system.local` or
+      `system.peers` table.
+
+    * `:schema_version` - the schema version of the host, as found in the `system.local` or
+      `system.peers` table.
+
+    * `:tokens` - the tokens held by the host, as found in the `system.local` or
+      `system.peers` table.
+
+  """
   @typedoc since: "0.15.0"
   @type t() :: %__MODULE__{
           address: :inet.ip_address() | :inet.hostname(),

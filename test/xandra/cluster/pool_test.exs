@@ -76,7 +76,7 @@ defmodule Xandra.Cluster.PoolTest do
                       %{
                         reason: :econnrefused,
                         cluster_pid: ^pid,
-                        host: %Host{address: ~c"127.0.0.1", port: 8091}
+                        host: %Host{address: {127, 0, 0, 1}, port: 8091}
                       }}
 
       # Then, the contact nodes.
@@ -86,7 +86,7 @@ defmodule Xandra.Cluster.PoolTest do
                         %{
                           reason: :econnrefused,
                           cluster_pid: ^pid,
-                          host: %Host{address: ~c"127.0.0.1", port: ^port}
+                          host: %Host{address: {127, 0, 0, 1}, port: ^port}
                         }}
       end
     end

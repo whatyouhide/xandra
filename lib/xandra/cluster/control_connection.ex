@@ -26,9 +26,15 @@ defmodule Xandra.Cluster.ControlConnection do
   @opts_schema [
     cluster_pid: [type: :pid, required: true],
     cluster_name: [type: :any, required: true],
-    contact_node: [type: {:tuple, [{:or, [:string, :any]}, :non_neg_integer]}, required: true],
     connection_options: [type: :keyword_list, required: true],
-    autodiscovered_nodes_port: [type: :non_neg_integer, required: true],
+    contact_node: [
+      type: {:custom, Xandra.OptionsValidators, :validate_contact_node, []},
+      required: true
+    ],
+    autodiscovered_nodes_port: [
+      type: {:custom, Xandra.OptionsValidators, :validate_port, []},
+      required: true
+    ],
     refresh_topology_interval: [type: :timeout, required: true]
   ]
 
@@ -138,16 +144,9 @@ defmodule Xandra.Cluster.ControlConnection do
   def handle_info(:refresh_topology, %__MODULE__{} = state) do
     with :ok <- Transport.setopts(state.transport, active: false),
          :ok <- assert_no_transport_message(state.transport.socket),
-         {:ok, peers} <-
-           fetch_cluster_topology(
-             state.transport,
-             state.autodiscovered_nodes_port,
-             state.protocol_module,
-             state.ip,
-             state.port
-           ),
+         {:ok, local_host, peers} <- fetch_cluster_topology(state),
          :ok <- Transport.setopts(state.transport, active: :once) do
-      state = refresh_topology(state, peers)
+      state = refresh_topology(state, [local_host | peers])
       schedule_refresh_topology(state.refresh_topology_interval)
       {:noreply, state}
     else
@@ -180,6 +179,7 @@ defmodule Xandra.Cluster.ControlConnection do
     {:noreply, state}
   end
 
+  # This is here only for making it easier to test stuff.
   @impl true
   def handle_cast({:refresh_topology, peers}, %__MODULE__{} = state) do
     {:noreply, refresh_topology(state, peers)}
@@ -193,12 +193,7 @@ defmodule Xandra.Cluster.ControlConnection do
     # A nil :protocol_version means "negotiate". A non-nil one means "enforce".
     proto_vsn = Keyword.get(options, :protocol_version)
 
-    case Transport.connect(
-           transport,
-           host.address,
-           host.port,
-           @default_connect_timeout
-         ) do
+    case Transport.connect(transport, host.address, host.port, @default_connect_timeout) do
       {:ok, transport} ->
         state = %__MODULE__{state | transport: transport}
 
@@ -207,19 +202,11 @@ defmodule Xandra.Cluster.ControlConnection do
              :ok <- startup_connection(state, supported_opts),
              {:ok, {local_address, local_port}} <- Transport.address_and_port(transport),
              state = %__MODULE__{state | ip: local_address, port: local_port},
-             {:ok, peers} <-
-               fetch_cluster_topology(
-                 transport,
-                 state.autodiscovered_nodes_port,
-                 state.protocol_module,
-                 state.ip,
-                 state.port
-               ),
+             {:ok, local_host, peers} <- fetch_cluster_topology(state),
              :ok <- register_to_events(state),
              :ok <- Transport.setopts(state.transport, active: :once) do
-          [local_host | _] = peers
           state = %__MODULE__{state | ip: local_host.address, port: local_host.port}
-          {:ok, state, peers}
+          {:ok, state, [local_host | peers]}
         else
           {:error, {:use_this_protocol_instead, _failed_protocol_version, proto_vsn}} ->
             state = update_in(state.transport, &Transport.close/1)
@@ -335,39 +322,30 @@ defmodule Xandra.Cluster.ControlConnection do
 
   # https://docs.datastax.com/en/cql-oss/3.3/cql/cql_using/useQuerySystemTableCluster.html
   @select_peers_query """
-  SELECT * FROM system.peers
+  SELECT data_center, host_id, rack, release_version, schema_version, tokens, rpc_address, peer
+  FROM system.peers
   """
 
   @select_local_query """
-  SELECT data_center, host_id, rack, release_version, schema_version, tokens FROM system.local
+  SELECT data_center, host_id, rack, release_version, schema_version, tokens
+  FROM system.local
   """
 
-  @doc """
-  Discover the peers in the same data center as the node we're connected to.
-  """
-  @spec fetch_cluster_topology(
-          Transport.t(),
-          :inet.port_number(),
-          module(),
-          :inet.ip_address(),
-          :inet.port_number()
-        ) ::
-          {:ok, [Host.t()]} | {:error, :closed | :inet.posix()}
-  def fetch_cluster_topology(
-        %Transport{} = transport,
-        autodiscovered_nodes_port,
-        protocol_module,
-        ip,
-        port
-      )
-      when is_integer(autodiscovered_nodes_port) and is_atom(protocol_module) do
+  defp fetch_cluster_topology(%__MODULE__{} = state) do
+    %__MODULE__{
+      transport: transport,
+      autodiscovered_nodes_port: autodiscovered_nodes_port,
+      protocol_module: protocol_module,
+      ip: ip,
+      port: port
+    } = state
+
     with {:ok, [local_node_info]} <- query(transport, protocol_module, @select_local_query),
          {:ok, peers} <- query(transport, protocol_module, @select_peers_query) do
-      local_peer = %Host{
-        queried_peer_to_host(local_node_info)
-        | address: ip,
-          port: port
-      }
+      local_peer =
+        local_node_info
+        |> Map.put("rpc_address", ip)
+        |> queried_peer_to_host(port)
 
       # We filter out the peers with null host_id because they seem to be nodes that are down or
       # decommissioned but not removed from the cluster. See
@@ -375,14 +353,11 @@ defmodule Xandra.Cluster.ControlConnection do
       # https://user.cassandra.apache.narkive.com/APRtj5hb/system-peers-and-decommissioned-nodes.
       peers =
         for peer_attrs <- peers,
-            peer = %Host{
-              queried_peer_to_host(peer_attrs)
-              | port: autodiscovered_nodes_port
-            },
+            peer = queried_peer_to_host(peer_attrs, autodiscovered_nodes_port),
             not is_nil(peer.host_id),
             do: peer
 
-      {:ok, [local_peer | peers]}
+      {:ok, local_peer, peers}
     end
   end
 
@@ -414,81 +389,31 @@ defmodule Xandra.Cluster.ControlConnection do
     end
   end
 
-  defp queried_peer_to_host(%{"rpc_address" => rpc_address} = peer_attrs)
+  defp queried_peer_to_host(%{"rpc_address" => rpc_address} = peer_attrs, port)
        when is_tuple(rpc_address) do
-    {address, peer_attrs} = Map.pop!(peer_attrs, "rpc_address")
-    peer_attrs = Map.delete(peer_attrs, "peer")
-    peer_attrs = Map.put(peer_attrs, "address", address)
-    queried_peer_to_host(peer_attrs)
+    %Host{
+      address: rpc_address,
+      port: port,
+      data_center: Map.fetch!(peer_attrs, "data_center"),
+      host_id: Map.fetch!(peer_attrs, "host_id"),
+      rack: Map.fetch!(peer_attrs, "rack"),
+      release_version: Map.fetch!(peer_attrs, "release_version"),
+      schema_version: Map.fetch!(peer_attrs, "schema_version"),
+      tokens: Map.fetch!(peer_attrs, "tokens")
+    }
   end
 
-  defp queried_peer_to_host(%{"rpc_address" => _} = peer_attrs) do
-    {address, peer_attrs} = Map.pop!(peer_attrs, "rpc_address")
-    peer_attrs = Map.delete(peer_attrs, "peer")
-
-    peer_attrs =
-      case :inet.parse_address(address) do
-        {:ok, valid_address_tuple} ->
-          Map.put(peer_attrs, "address", valid_address_tuple)
-
-        error ->
-          Logger.error(
-            "queried_peer_to_host: error converting address (#{inspect(address)}) to tuple, error: #{inspect(error)}"
-          )
-
-          # failed to parse, however, use what was returned in the table, see if
-          # node_validation will validate it
-          Map.put(peer_attrs, "address", address)
-      end
-
-    queried_peer_to_host(peer_attrs)
-  end
-
-  defp queried_peer_to_host(%{"peer" => peer} = peer_attrs)
-       when is_tuple(peer) do
-    {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
-    peer_attrs = Map.put(peer_attrs, "address", address)
-    queried_peer_to_host(peer_attrs)
-  end
-
-  defp queried_peer_to_host(%{"peer" => _} = peer_attrs) do
-    {address, peer_attrs} = Map.pop!(peer_attrs, "peer")
-
-    peer_attrs =
-      case :inet.parse_address(address) do
-        {:ok, valid_address_tuple} ->
-          Map.put(peer_attrs, "address", valid_address_tuple)
-
-        error ->
-          Logger.error(
-            "queried_peer_to_host: error converting address (#{inspect(address)}) to tuple, error: #{inspect(error)}"
-          )
-
-          # failed to parse, however, use what was returned in the table, see if
-          # node_validation will validate it
-          Map.put(peer_attrs, "address", address)
-      end
-
-    queried_peer_to_host(peer_attrs)
-  end
-
-  defp queried_peer_to_host(%{} = peer_attrs) do
-    columns = [
-      "address",
-      "data_center",
-      "host_id",
-      "rack",
-      "release_version",
-      "schema_version",
-      "tokens"
-    ]
-
-    peer_attrs =
-      peer_attrs
-      |> Map.take(columns)
-      |> Enum.map(fn {key, val} -> {String.to_existing_atom(key), val} end)
-
-    struct!(Host, peer_attrs)
+  defp queried_peer_to_host(%{"peer" => peer} = peer_attrs, port) when is_tuple(peer) do
+    %Host{
+      address: peer,
+      port: port,
+      data_center: Map.fetch!(peer_attrs, "data_center"),
+      host_id: Map.fetch!(peer_attrs, "host_id"),
+      rack: Map.fetch!(peer_attrs, "rack"),
+      release_version: Map.fetch!(peer_attrs, "release_version"),
+      schema_version: Map.fetch!(peer_attrs, "schema_version"),
+      tokens: Map.fetch!(peer_attrs, "tokens")
+    }
   end
 
   defp recv_frame(%Transport{} = transport, protocol_format) when is_atom(protocol_format) do

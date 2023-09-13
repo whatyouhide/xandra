@@ -42,6 +42,60 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert %Host{address: {127, 0, 0, 1}, data_center: "datacenter1", rack: "rack1"} = local_peer
   end
 
+  test "supports an IPv4 address as :contact_node",
+       %{mirror_ref: mirror_ref, start_options: start_options} do
+    telemetry_ref =
+      :telemetry_test.attach_event_handlers(self(), [
+        [:xandra, :cluster, :control_connection, :connected]
+      ])
+
+    options = Keyword.put(start_options, :contact_node, {{127, 0, 0, 1}, @port})
+    start_control_connection!(options)
+
+    assert_receive {^mirror_ref, {:discovered_hosts, [_local_peer]}}
+
+    assert_receive {[:xandra, :cluster, :control_connection, :connected], ^telemetry_ref,
+                    _measurements, meta}
+
+    assert meta.host == %Host{address: {127, 0, 0, 1}, port: @port}
+  end
+
+  test "supports an IPv6 address as :contact_node",
+       %{mirror_ref: mirror_ref, start_options: start_options} do
+    telemetry_ref =
+      :telemetry_test.attach_event_handlers(self(), [
+        [:xandra, :cluster, :control_connection, :connected]
+      ])
+
+    options = Keyword.put(start_options, :contact_node, {{0, 0, 0, 0, 0, 0, 0, 0}, @port})
+    start_control_connection!(options)
+
+    assert_receive {^mirror_ref, {:discovered_hosts, [_local_peer]}}
+
+    assert_receive {[:xandra, :cluster, :control_connection, :connected], ^telemetry_ref,
+                    _measurements, meta}
+
+    assert meta.host == %Host{address: {0, 0, 0, 0, 0, 0, 0, 1}, port: @port}
+  end
+
+  test "supports charlist hostname as :contact_node",
+       %{mirror_ref: mirror_ref, start_options: start_options} do
+    telemetry_ref =
+      :telemetry_test.attach_event_handlers(self(), [
+        [:xandra, :cluster, :control_connection, :connected]
+      ])
+
+    options = Keyword.put(start_options, :contact_node, {~c"localhost", @port})
+    start_control_connection!(options)
+
+    assert_receive {^mirror_ref, {:discovered_hosts, [_local_peer]}}
+
+    assert_receive {[:xandra, :cluster, :control_connection, :connected], ^telemetry_ref,
+                    _measurements, meta}
+
+    assert meta.host == %Host{address: {127, 0, 0, 1}, port: @port}
+  end
+
   test "fails to start if it can't connect to the contact point node",
        %{start_options: start_options} do
     telemetry_event = [:xandra, :cluster, :control_connection, :failed_to_connect]
@@ -51,7 +105,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     assert {:error, _} = start_supervised({ControlConnection, options})
 
     assert_receive {^telemetry_event, ^telemetry_ref, %{}, metadata}
-    assert %{reason: :econnrefused, host: %Host{address: ~c"127.0.0.1", port: 9039}} = metadata
+    assert %{reason: :econnrefused, host: %Host{address: {127, 0, 0, 1}, port: 9039}} = metadata
   end
 
   test "dies if the connected node closes its socket",
@@ -206,6 +260,23 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     send(ctrl_conn, :refresh_topology)
 
     assert_receive {^mirror_ref, {:discovered_hosts, _peers}}
+  end
+
+  test "doesn't refresh the topology if the socket is disconnected",
+       %{mirror_ref: mirror_ref, start_options: start_options} do
+    Process.flag(:trap_exit, true)
+
+    ctrl_conn = start_control_connection!(start_options)
+    ref = Process.monitor(ctrl_conn)
+
+    assert_receive {^mirror_ref, {:discovered_hosts, _peers}}
+
+    socket = :sys.get_state(ctrl_conn).transport.socket
+
+    :ok = :gen_tcp.shutdown(socket, :read_write)
+    GenServer.cast(ctrl_conn, {:refresh_topology, []})
+
+    assert_receive {:DOWN, ^ref, _, _, _}
   end
 
   defp start_control_connection!(start_options, overrides \\ []) do
