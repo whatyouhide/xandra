@@ -165,8 +165,7 @@ defmodule Xandra.RetryStrategy do
               :error | {:retry, new_options :: keyword, new_state :: state}
 
   @doc false
-  @spec run_with_retrying(keyword, (-> result)) :: result
-        when result: var
+  @spec run_with_retrying(keyword, (-> result)) :: result when result: var
   def run_with_retrying(options, fun) do
     options = Keyword.put(options, :execution_level, :xandra)
 
