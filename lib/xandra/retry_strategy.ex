@@ -16,7 +16,7 @@ defmodule Xandra.RetryStrategy do
   When a query fails and a retry strategy module was passed as an option, Xandra
   will:
 
-    1. invoke the `c:new/1` callback with options passed to the failing function
+    1. invoke the `c:new/1` callback with the options passed to the failing function
        to initialize the given retry strategy
 
     1. ask the retry strategy whether to retry or error out (`c:retry/3`) until
