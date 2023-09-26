@@ -171,11 +171,8 @@ defmodule Xandra.RetryStrategy do
     options = Keyword.put(options, :execution_level, :xandra)
 
     case Keyword.pop(options, :retry_strategy) do
-      {nil, _options} ->
-        fun.()
-
-      {retry_strategy, options} ->
-        run_with_retrying(options, retry_strategy, fun)
+      {nil, _options} -> fun.()
+      {retry_strategy, options} -> run_with_retrying(options, retry_strategy, fun)
     end
   end
 
