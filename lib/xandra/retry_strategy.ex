@@ -19,7 +19,7 @@ defmodule Xandra.RetryStrategy do
     1. invoke the `c:new/1` callback with options passed to the failing function
        to initialize the given retry strategy
 
-    2. ask the retry strategy whether to retry or error out (`c:retry/3`) until
+    1. ask the retry strategy whether to retry or error out (`c:retry/3`) until
        either the query succeeds or `c:retry/3` says to error out
 
   The `c:new/1` and `c:retry/3` callbacks will be invoked in the same
