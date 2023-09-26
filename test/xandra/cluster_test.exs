@@ -1,5 +1,5 @@
 defmodule Xandra.ClusterTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Xandra.TestHelper
   alias Xandra.Cluster.Host
@@ -24,6 +24,7 @@ defmodule Xandra.ClusterTest do
     use GenServer
 
     def start_link(opts), do: GenServer.start_link(__MODULE__, Map.new(opts))
+    def stop(pid), do: GenServer.stop(pid)
 
     @impl true
     def init(args) do
@@ -156,8 +157,7 @@ defmodule Xandra.ClusterTest do
 
       cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
 
-      assert {:ok, %Xandra.Page{}} =
-               Xandra.Cluster.execute(cluster, "SELECT * FROM system.local")
+      assert {:ok, %Xandra.Page{}} = Xandra.Cluster.execute(cluster, "SELECT * FROM system.local")
 
       assert {:ok, %Xandra.Page{}} =
                Xandra.Cluster.execute(

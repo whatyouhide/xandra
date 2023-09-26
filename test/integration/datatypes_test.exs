@@ -1,6 +1,50 @@
 defmodule DataTypesTest do
   use XandraTest.IntegrationCase, async: true
 
+  @types_that_should_be_documented MapSet.new([
+                                     :ascii,
+                                     :bigint,
+                                     :blob,
+                                     :boolean,
+                                     :counter,
+                                     :date,
+                                     :decimal,
+                                     :double,
+                                     :float,
+                                     :inet,
+                                     :int,
+                                     :smallint,
+                                     :text,
+                                     :time,
+                                     :timestamp,
+                                     :timeuuid,
+                                     :tinyint,
+                                     :uuid,
+                                     :varchar,
+                                     :varint,
+                                     :map,
+                                     :set,
+                                     :list,
+                                     :tuple
+                                   ])
+
+  test "all the datatypes are documented in the guides" do
+    types_in_guides =
+      Mix.Project.project_file()
+      |> Path.dirname()
+      |> Path.join("pages/Data types comparison table.md")
+      |> File.read!()
+      |> String.split("\n")
+      |> Enum.filter(&String.starts_with?(&1, "| `"))
+      |> MapSet.new(fn "| `" <> line ->
+        [type, _rest] = String.split(line, ["`", "<"], parts: 2)
+        String.to_atom(type)
+      end)
+      |> MapSet.delete(:NULL)
+
+    assert types_in_guides == @types_that_should_be_documented
+  end
+
   test "primitive datatypes", %{conn: conn} do
     statement = """
     CREATE TABLE primitives
