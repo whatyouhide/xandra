@@ -227,7 +227,7 @@ defmodule Xandra.RetryStrategy do
         {conn, options} when is_pid(conn) ->
           {conn, options}
 
-        {:random, options} ->
+        {nil, _options} ->
           [{conn, _host}] = Enum.take_random(connected_hosts, 1)
           {conn, options}
       end
@@ -245,7 +245,6 @@ defmodule Xandra.RetryStrategy do
         {:retry, new_options, new_retry_state} ->
           new_options =
             Keyword.put(new_options, :retrying_state, new_retry_state)
-            |> Keyword.put_new(:target_connection, :random)
 
           run_cluster_with_retrying(new_options, connected_hosts, retry_strategy, fun)
 
