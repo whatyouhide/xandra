@@ -180,7 +180,6 @@ defmodule Xandra.Connection do
     end
   end
 
-  # TODO: support timeout
   @spec execute(:gen_statem.server_ref(), Batch.t(), nil, keyword()) ::
           {:ok, Xandra.response()} | {:error, Xandra.error()}
   @spec execute(:gen_statem.server_ref(), Simple.t() | Prepared.t(), Xandra.values(), keyword()) ::
@@ -201,44 +200,55 @@ defmodule Xandra.Connection do
         query = hydrate_query(query, checkout_response, options)
         payload = query_mod.encode(query, params, options)
 
-        case Transport.send(transport, payload) do
-          :ok ->
-            case receive_response_frame(
-                   req_alias,
-                   checkout_response,
-                   Keyword.fetch!(options, :timeout)
-                 ) do
-              {:ok, %Frame{} = frame} ->
-                case protocol_module.decode_response(frame, query, options) do
-                  {%_{} = response, warnings} ->
-                    maybe_execute_telemetry_event_for_warnings(
-                      checkout_response,
-                      conn_pid,
-                      query,
-                      warnings
-                    )
+        fun = fn ->
+          case Transport.send(transport, payload) do
+            :ok ->
+              case receive_response_frame(
+                     req_alias,
+                     checkout_response,
+                     Keyword.fetch!(options, :timeout)
+                   ) do
+                {:ok, %Frame{} = frame} ->
+                  case protocol_module.decode_response(frame, query, options) do
+                    {%_{} = response, warnings} ->
+                      maybe_execute_telemetry_event_for_warnings(
+                        checkout_response,
+                        conn_pid,
+                        query,
+                        warnings
+                      )
 
-                    case response do
-                      %SetKeyspace{keyspace: keyspace} ->
-                        :gen_statem.cast(conn_pid, {:set_keyspace, keyspace})
+                      case response do
+                        %SetKeyspace{keyspace: keyspace} ->
+                          :gen_statem.cast(conn_pid, {:set_keyspace, keyspace})
 
-                      _other ->
-                        :ok
-                    end
+                        _other ->
+                          :ok
+                      end
 
-                    {:ok, response}
+                      {:ok, response}
 
-                  %Xandra.Error{} = error ->
-                    {:ok, error}
-                end
+                    %Xandra.Error{} = error ->
+                      {:ok, error}
+                  end
 
-              {:error, reason} ->
-                {:error, reason}
-            end
+                {:error, reason} ->
+                  {:error, reason}
+              end
 
-          {:error, reason} ->
-            {:error, ConnectionError.new("execute", reason)}
+            {:error, reason} ->
+              {:error, ConnectionError.new("execute", reason)}
+          end
         end
+
+        telemetry_meta =
+          checkout_response
+          |> telemetry_meta(conn_pid, %{query: query})
+          |> Map.put(:extra_metadata, options[:telemetry_metadata])
+
+        :telemetry.span([:xandra, :execute_query], telemetry_meta, fn ->
+          {fun.(), telemetry_meta}
+        end)
 
       {:error, %ConnectionError{} = error} ->
         {:error, error}
