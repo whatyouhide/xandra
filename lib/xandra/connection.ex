@@ -20,7 +20,10 @@ defmodule Xandra.Connection do
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
   @max_concurrent_requests 5000
 
-  defrecordp :checkout_response, [
+  # This record is used internally when we check out a "view" of the state of
+  # the connection. This holds all the necessary info to encode queries and more.
+  # It's a record just so that we don't have to create yet another module for a struct.
+  defrecordp :checked_out_state, [
     :address,
     :atom_keys?,
     :compressor,
@@ -36,12 +39,7 @@ defmodule Xandra.Connection do
 
   ## Public API
 
-  @spec child_spec(keyword()) :: Supervisor.child_spec()
-  def child_spec(options) when is_list(options) do
-    %{id: __MODULE__, start: {__MODULE__, :start_link, [options]}, type: :worker}
-  end
-
-  @spec start_link(keyword) :: :gen_statem.start_ret()
+  @spec start_link(keyword()) :: :gen_statem.start_ret()
   def start_link(options) when is_list(options) do
     {gen_statem_opts, options} = Keyword.split(options, [:hibernate_after, :debug, :spawn_opt])
 
@@ -81,8 +79,8 @@ defmodule Xandra.Connection do
     telemetry_metadata = Keyword.fetch!(options, :telemetry_metadata)
 
     case :gen_statem.call(conn_pid, {:checkout_state_for_next_request, req_alias}) do
-      {:ok, checkout_response() = response} ->
-        checkout_response(
+      {:ok, checked_out_state() = response} ->
+        checked_out_state(
           protocol_module: protocol_module,
           stream_id: stream_id,
           prepared_cache: prepared_cache
@@ -142,7 +140,7 @@ defmodule Xandra.Connection do
   end
 
   defp send_prepared(
-         checkout_response(protocol_module: protocol_module, transport: transport),
+         checked_out_state(protocol_module: protocol_module, transport: transport),
          %Prepared{compressor: compressor} = prepared,
          options
        ) do
@@ -171,15 +169,15 @@ defmodule Xandra.Connection do
     req_alias = Process.monitor(conn_pid, alias: :reply_demonitor)
 
     case :gen_statem.call(conn_pid, {:checkout_state_for_next_request, req_alias}) do
-      {:ok, checkout_response() = checkout_response} ->
-        checkout_response(
+      {:ok, checked_out_state() = checked_out_state} ->
+        checked_out_state(
           transport: %Transport{} = transport,
           protocol_module: protocol_module,
           stream_id: stream_id
-        ) = checkout_response
+        ) = checked_out_state
 
         options = Keyword.put(options, :stream_id, stream_id)
-        query = hydrate_query(query, checkout_response, options)
+        query = hydrate_query(query, checked_out_state, options)
         payload = query_mod.encode(query, params, options)
 
         fun = fn ->
@@ -187,14 +185,14 @@ defmodule Xandra.Connection do
             :ok ->
               case receive_response_frame(
                      req_alias,
-                     checkout_response,
+                     checked_out_state,
                      Keyword.fetch!(options, :timeout)
                    ) do
                 {:ok, %Frame{} = frame} ->
                   case protocol_module.decode_response(frame, query, options) do
                     {%_{} = response, warnings} ->
                       maybe_execute_telemetry_event_for_warnings(
-                        checkout_response,
+                        checked_out_state,
                         conn_pid,
                         query,
                         warnings
@@ -224,7 +222,7 @@ defmodule Xandra.Connection do
         end
 
         telemetry_meta =
-          checkout_response
+          checked_out_state
           |> telemetry_meta(conn_pid, %{query: query})
           |> Map.put(:extra_metadata, options[:telemetry_metadata])
 
@@ -237,38 +235,38 @@ defmodule Xandra.Connection do
     end
   end
 
-  defp hydrate_query(%Simple{} = simple, checkout_response() = response, options) do
+  defp hydrate_query(%Simple{} = simple, checked_out_state() = response, options) do
     %Simple{
       simple
-      | default_consistency: checkout_response(response, :default_consistency),
-        protocol_module: checkout_response(response, :protocol_module),
+      | default_consistency: checked_out_state(response, :default_consistency),
+        protocol_module: checked_out_state(response, :protocol_module),
         compressor: get_right_compressor(response, options[:compressor]),
         custom_payload: options[:custom_payload]
     }
   end
 
-  defp hydrate_query(%Batch{} = batch, checkout_response() = response, options) do
+  defp hydrate_query(%Batch{} = batch, checked_out_state() = response, options) do
     %Batch{
       batch
-      | default_consistency: checkout_response(response, :default_consistency),
-        protocol_module: checkout_response(response, :protocol_module),
+      | default_consistency: checked_out_state(response, :default_consistency),
+        protocol_module: checked_out_state(response, :protocol_module),
         compressor: get_right_compressor(response, options[:compressor]),
         custom_payload: options[:custom_payload]
     }
   end
 
-  defp hydrate_query(%Prepared{} = prepared, checkout_response() = response, options) do
+  defp hydrate_query(%Prepared{} = prepared, checked_out_state() = response, options) do
     %Prepared{
       prepared
-      | default_consistency: checkout_response(response, :default_consistency),
-        protocol_module: checkout_response(response, :protocol_module),
-        keyspace: checkout_response(response, :current_keyspace),
+      | default_consistency: checked_out_state(response, :default_consistency),
+        protocol_module: checked_out_state(response, :protocol_module),
+        keyspace: checked_out_state(response, :current_keyspace),
         compressor: get_right_compressor(response, options[:compressor]),
         request_custom_payload: options[:custom_payload]
     }
   end
 
-  defp receive_response_frame(req_alias, checkout_response(atom_keys?: atom_keys?), timeout) do
+  defp receive_response_frame(req_alias, checked_out_state(atom_keys?: atom_keys?), timeout) do
     receive do
       {^req_alias, {:ok, %Frame{} = frame}} ->
         frame = %Frame{frame | atom_keys?: atom_keys?}
@@ -560,7 +558,7 @@ defmodule Xandra.Connection do
       end)
 
     response =
-      checkout_response(
+      checked_out_state(
         address: data.address,
         atom_keys?: data.atom_keys?,
         compressor: data.compressor,
@@ -712,19 +710,19 @@ defmodule Xandra.Connection do
     )
   end
 
-  defp telemetry_meta(checkout_response() = resp, conn_pid, extra_meta) do
+  defp telemetry_meta(checked_out_state() = resp, conn_pid, extra_meta) do
     meta =
       Map.merge(
         %{
           connection: conn_pid,
-          connection_name: checkout_response(resp, :connection_name),
-          address: checkout_response(resp, :address),
-          port: checkout_response(resp, :port)
+          connection_name: checked_out_state(resp, :connection_name),
+          address: checked_out_state(resp, :address),
+          port: checked_out_state(resp, :port)
         },
         extra_meta
       )
 
-    if keyspace = checkout_response(resp, :current_keyspace) do
+    if keyspace = checked_out_state(resp, :current_keyspace) do
       Map.put(meta, :current_keyspace, keyspace)
     else
       meta
@@ -732,7 +730,7 @@ defmodule Xandra.Connection do
   end
 
   defp get_right_compressor(
-         checkout_response(compressor: conn_compressor, protocol_module: protocol_module),
+         checked_out_state(compressor: conn_compressor, protocol_module: protocol_module),
          query_compressor
        ) do
     case Xandra.Protocol.frame_protocol_format(protocol_module) do
@@ -794,7 +792,7 @@ defmodule Xandra.Connection do
   end
 
   defp maybe_execute_telemetry_event_for_warnings(
-         checkout_response() = resp,
+         checked_out_state() = resp,
          conn_pid,
          query,
          warnings
