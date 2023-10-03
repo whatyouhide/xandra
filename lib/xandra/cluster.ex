@@ -311,7 +311,7 @@ defmodule Xandra.Cluster do
       {:ok, cluster} =
         Xandra.Cluster.start_link(
           nodes: ["cassandra.example.net"],
-          after_connect: &Xandra.execute!(&1, "USE my_keyspace")
+          keyspace: "my_keyspace"
         )
 
   """

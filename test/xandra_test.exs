@@ -50,13 +50,7 @@ defmodule XandraTest do
   end
 
   test "returns an error if the connection is not established" do
-    options =
-      Keyword.merge(default_start_options(),
-        nodes: ["nonexistent-domain"],
-        queue_target: 10,
-        queue_interval: 10,
-        pool_size: 0
-      )
+    options = Keyword.merge(default_start_options(), nodes: ["nonexistent-domain"])
 
     conn = start_supervised!({Xandra, options})
 

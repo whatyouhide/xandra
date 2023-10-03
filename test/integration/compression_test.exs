@@ -21,12 +21,6 @@ defmodule CompressionTest do
       %{start_options: start_options ++ [compressor: LZ4Compressor]}
     end
 
-    test "pings still work with compression", %{start_options: start_options} do
-      compressed_conn = start_supervised!({Xandra, start_options ++ [idle_interval: 200]})
-      Process.sleep(300)
-      assert Process.alive?(compressed_conn)
-    end
-
     test "with simple queries", %{keyspace: keyspace, start_options: start_options} do
       compressed_conn = start_supervised!({Xandra, start_options})
 

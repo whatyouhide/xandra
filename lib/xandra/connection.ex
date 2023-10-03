@@ -189,6 +189,8 @@ defmodule Xandra.Connection do
     conn_pid = GenServer.whereis(conn)
     req_alias = Process.monitor(conn_pid, alias: :reply_demonitor)
 
+    dbg(query)
+
     case :gen_statem.call(conn_pid, {:checkout_state_for_next_request, req_alias}) do
       {:ok, checkout_response() = checkout_response} ->
         checkout_response(
@@ -211,6 +213,8 @@ defmodule Xandra.Connection do
               {:ok, %Frame{} = frame} ->
                 case protocol_module.decode_response(frame, query, options) do
                   {%_{} = response, warnings} ->
+                    dbg(response)
+
                     maybe_execute_telemetry_event_for_warnings(
                       checkout_response,
                       conn_pid,
@@ -321,8 +325,6 @@ defmodule Xandra.Connection do
     :protocol_version,
     :options,
     :disconnection_reason,
-    :after_connect,
-    :after_connect_task_ref,
     :original_options,
     free_stream_ids: MapSet.new(1..@max_concurrent_requests),
     in_flight_requests: %{},
@@ -397,7 +399,6 @@ defmodule Xandra.Connection do
         connection_name: Keyword.get(options, :name),
         cluster_pid: Keyword.get(options, :cluster_pid),
         protocol_version: Keyword.get(options, :protocol_version),
-        after_connect: Keyword.get(options, :after_connect),
         options: options
     }
 
@@ -580,19 +581,6 @@ defmodule Xandra.Connection do
 
   def connected(:cast, {:set_keyspace, keyspace}, %__MODULE__{} = data) do
     {:keep_state, %__MODULE__{data | current_keyspace: keyspace}}
-  end
-
-  def connected(
-        :info,
-        {:DOWN, ref, _, _pid, reason},
-        %__MODULE__{after_connect_task_ref: ref} = data
-      ) do
-    disconnect(data, {:after_connect_crashed, reason})
-  end
-
-  def connected(:info, {ref, _response}, %__MODULE__{after_connect_task_ref: ref} = data) do
-    Process.demonitor(ref, [:flush])
-    {:keep_state, %__MODULE__{data | after_connect_task_ref: nil}}
   end
 
   ## Helpers

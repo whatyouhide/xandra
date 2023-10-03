@@ -388,14 +388,37 @@ defmodule Xandra do
     configure: [
       type: {:or, [:mfa, {:fun, 1}]},
       doc: """
-      *Available since v0.18.0*.
+      A function to run before every connect attempt to dynamically configure the options. It's
+      either a 1-arity fun, a `{module, function, args}` with options prepended to `args`, or
+      `nil` where only returned options are passed to connect callback. This function is
+      called in the connection process. *Available since v0.18.0*.
       """
     ],
-
-    # TODO
-    backoff_min: [],
-    backoff_max: [],
-    backoff_type: [],
+    backoff_min: [
+      type: :non_neg_integer,
+      default: 1000,
+      doc: "The minimum backoff interval (in milliseconds)."
+    ],
+    backoff_max: [
+      type: :non_neg_integer,
+      default: 30_000,
+      doc: "The maximum backoff interval (in milliseconds)."
+    ],
+    backoff_type: [
+      type: {:in, [:stop, :exp, :rand, :rand_exp]},
+      default: :rand_exp,
+      doc: """
+      The backoff strategy. `:stop` means the connection will stop when a disconnection happens,
+      `:exp` means exponential backoff, `:rand` is random backoff, and `:rand_exp` is random
+      exponential backoff.
+      """
+    ],
+    name: [
+      type: :any,
+      doc: """
+      Name registration, just like `GenServer`.
+      """
+    ],
 
     # Internal options, used by Xandra.Cluster.
     cluster_pid: [doc: false, type: :pid]
@@ -441,33 +464,7 @@ defmodule Xandra do
       # Start a connection and register it under a name:
       {:ok, _conn} = Xandra.start_link(name: :xandra)
 
-  If you're using Xandra under a supervisor, see `Xandra.child_spec/1`.
-
-  ### Using a keyspace for new connections
-
-  It is common to start a Xandra connection or pool of connections that will use
-  a single keyspace for their whole life span. Doing something like:
-
-      {:ok, conn} = Xandra.start_link()
-      Xandra.execute!(conn, "USE my_keyspace")
-
-  will work just fine when you only have one connection. If you have a pool of
-  connections more than one connection, however, the code above won't work:
-  it would start the pool and then checkout one connection from the pool
-  to execute the `USE my_keyspace` query. That specific connection will then be
-  using the `my_keyspace` keyspace, but all other connections in the pool will
-  not. Fortunately, `DBConnection` provides an option we can use to solve this
-  problem: `:after_connect`. This option can specify a function that will be run
-  after each single connection to Cassandra. This function will take a
-  connection and can be used to setup that connection. Since this function is
-  run for every established connection, it will work well with pools as well.
-
-      after_connect_fun = fn conn ->
-        Xandra.execute!(conn, "USE my_keyspace")
-      end
-
-      {:ok, conn} = Xandra.start_link(after_connect: after_connect_fun)
-
+  If you're using Xandra under a supervisor, see `child_spec/1`.
   """
   @spec start_link([start_option()]) :: GenServer.on_start()
   def start_link(options \\ []) when is_list(options) do
