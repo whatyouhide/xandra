@@ -79,67 +79,67 @@ defmodule Xandra.Connection do
     telemetry_metadata = Keyword.fetch!(options, :telemetry_metadata)
 
     case :gen_statem.call(conn_pid, {:checkout_state_for_next_request, req_alias}) do
-      {:ok, checked_out_state() = response} ->
+      {:ok, checked_out_state() = state} ->
         checked_out_state(
           protocol_module: protocol_module,
           stream_id: stream_id,
           prepared_cache: prepared_cache
-        ) = response
+        ) = state
 
         metadata =
-          telemetry_meta(response, conn_pid, %{
+          telemetry_meta(state, conn_pid, %{
             query: prepared,
             extra_metadata: telemetry_metadata
           })
 
         options = Keyword.put(options, :stream_id, stream_id)
-        prepared = hydrate_query(prepared, response, options)
+        prepared = hydrate_query(prepared, state, options)
+        timeout = Keyword.fetch!(options, :timeout)
 
         case prepared_cache_lookup(prepared_cache, prepared, Keyword.fetch!(options, :force)) do
+          # If the prepared query was in the cache, we emit a Telemetry event and we must
+          # make sure to put the stream ID we checked out back into the pool.
           {:ok, prepared} ->
             :telemetry.execute([:xandra, :prepared_cache, :hit], %{}, metadata)
+            :gen_statem.cast(conn_pid, {:release_stream_id, stream_id})
             {:ok, prepared}
 
           {:error, cache_status} ->
+            # If the prepared query is not in the cache, we need to prepare it and then
+            # cache it.
             :telemetry.execute([:xandra, :prepared_cache, cache_status], %{}, metadata)
 
             :telemetry.span([:xandra, :prepare_query], metadata, fn ->
-              case send_prepared(response, prepared, options) do
-                :ok ->
-                  case receive_response_frame(
-                         req_alias,
-                         response,
-                         Keyword.fetch!(options, :timeout)
-                       ) do
-                    {:ok, %Frame{} = frame} ->
-                      case protocol_module.decode_response(frame, prepared, options) do
-                        {%Prepared{} = prepared, warnings} ->
-                          Prepared.Cache.insert(prepared_cache, prepared)
+              with :ok <- send_prepare_frame(state, prepared, options),
+                   {:ok, %Frame{} = frame} <- receive_response_frame(req_alias, state, timeout) do
+                case protocol_module.decode_response(frame, prepared, options) do
+                  {%Prepared{} = prepared, warnings} ->
+                    Prepared.Cache.insert(prepared_cache, prepared)
 
-                          maybe_execute_telemetry_event_for_warnings(
-                            response,
-                            conn_pid,
-                            prepared,
-                            warnings
-                          )
+                    maybe_execute_telemetry_for_warnings(
+                      state,
+                      conn_pid,
+                      prepared,
+                      warnings
+                    )
 
-                          reprepared = cache_status == :hit
-                          {{:ok, prepared}, Map.put(metadata, :reprepared, reprepared)}
+                    reprepared = cache_status == :hit
+                    {{:ok, prepared}, Map.put(metadata, :reprepared, reprepared)}
 
-                        %Xandra.Error{} = error ->
-                          {{:error, error}, Map.put(metadata, :reason, error)}
-                      end
-
-                    {:error, reason} ->
-                      {{:error, reason}, Map.put(metadata, :reason, reason)}
-                  end
+                  %Xandra.Error{} = error ->
+                    {{:error, error}, Map.put(metadata, :reason, error)}
+                end
+              else
+                {:error, reason} ->
+                  reason = ConnectionError.new("prepare", reason)
+                  {{:error, reason}, Map.put(metadata, :reason, reason)}
               end
             end)
         end
     end
   end
 
-  defp send_prepared(
+  defp send_prepare_frame(
          checked_out_state(protocol_module: protocol_module, transport: transport),
          %Prepared{compressor: compressor} = prepared,
          options
@@ -178,44 +178,34 @@ defmodule Xandra.Connection do
 
         options = Keyword.put(options, :stream_id, stream_id)
         query = hydrate_query(query, checked_out_state, options)
+        timeout = Keyword.fetch!(options, :timeout)
         payload = query_mod.encode(query, params, options)
 
+        # This is in an anonymous function so that we can use it in a Telemetry span.
         fun = fn ->
-          case Transport.send(transport, payload) do
-            :ok ->
-              case receive_response_frame(
-                     req_alias,
-                     checked_out_state,
-                     Keyword.fetch!(options, :timeout)
-                   ) do
-                {:ok, %Frame{} = frame} ->
-                  case protocol_module.decode_response(frame, query, options) do
-                    {%_{} = response, warnings} ->
-                      maybe_execute_telemetry_event_for_warnings(
-                        checked_out_state,
-                        conn_pid,
-                        query,
-                        warnings
-                      )
+          with :ok <- Transport.send(transport, payload),
+               {:ok, %Frame{} = frame} <-
+                 receive_response_frame(req_alias, checked_out_state, timeout) do
+            case protocol_module.decode_response(frame, query, options) do
+              {%_{} = response, warnings} ->
+                maybe_execute_telemetry_for_warnings(checked_out_state, conn_pid, query, warnings)
 
-                      case response do
-                        %SetKeyspace{keyspace: keyspace} ->
-                          :gen_statem.cast(conn_pid, {:set_keyspace, keyspace})
+                # If the query was a "USE keyspace" query, we need to update the current
+                # keyspace for the connection. This is race conditioney, but it's probably ok.
+                case response do
+                  %SetKeyspace{keyspace: keyspace} ->
+                    :gen_statem.cast(conn_pid, {:set_keyspace, keyspace})
 
-                        _other ->
-                          :ok
-                      end
+                  _other ->
+                    :ok
+                end
 
-                      {:ok, response}
+                {:ok, response}
 
-                    %Xandra.Error{} = error ->
-                      {:error, error}
-                  end
-
-                {:error, reason} ->
-                  {:error, reason}
-              end
-
+              %Xandra.Error{} = error ->
+                {:error, error}
+            end
+          else
             {:error, reason} ->
               {:error, ConnectionError.new("execute", reason)}
           end
@@ -276,11 +266,11 @@ defmodule Xandra.Connection do
         {:error, error}
 
       {:DOWN, ^req_alias, _, _, reason} ->
-        {:error, ConnectionError.new("receive response", {:connection_crashed, reason})}
+        {:error, {:connection_crashed, reason}}
     after
       timeout ->
         Process.demonitor(req_alias, [:flush])
-        {:error, ConnectionError.new("receive response", :timeout)}
+        {:error, :timeout}
     end
   end
 
@@ -290,6 +280,7 @@ defmodule Xandra.Connection do
   # half of the range)
   @type stream_id() :: 1..32_768
 
+  # This type is just for documentation.
   @type t() :: %__MODULE__{
           address: term(),
           atom_keys?: boolean(),
@@ -518,6 +509,12 @@ defmodule Xandra.Connection do
     :keep_state_and_data
   end
 
+  def disconnected(:cast, {:release_stream_id, stream_id}, %__MODULE__{} = data) do
+    data = update_in(data.free_stream_ids, &MapSet.put(&1, stream_id))
+    data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
+    {:keep_state, data}
+  end
+
   ## "Connected" state
 
   def connected(:enter, :disconnected, %__MODULE__{} = data) do
@@ -595,6 +592,12 @@ defmodule Xandra.Connection do
 
   def connected(:cast, {:set_keyspace, keyspace}, %__MODULE__{} = data) do
     {:keep_state, %__MODULE__{data | current_keyspace: keyspace}}
+  end
+
+  def connected(:cast, {:release_stream_id, stream_id}, %__MODULE__{} = data) do
+    data = update_in(data.free_stream_ids, &MapSet.put(&1, stream_id))
+    data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
+    {:keep_state, data}
   end
 
   ## Helpers
@@ -791,7 +794,7 @@ defmodule Xandra.Connection do
     end
   end
 
-  defp maybe_execute_telemetry_event_for_warnings(
+  defp maybe_execute_telemetry_for_warnings(
          checked_out_state() = resp,
          conn_pid,
          query,
