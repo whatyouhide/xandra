@@ -21,6 +21,9 @@ defmodule Xandra.Prepared do
       in the documentation for the `Xandra` module.
 
   """
+
+  alias Xandra.Frame
+
   defstruct [
     :statement,
     :values,
@@ -60,8 +63,7 @@ defmodule Xandra.Prepared do
         }
 
   @doc false
-  def rewrite_named_params_to_positional(%__MODULE__{} = prepared, params)
-      when is_map(params) do
+  def rewrite_named_params_to_positional(%__MODULE__{} = prepared, params) when is_map(params) do
     Enum.map(prepared.bound_columns, fn {_keyspace, _table, name, _type} ->
       case Map.fetch(params, name) do
         {:ok, value} ->
@@ -75,34 +77,23 @@ defmodule Xandra.Prepared do
     end)
   end
 
-  defimpl DBConnection.Query do
-    alias Xandra.Frame
+  @doc false
+  @spec encode(t(), Xandra.values(), keyword()) :: iodata()
+  def encode(prepared, values, options)
 
-    def parse(prepared, _options) do
-      prepared
-    end
+  def encode(prepared, values, options) when is_map(values) do
+    encode(prepared, rewrite_named_params_to_positional(prepared, values), options)
+  end
 
-    def encode(prepared, values, options) when is_map(values) do
-      encode(prepared, @for.rewrite_named_params_to_positional(prepared, values), options)
-    end
-
-    def encode(prepared, values, options) when is_list(values) do
-      Frame.new(:execute,
-        tracing: options[:tracing],
-        compressor: prepared.compressor,
-        custom_payload: prepared.request_custom_payload
-      )
-      |> prepared.protocol_module.encode_request(%{prepared | values: values}, options)
-      |> Frame.encode(prepared.protocol_module)
-    end
-
-    def decode(_prepared, response, _options) do
-      response
-    end
-
-    def describe(prepared, _options) do
-      prepared
-    end
+  def encode(%__MODULE__{} = prepared, values, options) when is_list(values) do
+    Frame.new(:execute,
+      tracing: options[:tracing],
+      compressor: prepared.compressor,
+      custom_payload: prepared.request_custom_payload,
+      stream_id: Keyword.get(options, :stream_id, 0)
+    )
+    |> prepared.protocol_module.encode_request(%{prepared | values: values}, options)
+    |> Frame.encode(prepared.protocol_module)
   end
 
   defimpl Inspect do

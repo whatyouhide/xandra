@@ -38,10 +38,7 @@ defmodule XandraTest.IntegrationCase do
   def default_start_options do
     port = System.get_env("CASSANDRA_PORT", "9052")
 
-    options = [
-      show_sensitive_data_on_connection_error: true,
-      nodes: ["127.0.0.1:#{port}"]
-    ]
+    options = [nodes: ["127.0.0.1:#{port}"]]
 
     case System.get_env("CASSANDRA_NATIVE_PROTOCOL", "") do
       "v3" -> Keyword.put(options, :protocol_version, :v3)

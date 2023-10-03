@@ -58,7 +58,10 @@ defmodule Xandra.Mixfile do
   end
 
   def application() do
-    [extra_applications: [:logger]]
+    [
+      extra_applications: [:logger],
+      mod: {Xandra.Application, []}
+    ]
   end
 
   defp elixirc_paths(:test), do: ["test/support"] ++ elixirc_paths(:dev)

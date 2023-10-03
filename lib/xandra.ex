@@ -3,9 +3,15 @@ defmodule Xandra do
   This module provides the main API to interface with Cassandra.
 
   This module handles the connection to Cassandra, queries, connection pooling,
-  connection backoff, logging, and more. Some of these features are provided by
-  the [`DBConnection`](https://hex.pm/packages/db_connection) library, which
-  Xandra is built on top of.
+  connection backoff, logging, and more.
+
+  > #### `db_connection` {: .warning}
+  >
+  > Before v0.18.0, this library was built on top of the
+  > [`db_connection`](http://hex.pm/packages/db_connection) library. Since v0.18.0,
+  > this is not the case anymore. This allowed us to significantly improve the design
+  > and architecture of Xandra, ultimately resulting in a client that is more fitted
+  > for the Cassandra protocol.
 
   ## Errors
 
@@ -133,12 +139,11 @@ defmodule Xandra do
 
   ## Reconnections
 
-  Thanks to the `DBConnection` library, Xandra is able to handle connection
+  A Xandra connection is able to handle connection
   losses and to automatically reconnect to Cassandra. By default, reconnections
   are retried at exponentially increasing randomized intervals, but backoff can
   be configured through a subset of the options accepted by
-  `start_link/2`. These options are described in the documentation for
-  `DBConnection.start_link/2`.
+  `start_link/2`.
 
   ## Clustering
 
@@ -237,8 +242,8 @@ defmodule Xandra do
   @typedoc "The result of a query."
   @type result :: Xandra.Void.t() | Page.t() | Xandra.SetKeyspace.t() | Xandra.SchemaChange.t()
 
-  @typedoc "A Xandra connection pool."
-  @type conn :: DBConnection.conn()
+  @typedoc "A single Xandra connection process."
+  @type conn :: :gen_statem.server_ref()
 
   @typedoc """
   An error that can be returned from a query.
@@ -255,8 +260,8 @@ defmodule Xandra do
   """
   @type custom_payload :: %{optional(String.t()) => binary()}
 
-  @typedoc "Xandra-specific options for `start_link/1`."
-  @type xandra_start_option ::
+  @typedoc "Options for `start_link/1`."
+  @type start_option ::
           {:nodes, [String.t()]}
           | {:compressor, module}
           | {:authentication, {module, keyword}}
@@ -265,14 +270,6 @@ defmodule Xandra do
              unquote(
                Enum.reduce(Frame.supported_protocols(), &quote(do: unquote(&1) | unquote(&2)))
              )}
-
-  @typedoc "Options passed to `DBConnection.start_link/2`."
-  @type db_connection_start_option :: {atom(), any}
-
-  @type start_option :: xandra_start_option | db_connection_start_option
-
-  @typedoc "Options for `start_link/1`."
-  @type start_options :: [start_option]
 
   @valid_consistencies [
     :one,
@@ -334,15 +331,6 @@ defmodule Xandra do
       options, see the `:transport_options` option.
       """
     ],
-    idle_interval: [
-      type: :non_neg_integer,
-      default: 30_000,
-      doc: """
-      From DBConnection library. Controls the frequency we check for idle
-      connections in the pool (in milliseconds). We then notify each idle connection to ping the
-      database. In practice, the ping happens between `idle_interval` and `2 * idle_interval`.
-      """
-    ],
     nodes: [
       type: {:list, {:custom, Xandra.OptionsValidators, :validate_node, []}},
       default: ["127.0.0.1"],
@@ -389,12 +377,30 @@ defmodule Xandra do
       TCP (see the `:gen_tcp` Erlang module).
       """
     ],
+    keyspace: [
+      type: :string,
+      doc: """
+      `USE` this keyspace right after establishing a connection to the server. This effectively
+      replaces most uses of the `:after_connect` option that was available before v0.18.0.
+      *Available since v0.18.0*.
+      """
+    ],
+    configure: [
+      type: {:or, [:mfa, {:fun, 1}]},
+      doc: """
+      *Available since v0.18.0*.
+      """
+    ],
+
+    # TODO
+    backoff_min: [],
+    backoff_max: [],
+    backoff_type: [],
+    configure: [],
 
     # Internal options, used by Xandra.Cluster.
     cluster_pid: [doc: false, type: :pid]
   ]
-
-  @start_link_opts_keys Keyword.keys(@start_link_opts_schema)
 
   @doc """
   Returns the `NimbleOptions` schema used for validating the options for `start_link/1`.
@@ -420,21 +426,13 @@ defmodule Xandra do
   @doc """
   Starts a new pool of connections to Cassandra.
 
-  This function starts a new connection or pool of connections to the provided
-  Cassandra server. `options` is a list of both Xandra-specific options, as well
-  as `DBConnection` options.
+  This function starts a new connection to the provided Cassandra node.
 
   ## Options
 
-  These are the Xandra-specific options supported by this function:
+  These are the options supported by this function:
 
   #{NimbleOptions.docs(@start_link_opts_schema)}
-
-  The rest of the options are forwarded to `DBConnection.start_link/2`. For
-  example, to start a pool of five connections, you can use the `:pool_size`
-  option:
-
-      Xandra.start_link(pool_size: 5)
 
   ## Examples
 
@@ -471,14 +469,10 @@ defmodule Xandra do
 
       {:ok, conn} = Xandra.start_link(after_connect: after_connect_fun)
 
-  See the documentation for `DBConnection.start_link/2` for more information
-  about this option.
   """
-  @spec start_link(start_options) :: GenServer.on_start()
+  @spec start_link([start_option()]) :: GenServer.on_start()
   def start_link(options \\ []) when is_list(options) do
-    {xandra_opts, db_conn_opts} = Keyword.split(options, @start_link_opts_keys)
-    xandra_opts = NimbleOptions.validate!(xandra_opts, @start_link_opts_schema)
-    options = Keyword.merge(xandra_opts, db_conn_opts)
+    options = NimbleOptions.validate!(options, @start_link_opts_schema)
 
     {node, options} =
       case Keyword.pop(options, :nodes) do
@@ -496,10 +490,9 @@ defmodule Xandra do
     options =
       options
       |> Keyword.put(:node, node)
-      |> Keyword.put(:pool, DBConnection.ConnectionPool)
       |> Keyword.put(:prepared_cache, Prepared.Cache.new())
 
-    DBConnection.start_link(Connection, options)
+    Connection.start_link(options)
   end
 
   @doc """
@@ -520,7 +513,7 @@ defmodule Xandra do
       ]
 
   """
-  @spec child_spec(start_options) :: Supervisor.child_spec()
+  @spec child_spec([start_option()]) :: Supervisor.child_spec()
   def child_spec(options) do
     %{
       id: __MODULE__,
@@ -619,10 +612,15 @@ defmodule Xandra do
       Custom metadata to be added to the metadata of `[:xandra, :prepare_query, :start]`
       and `[:xandra, :prepare_query, :stop]` telemetry events as `extra_metadata` field.
       """
+    ],
+    timeout: [
+      type: :timeout,
+      default: :infinity,
+      doc: """
+      The timeout for this call, in milliseconds.
+      """
     ]
   ]
-
-  @prepare_opts_keys Keyword.keys(@prepare_opts_schema)
 
   @doc """
   Prepares the given query.
@@ -639,8 +637,7 @@ defmodule Xandra do
   `Xandra.ConnectionError` structs. See the module documentation for more
   information about errors.
 
-  Supports all the options supported by `DBConnection.prepare/3`, and the
-  following additional options:
+  ## Options
 
   #{NimbleOptions.docs(@prepare_opts_schema)}
 
@@ -674,13 +671,9 @@ defmodule Xandra do
   """
   @spec prepare(conn, statement, keyword) :: {:ok, Prepared.t()} | {:error, error}
   def prepare(conn, statement, options \\ []) when is_binary(statement) do
-    {prepare_opts, db_conn_opts} = Keyword.split(options, @prepare_opts_keys)
-    options = NimbleOptions.validate!(prepare_opts, @prepare_opts_schema) ++ db_conn_opts
-    DBConnection.prepare(conn, %Prepared{statement: statement}, options)
-  rescue
-    DBConnection.ConnectionError ->
-      error = ConnectionError.new("preparing query", :closed)
-      {:error, error}
+    options = NimbleOptions.validate!(options, @prepare_opts_schema)
+    prepared = %Prepared{statement: statement}
+    Connection.prepare(conn, prepared, options)
   end
 
   @doc """
@@ -728,9 +721,8 @@ defmodule Xandra do
 
   ## Options for batch queries
 
-  When `query` is a batch query, `params_or_options` is a list of options. All
-  options supported by `DBConnection.execute/4` are supported, and the following
-  additional batch-specific options:
+  When `query` is a batch query, `params_or_options` is a list of options. The following
+  options are supported:
 
     * `:consistency` - same as the `:consistency` option described in the
       documentation for `execute/4`.
@@ -763,11 +755,6 @@ defmodule Xandra do
 
       # Execute the batch with a default timestamp for all statements:
       Xandra.execute(conn, batch, timestamp: System.system_time(:millisecond) - 1_000)
-      #=> {:ok, %Xandra.Void{}}
-
-  All `DBConnection.execute/4` options are supported here as well:
-
-      Xandra.execute(conn, batch, timeout: 10_000)
       #=> {:ok, %Xandra.Void{}}
 
   """
@@ -929,6 +916,13 @@ defmodule Xandra do
       Custom metadata to be added to the metadata of `[:xandra, :execute_query, :start]`
       and `[:xandra, :execute_query, :stop]` telemetry events as `extra_metadata` field.
       """
+    ],
+    timeout: [
+      type: :timeout,
+      default: :infinity,
+      doc: """
+      The timeout for this call, in milliseconds.
+      """
     ]
   ]
 
@@ -958,9 +952,6 @@ defmodule Xandra do
   result's module.
 
   ## Options
-
-  This function accepts all options accepted by `DBConnection.execute/4`, plus
-  the following ones:
 
   #{NimbleOptions.docs(@execute_opts_schema)}
 
@@ -1021,12 +1012,6 @@ defmodule Xandra do
 
       statement = "INSERT INTO users (first_name, last_name) VALUES ('Chandler', 'Bing')"
       {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], consistency: :three)
-
-  This function supports all options supported by `DBConnection.execute/4`; for
-  example, to use a timeout:
-
-      statement = "DELETE FROM users WHERE first_name = 'Chandler'"
-      {:ok, %Xandra.Void{}} = Xandra.execute(conn, statement, _params = [], timeout: 10_000)
 
   ## Paging
 
@@ -1142,34 +1127,10 @@ defmodule Xandra do
     end
   end
 
-  @doc """
-  Acquires a locked connection from `conn` and executes `fun` passing such
-  connection as the argument.
-
-  All options are forwarded to `DBConnection.run/3`.
-
-  The return value of this function is the return value of `fun`.
-
-  > #### Checkout failures {: .warning}
-  >
-  > If we cannot check out a connection from the pool, this function raises a
-  > `DBConnection.ConnectionError` exception. This could also happen in some
-  > other cases, so if you want to handle this case, you should rescue
-  > `DBConnection.ConnectionError` exceptions when using `run/3`.
-
-  ## Examples
-
-  Preparing a query and executing it on the same connection:
-
-      Xandra.run(conn, fn conn ->
-        prepared = Xandra.prepare!(conn, "INSERT INTO users (name, age) VALUES (:name, :age)")
-        Xandra.execute!(conn, prepared, %{"name" => "John", "age" => 84})
-      end)
-
-  """
-  @spec run(conn, keyword, (conn -> result)) :: result when result: var
-  def run(conn, options \\ [], fun) when is_function(fun, 1) do
-    DBConnection.run(conn, fun, options)
+  @doc false
+  @spec run(conn, keyword, (conn -> result)) :: no_return()
+  def run(_conn, _options \\ [], fun) when is_function(fun, 1) do
+    raise "not available since v0.18.0"
   end
 
   @doc """
@@ -1226,81 +1187,51 @@ defmodule Xandra do
   end
 
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
-    run(conn, options, fn conn ->
-      case DBConnection.prepare_execute(conn, batch, nil, options) do
-        {:ok, _query, %Error{reason: :unprepared}} ->
-          with :ok <- reprepare_queries(conn, batch.queries, options) do
-            execute(conn, batch, options)
-          end
+    case Connection.execute(conn, batch, nil, options) do
+      {:ok, %Error{reason: :unprepared}} ->
+        with :ok <- reprepare_queries(conn, batch.queries, options) do
+          execute(conn, batch, options)
+        end
 
-        {:ok, _query, %Error{} = error} ->
-          {:error, error}
-
-        {:ok, _query, result} ->
-          {:ok, result}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
-    end)
-  rescue
-    DBConnection.ConnectionError ->
-      error = ConnectionError.new("execute batch query", :closed)
-      {:error, error}
-  end
-
-  defp execute_without_retrying(conn, %Simple{} = query, params, options) do
-    case DBConnection.prepare_execute(conn, query, params, options) do
-      {:ok, _query, %Error{} = error} ->
+      {:ok, %Error{} = error} ->
         {:error, error}
 
-      {:ok, _query, result} ->
+      {:ok, result} ->
         {:ok, result}
 
       {:error, reason} ->
         {:error, reason}
     end
-  rescue
-    DBConnection.ConnectionError ->
-      error = ConnectionError.new("execute simple query", :closed)
-      {:error, error}
+  end
+
+  defp execute_without_retrying(conn, %Simple{} = query, params, options) do
+    case Connection.execute(conn, query, params, options) do
+      {:ok, %Error{} = error} -> {:error, error}
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
-    run(conn, options, fn conn ->
-      case DBConnection.execute(conn, prepared, params, options) do
-        {:ok, _query, %Error{reason: :unprepared}} ->
-          # We can ignore the newly returned prepared query since it will have the
-          # same id of the query we are repreparing.
-          case DBConnection.prepare_execute(
+    case Connection.execute(conn, prepared, params, options) do
+      {:ok, %Error{reason: :unprepared}} ->
+        with {:ok, _reprepared} <-
+               Connection.prepare(
                  conn,
-                 prepared,
-                 params,
+                 prepared.statement,
                  Keyword.put(options, :force, true)
                ) do
-            {:ok, _prepared, %Error{} = error} ->
-              {:error, error}
+          Connection.execute(conn, prepared, params, options)
+        end
 
-            {:ok, _prepared, result} ->
-              {:ok, result}
+      {:ok, %Error{} = error} ->
+        {:error, error}
 
-            {:error, _reason} = error ->
-              error
-          end
+      {:ok, result} ->
+        {:ok, result}
 
-        {:ok, _query, %Error{} = error} ->
-          {:error, error}
-
-        {:ok, _query, result} ->
-          {:ok, result}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
-    end)
-  rescue
-    DBConnection.ConnectionError ->
-      error = ConnectionError.new("execute prepared query", :closed)
-      {:error, error}
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 end
