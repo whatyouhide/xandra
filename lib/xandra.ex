@@ -1174,9 +1174,8 @@ defmodule Xandra do
   end
 
   defp execute_with_retrying(conn, query, params, options) do
-    {xandra_opts, db_conn_opts} = Keyword.split(options, @execute_opts_keys)
-    xandra_opts = NimbleOptions.validate!(xandra_opts, @execute_opts_schema)
-    options = xandra_opts ++ db_conn_opts
+    {xandra_opts, other_opts} = Keyword.split(options, @execute_opts_keys)
+    options = NimbleOptions.validate!(xandra_opts, @execute_opts_schema) ++ other_opts
 
     RetryStrategy.run_with_retrying(options, fn ->
       execute_without_retrying(conn, query, params, options)
