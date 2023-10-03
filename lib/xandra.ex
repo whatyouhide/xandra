@@ -1178,7 +1178,9 @@ defmodule Xandra do
     options = xandra_opts ++ db_conn_opts
 
     RetryStrategy.run_with_retrying(options, fn ->
-      execute_without_retrying(conn, query, params, options)
+      :telemetry.span([:xandra, :execute_query], telemetry_meta, fn ->
+        result = execute_without_retrying(conn, query, params, options)
+      end)
     end)
   end
 
