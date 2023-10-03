@@ -189,8 +189,6 @@ defmodule Xandra.Connection do
     conn_pid = GenServer.whereis(conn)
     req_alias = Process.monitor(conn_pid, alias: :reply_demonitor)
 
-    dbg(query)
-
     case :gen_statem.call(conn_pid, {:checkout_state_for_next_request, req_alias}) do
       {:ok, checkout_response() = checkout_response} ->
         checkout_response(
@@ -231,7 +229,7 @@ defmodule Xandra.Connection do
                     {:ok, response}
 
                   %Xandra.Error{} = error ->
-                    {:error, error}
+                    {:ok, error}
                 end
 
               {:error, reason} ->
@@ -758,6 +756,8 @@ defmodule Xandra.Connection do
   end
 
   defp prepared_cache_lookup(prepared_cache, prepared, true = _force?) do
+    dbg()
+
     cache_status =
       case Prepared.Cache.lookup(prepared_cache, prepared) do
         {:ok, %Prepared{}} -> :hit

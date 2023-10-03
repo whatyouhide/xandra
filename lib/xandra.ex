@@ -1214,7 +1214,7 @@ defmodule Xandra do
         with {:ok, _reprepared} <-
                Connection.prepare(
                  conn,
-                 prepared.statement,
+                 prepared,
                  Keyword.put(options, :force, true)
                ) do
           Connection.execute(conn, prepared, params, options)
