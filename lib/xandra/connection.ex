@@ -283,6 +283,7 @@ defmodule Xandra.Connection do
   @type stream_id() :: 1..32_768
 
   @type t() :: %__MODULE__{
+          configure: {module(), atom(), [term()]} | (keyword() -> keyword()) | nil,
           buffer: binary(),
           disconnection_reason: term(),
           free_stream_ids: MapSet.t(stream_id()),
@@ -300,6 +301,7 @@ defmodule Xandra.Connection do
           protocol_module: module(),
           protocol_version: nil | Frame.supported_protocol(),
           options: keyword(),
+          original_options: keyword(),
           in_flight_requests: %{optional(stream_id()) => term()}
         }
 
@@ -307,6 +309,7 @@ defmodule Xandra.Connection do
     :transport,
     :default_consistency,
     :atom_keys?,
+    :configure,
     :prepared_cache,
     :compressor,
     :address,
@@ -320,6 +323,7 @@ defmodule Xandra.Connection do
     :disconnection_reason,
     :after_connect,
     :after_connect_task_ref,
+    :original_options,
     free_stream_ids: MapSet.new(1..@max_concurrent_requests),
     in_flight_requests: %{},
     current_keyspace: nil,
@@ -333,31 +337,7 @@ defmodule Xandra.Connection do
 
   @impl true
   def init(options) do
-    {address, port} = Keyword.fetch!(options, :node)
-
-    transport = %Transport{
-      module: if(options[:encryption], do: :ssl, else: :gen_tcp),
-      options:
-        options
-        |> Keyword.get(:transport_options, [])
-        |> Keyword.merge(@forced_transport_options)
-    }
-
-    data = %__MODULE__{
-      transport: transport,
-      prepared_cache: Keyword.fetch!(options, :prepared_cache),
-      compressor: Keyword.get(options, :compressor),
-      default_consistency: Keyword.fetch!(options, :default_consistency),
-      atom_keys?: Keyword.fetch!(options, :atom_keys),
-      address: address,
-      port: port,
-      connection_name: Keyword.get(options, :name),
-      cluster_pid: Keyword.get(options, :cluster_pid),
-      protocol_version: Keyword.get(options, :protocol_version),
-      after_connect: Keyword.get(options, :after_connect),
-      options: options
-    }
-
+    data = %__MODULE__{original_options: options, configure: Keyword.get(options, :configure)}
     {:ok, :disconnected, data, {:next_event, :internal, :connect}}
   end
 
@@ -386,6 +366,41 @@ defmodule Xandra.Connection do
   end
 
   def disconnected(:internal, :connect, %__MODULE__{} = data) do
+    # First, potentially reconfigure the options.
+    options =
+      case data.configure do
+        {mod, fun, args} -> apply(mod, fun, [data.original_options | args])
+        fun when is_function(fun, 1) -> fun.(data.original_options)
+        nil -> data.original_options
+      end
+
+    # Now, build the state from the options.
+    {address, port} = Keyword.fetch!(options, :node)
+
+    transport = %Transport{
+      module: if(options[:encryption], do: :ssl, else: :gen_tcp),
+      options:
+        options
+        |> Keyword.get(:transport_options, [])
+        |> Keyword.merge(@forced_transport_options)
+    }
+
+    data = %__MODULE__{
+      data
+      | transport: transport,
+        prepared_cache: Keyword.fetch!(options, :prepared_cache),
+        compressor: Keyword.get(options, :compressor),
+        default_consistency: Keyword.fetch!(options, :default_consistency),
+        atom_keys?: Keyword.fetch!(options, :atom_keys),
+        address: address,
+        port: port,
+        connection_name: Keyword.get(options, :name),
+        cluster_pid: Keyword.get(options, :cluster_pid),
+        protocol_version: Keyword.get(options, :protocol_version),
+        after_connect: Keyword.get(options, :after_connect),
+        options: options
+    }
+
     case Transport.connect(data.transport, data.address, data.port, @default_timeout) do
       {:ok, transport} ->
         {:ok, peername} = Transport.address_and_port(transport)

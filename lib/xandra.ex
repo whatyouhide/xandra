@@ -396,7 +396,6 @@ defmodule Xandra do
     backoff_min: [],
     backoff_max: [],
     backoff_type: [],
-    configure: [],
 
     # Internal options, used by Xandra.Cluster.
     cluster_pid: [doc: false, type: :pid]
