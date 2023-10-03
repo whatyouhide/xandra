@@ -1124,6 +1124,7 @@ defmodule Xandra do
   end
 
   @doc false
+  @spec run(conn, (conn -> result)) :: no_return()
   @spec run(conn, keyword, (conn -> result)) :: no_return()
   def run(_conn, _options \\ [], fun) when is_function(fun, 1) do
     raise "not available since v0.18.0"
@@ -1184,12 +1185,12 @@ defmodule Xandra do
 
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
     case Connection.execute(conn, batch, nil, options) do
-      {:ok, %Error{reason: :unprepared}} ->
+      {:error, %Error{reason: :unprepared}} ->
         with :ok <- reprepare_queries(conn, batch.queries, options) do
           execute(conn, batch, options)
         end
 
-      {:ok, %Error{} = error} ->
+      {:error, %Error{} = error} ->
         {:error, error}
 
       {:ok, result} ->
@@ -1201,16 +1202,12 @@ defmodule Xandra do
   end
 
   defp execute_without_retrying(conn, %Simple{} = query, params, options) do
-    case Connection.execute(conn, query, params, options) do
-      {:ok, %Error{} = error} -> {:error, error}
-      {:ok, result} -> {:ok, result}
-      {:error, reason} -> {:error, reason}
-    end
+    Connection.execute(conn, query, params, options)
   end
 
   defp execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
     case Connection.execute(conn, prepared, params, options) do
-      {:ok, %Error{reason: :unprepared}} ->
+      {:error, %Error{reason: :unprepared}} ->
         with {:ok, reprepared} <-
                Connection.prepare(
                  conn,
@@ -1219,9 +1216,6 @@ defmodule Xandra do
                ) do
           Connection.execute(conn, reprepared, params, options)
         end
-
-      {:ok, %Error{} = error} ->
-        {:error, error}
 
       {:ok, result} ->
         {:ok, result}

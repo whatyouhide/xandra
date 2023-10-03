@@ -4,6 +4,7 @@ defmodule Xandra.Connection do
   import Record
   import Xandra.Transport, only: [is_data_message: 2, is_closed_message: 2, is_error_message: 2]
 
+  alias Xandra.Backoff
   alias Xandra.Batch
   alias Xandra.ConnectionError
   alias Xandra.Connection.Utils
@@ -71,9 +72,8 @@ defmodule Xandra.Connection do
     end
   end
 
-  # TODO: support timeout
   @spec prepare(:gen_statem.server_ref(), Prepared.t(), keyword()) ::
-          {:ok, Prepared.t()} | {:error, term()}
+          {:ok, Prepared.t()} | {:error, Xandra.error()}
   def prepare(conn, %Prepared{} = prepared, options) when is_list(options) do
     conn_pid = GenServer.whereis(conn)
     req_alias = Process.monitor(conn_pid, alias: :reply_demonitor)
@@ -141,24 +141,6 @@ defmodule Xandra.Connection do
     end
   end
 
-  defp receive_response_frame(req_alias, checkout_response(atom_keys?: atom_keys?), timeout) do
-    receive do
-      {^req_alias, {:ok, %Frame{} = frame}} ->
-        frame = %Frame{frame | atom_keys?: atom_keys?}
-        {:ok, frame}
-
-      {^req_alias, {:error, %ConnectionError{} = error}} ->
-        {:error, error}
-
-      {:DOWN, ^req_alias, _, _, reason} ->
-        {:error, ConnectionError.new("receive response", {:connection_crashed, reason})}
-    after
-      timeout ->
-        Process.demonitor(req_alias, [:flush])
-        {:error, ConnectionError.new("receive response", :timeout)}
-    end
-  end
-
   defp send_prepared(
          checkout_response(protocol_module: protocol_module, transport: transport),
          %Prepared{compressor: compressor} = prepared,
@@ -181,9 +163,9 @@ defmodule Xandra.Connection do
   end
 
   @spec execute(:gen_statem.server_ref(), Batch.t(), nil, keyword()) ::
-          {:ok, Xandra.response()} | {:error, Xandra.error()}
+          {:ok, Xandra.result()} | {:error, Xandra.error()}
   @spec execute(:gen_statem.server_ref(), Simple.t() | Prepared.t(), Xandra.values(), keyword()) ::
-          {:ok, Xandra.response()} | {:error, Xandra.error()}
+          {:ok, Xandra.result()} | {:error, Xandra.error()}
   def execute(conn, %query_mod{} = query, params, options) when is_list(options) do
     conn_pid = GenServer.whereis(conn)
     req_alias = Process.monitor(conn_pid, alias: :reply_demonitor)
@@ -229,7 +211,7 @@ defmodule Xandra.Connection do
                       {:ok, response}
 
                     %Xandra.Error{} = error ->
-                      {:ok, error}
+                      {:error, error}
                   end
 
                 {:error, reason} ->
@@ -286,6 +268,24 @@ defmodule Xandra.Connection do
     }
   end
 
+  defp receive_response_frame(req_alias, checkout_response(atom_keys?: atom_keys?), timeout) do
+    receive do
+      {^req_alias, {:ok, %Frame{} = frame}} ->
+        frame = %Frame{frame | atom_keys?: atom_keys?}
+        {:ok, frame}
+
+      {^req_alias, {:error, %ConnectionError{} = error}} ->
+        {:error, error}
+
+      {:DOWN, ^req_alias, _, _, reason} ->
+        {:error, ConnectionError.new("receive response", {:connection_crashed, reason})}
+    after
+      timeout ->
+        Process.demonitor(req_alias, [:flush])
+        {:error, ConnectionError.new("receive response", :timeout)}
+    end
+  end
+
   ## Data
 
   # [short] - a 2-byte integer, which clients can only use as a *positive* integer (so
@@ -293,45 +293,47 @@ defmodule Xandra.Connection do
   @type stream_id() :: 1..32_768
 
   @type t() :: %__MODULE__{
-          configure: {module(), atom(), [term()]} | (keyword() -> keyword()) | nil,
+          address: term(),
+          atom_keys?: boolean(),
+          backoff: Backoff.t(),
           buffer: binary(),
+          cluster_pid: pid() | nil,
+          compressor: module() | nil,
+          configure: {module(), atom(), [term()]} | (keyword() -> keyword()) | nil,
+          connection_name: term(),
+          current_keyspace: String.t() | nil,
+          default_consistency: atom(),
           disconnection_reason: term(),
           free_stream_ids: MapSet.t(stream_id()),
-          transport: Transport.t(),
-          default_consistency: atom(),
-          atom_keys?: boolean(),
-          prepared_cache: term(),
-          compressor: module() | nil,
-          current_keyspace: String.t() | nil,
-          address: term(),
-          port: term(),
-          connection_name: term(),
-          cluster_pid: pid() | nil,
-          peername: term(),
-          protocol_module: module(),
-          protocol_version: nil | Frame.supported_protocol(),
+          in_flight_requests: %{optional(stream_id()) => term()},
           options: keyword(),
           original_options: keyword(),
-          in_flight_requests: %{optional(stream_id()) => term()}
+          peername: term(),
+          port: term(),
+          prepared_cache: term(),
+          protocol_module: module(),
+          protocol_version: nil | Frame.supported_protocol(),
+          transport: Transport.t()
         }
 
   defstruct [
-    :transport,
-    :default_consistency,
-    :atom_keys?,
-    :configure,
-    :prepared_cache,
-    :compressor,
     :address,
-    :port,
-    :connection_name,
+    :atom_keys?,
+    :backoff,
     :cluster_pid,
+    :compressor,
+    :configure,
+    :connection_name,
+    :default_consistency,
+    :disconnection_reason,
+    :options,
+    :original_options,
     :peername,
+    :port,
+    :prepared_cache,
     :protocol_module,
     :protocol_version,
-    :options,
-    :disconnection_reason,
-    :original_options,
+    :transport,
     free_stream_ids: MapSet.new(1..@max_concurrent_requests),
     in_flight_requests: %{},
     current_keyspace: nil,
@@ -405,7 +407,10 @@ defmodule Xandra.Connection do
         connection_name: Keyword.get(options, :name),
         cluster_pid: Keyword.get(options, :cluster_pid),
         protocol_version: Keyword.get(options, :protocol_version),
-        options: options
+        options: options,
+        backoff:
+          data.backoff ||
+            Backoff.new(Keyword.take(options, [:backoff_type, :backoff_min, :backoff_max]))
     }
 
     case Transport.connect(data.transport, data.address, data.port, @default_timeout) do
@@ -493,7 +498,12 @@ defmodule Xandra.Connection do
           )
         end
 
-        {:keep_state, data, {{:timeout, :reconnect}, @default_timeout, _content = nil}}
+        if data.backoff do
+          {backoff_time, data} = get_and_update_in(data.backoff, &Backoff.backoff/1)
+          {:keep_state, data, {{:timeout, :reconnect}, backoff_time, _content = nil}}
+        else
+          {:stop, reason}
+        end
     end
   end
 

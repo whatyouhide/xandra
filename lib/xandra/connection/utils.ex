@@ -22,7 +22,9 @@ defmodule Xandra.Connection.Utils do
   @spec request_options(Transport.t(), nil | Frame.supported_protocol(), nil | module) ::
           {:ok, map(), negotiated_protocol_module :: module()}
           | {:error, ConnectionError.t() | Error.t()}
-          | {:error, {:use_this_protocol_instead, Frame.supported_protocol()}}
+          | {:error,
+             {:use_this_protocol_instead, Frame.supported_protocol(), Frame.supported_protocol()}}
+          | {:error, {:unsupported_protocol, atom()}}
   def request_options(%Transport{} = transport, protocol_version, compressor \\ nil)
       when (is_nil(protocol_version) or protocol_version in unquote(Frame.supported_protocols())) and
              is_atom(compressor) do
