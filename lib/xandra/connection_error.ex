@@ -16,6 +16,14 @@ defmodule Xandra.ConnectionError do
       negotiating the connection algorithm fails because such compressor module
       uses an algorithm that the Cassandra server does not support.
 
+    * `:disconnected` - the connection closed in the middle of a request to the server.
+
+    * `{:connection_process_crashed, reason}` - the connection process crashed before
+      sending a response.
+
+    * `:timeout` - the connection timed out while waiting for a response from the
+      server.
+
     * `{:cluster, :not_connected}` - this happens when a `Xandra.Cluster`-based
       connection is not connected to any node (for example, because all the
       specified nodes are currently down). See the documentation for
@@ -49,6 +57,22 @@ defmodule Xandra.ConnectionError do
 
   defp format_reason(:closed) do
     "socket is closed"
+  end
+
+  defp format_reason(:not_connected) do
+    "there is currently no connection established with the server"
+  end
+
+  defp format_reason(:disconnected) do
+    "connection dropped in the middle of a request"
+  end
+
+  defp format_reason({:connection_process_crashed, reason}) do
+    "connection process crashed before sending a response with reason: #{inspect(reason)}"
+  end
+
+  defp format_reason(:timeout) do
+    "request timeout"
   end
 
   defp format_reason({:cluster, :not_connected}) do

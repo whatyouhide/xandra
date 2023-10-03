@@ -16,6 +16,7 @@ defmodule Xandra.Frame do
 
   import Bitwise
 
+  alias Xandra.Protocol
   alias Xandra.Protocol.CRC
 
   # This list must be ordered: the first item is the "max supported protocol" that
@@ -139,7 +140,8 @@ defmodule Xandra.Frame do
       kind: kind,
       compressor: Keyword.get(options, :compressor),
       tracing: Keyword.get(options, :tracing, false),
-      custom_payload: is_map(options[:custom_payload])
+      custom_payload: is_map(options[:custom_payload]),
+      stream_id: Keyword.get(options, :stream_id, 0)
     }
   end
 
@@ -287,6 +289,26 @@ defmodule Xandra.Frame do
 
   ## Decoding
 
+  @spec decode(
+          module(),
+          (fetch_state, pos_integer() -> {:ok, binary(), fetch_state} | {:error, reason}),
+          fetch_state,
+          module() | nil
+        ) :: {:ok, t(), binary()} | {:error, reason}
+        when fetch_state: term(), reason: term()
+  def decode(
+        protocol_module,
+        fetch_bytes_fun,
+        fetch_state,
+        compressor,
+        rest_fun \\ fn _ -> "" end
+      ) do
+    case Protocol.frame_protocol_format(protocol_module) do
+      :v4_or_less -> decode_v4(fetch_bytes_fun, fetch_state, compressor, rest_fun)
+      :v5_or_more -> decode_v5(fetch_bytes_fun, fetch_state, compressor, rest_fun)
+    end
+  end
+
   @spec decode_v4(
           (fetch_state, pos_integer() -> {:ok, binary(), fetch_state} | {:error, reason}),
           fetch_state,
@@ -321,7 +343,7 @@ defmodule Xandra.Frame do
       when is_function(fetch_bytes_fun, 2) and is_atom(compressor) do
     with {:ok, envelope, rest} <-
            decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor, rest_fun) do
-      {frame, ""} = decode_from_binary(envelope, compressor)
+      {frame, _ignored_rest} = decode_from_binary(envelope, compressor)
       {:ok, frame, rest}
     end
   end

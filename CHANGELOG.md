@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.18.0
+
+  * Removed the `Xandra.db_connection_start_option/0` type
+  * Removed the `Xandra.xandra_start_option/0` type
+  * Removed the following options in `Xandra.start_link/1`:
+    * `:idle_interval`
+
 ## v0.17.0
 
   * Move most logs to Telemetry events instead. If you want to keep the same behavior as before, call this in your application's `start/2` callback:

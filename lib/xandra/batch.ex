@@ -10,7 +10,8 @@ defmodule Xandra.Batch do
   Note that the `t/1` type is not documented as it's not meant
   for public use. If you want to use batches in your typespecs, use `t:t/0`.
   """
-  alias Xandra.{Prepared, Simple}
+
+  alias Xandra.{Frame, Prepared, Simple}
 
   @enforce_keys [:type]
   defstruct @enforce_keys ++
@@ -104,32 +105,19 @@ defmodule Xandra.Batch do
     %{batch | queries: queries}
   end
 
-  defimpl DBConnection.Query do
-    alias Xandra.Frame
+  @doc false
+  @spec encode(t(), nil, keyword()) :: iodata()
+  def encode(%__MODULE__{} = batch, _values = nil, options) when is_list(options) do
+    batch = %__MODULE__{batch | queries: Enum.reverse(batch.queries)}
 
-    def parse(batch, _options) do
-      batch
-    end
-
-    def encode(batch, _values = nil, options) do
-      batch = %@for{batch | queries: Enum.reverse(batch.queries)}
-
-      Frame.new(:batch,
-        tracing: options[:tracing],
-        compressor: batch.compressor,
-        custom_payload: batch.custom_payload
-      )
-      |> batch.protocol_module.encode_request(batch, options)
-      |> Frame.encode(batch.protocol_module)
-    end
-
-    def decode(_batch, response, _options) do
-      response
-    end
-
-    def describe(batch, _options) do
-      batch
-    end
+    Frame.new(:batch,
+      tracing: options[:tracing],
+      compressor: batch.compressor,
+      custom_payload: batch.custom_payload,
+      stream_id: Keyword.get(options, :stream_id, 0)
+    )
+    |> batch.protocol_module.encode_request(batch, options)
+    |> Frame.encode(batch.protocol_module)
   end
 
   defimpl Inspect do

@@ -3,6 +3,8 @@ defmodule Xandra.Simple do
   A data structure used internally to represent simple queries.
   """
 
+  alias Xandra.Frame
+
   defstruct [
     :statement,
     :values,
@@ -27,30 +29,16 @@ defmodule Xandra.Simple do
           custom_payload: Xandra.custom_payload() | nil
         }
 
-  defimpl DBConnection.Query do
-    alias Xandra.Frame
-
-    def parse(query, _options) do
-      query
-    end
-
-    # "options" are the options given to DBConnection.execute/4.
-    def encode(%@for{} = query, values, options) do
-      Frame.new(:query,
-        tracing: options[:tracing],
-        compressor: query.compressor,
-        custom_payload: query.custom_payload
-      )
-      |> query.protocol_module.encode_request(%@for{query | values: values}, options)
-      |> Frame.encode(query.protocol_module)
-    end
-
-    def decode(_query, response, _options) do
-      response
-    end
-
-    def describe(query, _options) do
-      query
-    end
+  @doc false
+  @spec encode(t(), Xandra.values(), keyword()) :: iodata()
+  def encode(%__MODULE__{} = query, values, options) when is_list(options) do
+    Frame.new(:query,
+      tracing: options[:tracing],
+      stream_id: Keyword.get(options, :stream_id, 0),
+      compressor: query.compressor,
+      custom_payload: query.custom_payload
+    )
+    |> query.protocol_module.encode_request(%__MODULE__{query | values: values}, options)
+    |> Frame.encode(query.protocol_module)
   end
 end

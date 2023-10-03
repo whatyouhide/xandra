@@ -107,15 +107,6 @@ jobs:
             cassandra_version: "4.1"
             cassandra_native_protocol: "v4"
 
-          # Oldest supported Elixir/OTP matrix. We support down to Erlang 21, but
-          # rustler_precompiled (which we use for nimble_lz4, which we use for testing)
-          # requires OTP 23+.
-          - otp: "23.3"
-            elixir: "1.11"
-            test_only_cassandra: true
-            cassandra_version: "3"
-            cassandra_native_protocol: "v3"
-
     env:
       CASSANDRA_VERSION: ${{ matrix.server_versions.cassandra }}
       SCYLLA_VERSION: ${{ matrix.server_versions.scylla }}

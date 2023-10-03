@@ -16,6 +16,20 @@ defmodule Xandra.Transport do
   @enforce_keys [:module, :options]
   defstruct [:module, :options, :socket]
 
+  defguard is_data_message(transport, msg)
+           when is_tuple(msg) and tuple_size(msg) == 3 and elem(msg, 0) in [:tcp, :ssl] and
+                  elem(msg, 1) == transport.socket
+
+  defguard is_closed_message(transport, msg)
+           when is_tuple(msg) and tuple_size(msg) == 2 and
+                  elem(msg, 0) in [:tcp_closed, :ssl_closed] and
+                  elem(msg, 1) == transport.socket
+
+  defguard is_error_message(transport, msg)
+           when is_tuple(msg) and tuple_size(msg) == 3 and
+                  elem(msg, 0) in [:tcp_error, :ssl_error] and
+                  elem(msg, 1) == transport.socket
+
   @spec connect(t(), :inet.ip_address() | charlist(), :inet.port_number(), timeout()) ::
           {:ok, t()} | {:error, error_reason()}
   def connect(%__MODULE__{socket: nil} = transport, address, port, timeout) do

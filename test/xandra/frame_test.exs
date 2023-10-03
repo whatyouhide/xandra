@@ -129,7 +129,7 @@ defmodule Xandra.FrameTest do
       check all kind <- kind_generator(),
                 tracing? <- boolean(),
                 body <- binary(),
-                stream_id <- map(integer(), &abs/1) do
+                stream_id <- integer(1..1000) do
         protocol_module = Frame.protocol_version_to_module(:v5)
 
         frame = Frame.new(kind, compressor: nil, tracing: tracing?)

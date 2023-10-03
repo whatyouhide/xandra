@@ -3,6 +3,8 @@ defmodule XandraTest do
 
   import XandraTest.IntegrationCase, only: [default_start_options: 0]
 
+  alias Xandra.ConnectionError
+
   doctest Xandra
 
   describe "options validation in Xandra.start_link/1" do
@@ -47,31 +49,12 @@ defmodule XandraTest do
     end
   end
 
-  test "supports DBConnection.status/1 without raising" do
-    conn = start_supervised!({Xandra, default_start_options()})
-    assert DBConnection.status(conn) == :idle
-  end
-
-  test "raises for unsupported DBConnection callbacks" do
-    conn = start_supervised!({Xandra, default_start_options()})
-
-    assert_raise ArgumentError, "Cassandra doesn't support transactions", fn ->
-      assert DBConnection.transaction(conn, fn _ -> :ok end)
-    end
-  end
-
-  @tag :capture_log
-  test "rescues DBConnection errors" do
-    options =
-      Keyword.merge(default_start_options(),
-        nodes: ["nonexistent-domain"],
-        queue_target: 10,
-        queue_interval: 10,
-        pool_size: 0
-      )
+  test "returns an error if the connection is not established" do
+    options = Keyword.merge(default_start_options(), nodes: ["nonexistent-domain"])
 
     conn = start_supervised!({Xandra, options})
 
-    assert {:error, %DBConnection.ConnectionError{}} = Xandra.execute(conn, "USE some_keyspace")
+    assert {:error, %ConnectionError{action: "request", reason: :not_connected}} =
+             Xandra.execute(conn, "USE some_keyspace")
   end
 end

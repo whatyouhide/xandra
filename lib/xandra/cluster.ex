@@ -311,7 +311,7 @@ defmodule Xandra.Cluster do
       {:ok, cluster} =
         Xandra.Cluster.start_link(
           nodes: ["cassandra.example.net"],
-          after_connect: &Xandra.execute!(&1, "USE my_keyspace")
+          keyspace: "my_keyspace"
         )
 
   """
@@ -482,8 +482,8 @@ defmodule Xandra.Cluster do
 
   """
   @spec run(cluster, keyword, (Xandra.conn() -> result)) :: result when result: var
-  def run(cluster, options \\ [], fun) do
-    with_conn(cluster, &Xandra.run(&1, options, fun))
+  def run(cluster, _options \\ [], fun) do
+    with_conn(cluster, fun)
   end
 
   @doc """
