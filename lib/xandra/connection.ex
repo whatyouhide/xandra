@@ -756,8 +756,6 @@ defmodule Xandra.Connection do
   end
 
   defp prepared_cache_lookup(prepared_cache, prepared, true = _force?) do
-    dbg()
-
     cache_status =
       case Prepared.Cache.lookup(prepared_cache, prepared) do
         {:ok, %Prepared{}} -> :hit

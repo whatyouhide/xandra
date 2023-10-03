@@ -101,13 +101,11 @@ defmodule Xandra.Prepared do
 
     def inspect(prepared, options) do
       properties = [
-        id: Base.encode16(prepared.id, case: :lower),
         statement: prepared.statement,
         tracing_id: prepared.tracing_id
       ]
 
-      # concat(["#Xandra.Prepared<", to_doc(properties, options), ">"])
-      Inspect.Map.inspect(prepared, options)
+      concat(["#Xandra.Prepared<", to_doc(properties, options), ">"])
     end
   end
 end

@@ -1211,13 +1211,13 @@ defmodule Xandra do
   defp execute_without_retrying(conn, %Prepared{} = prepared, params, options) do
     case Connection.execute(conn, prepared, params, options) do
       {:ok, %Error{reason: :unprepared}} ->
-        with {:ok, _reprepared} <-
+        with {:ok, reprepared} <-
                Connection.prepare(
                  conn,
                  prepared,
                  Keyword.put(options, :force, true)
                ) do
-          Connection.execute(conn, prepared, params, options)
+          Connection.execute(conn, reprepared, params, options)
         end
 
       {:ok, %Error{} = error} ->
