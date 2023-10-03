@@ -213,8 +213,6 @@ defmodule Xandra.Connection do
               {:ok, %Frame{} = frame} ->
                 case protocol_module.decode_response(frame, query, options) do
                   {%_{} = response, warnings} ->
-                    dbg(response)
-
                     maybe_execute_telemetry_event_for_warnings(
                       checkout_response,
                       conn_pid,
