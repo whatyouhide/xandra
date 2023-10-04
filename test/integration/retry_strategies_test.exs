@@ -1,58 +1,62 @@
 defmodule Xandra.RetryStrategiesTest do
-  use XandraTest.IntegrationCase, async: false
+  use XandraTest.IntegrationCase, async: true
 
+  alias Xandra.Cluster.Host
   alias Xandra.Error
 
-  describe "RetryStrategy on Xandra level" do
-    test "that retries for a fixed amount of times", %{conn: conn} do
+  describe "on single connection level level" do
+    test "calls the c:retry/3 until query succeeds", %{conn: conn} do
       defmodule CounterStrategy do
         @behaviour Xandra.RetryStrategy
 
-        def new(options) do
-          retries_left = Keyword.fetch!(options, :retry_count)
+        @impl true
+        def new(options), do: Keyword.fetch!(options, :retry_count)
 
-          %{retries_left: retries_left}
-        end
-
-        def retry(_error, _options, %{retries_left: 0}) do
+        @impl true
+        def retry(_error, _options, 0) do
           :error
         end
 
-        def retry(error, options, %{retries_left: retries_left}) do
+        def retry(error, options, retries_left) do
           send(self(), {:retrying, error, retries_left})
-
-          {:retry, options, %{retries_left: retries_left - 1}}
+          {:retry, options, retries_left - 1}
         end
       end
 
-      assert_raise KeyError, fn ->
+      assert_raise KeyError, ~r"key :retry_count not found", fn ->
         Xandra.execute(conn, "USE nonexistent_keyspace", [], retry_strategy: CounterStrategy)
       end
 
-      options = [retry_strategy: CounterStrategy, retry_count: 2]
-      assert {:error, _} = Xandra.execute(conn, "USE nonexistent_keyspace", [], options)
+      assert {:error, %Error{} = error} =
+               Xandra.execute(conn, "USE nonexistent_keyspace", [],
+                 retry_strategy: CounterStrategy,
+                 retry_count: 2
+               )
 
-      assert_received {:retrying, %Error{reason: :invalid}, 2}
-      assert_received {:retrying, %Error{reason: :invalid}, 1}
+      assert error.reason == :invalid
     after
       :code.delete(CounterStrategy)
       :code.purge(CounterStrategy)
     end
 
-    test "raises an error if retry/3 returns an invalid value", %{conn: conn} do
+    test "raises an error if c:retry/3 returns an invalid value", %{conn: conn} do
       defmodule InvalidStrategy do
         @behaviour Xandra.RetryStrategy
 
+        @impl true
         def new(_options), do: %{}
+
+        @impl true
         def retry(_error, _options, _state), do: :invalid_value
       end
 
-      message =
-        "invalid return value :invalid_value from " <>
-          "retry strategy Xandra.RetryStrategiesTest.InvalidStrategy with state %{}"
+      message = """
+      invalid return value from retry strategy callback \
+      Xandra.RetryStrategiesTest.InvalidStrategy.retry/3 with state %{}: :invalid_value\
+      """
 
       assert_raise ArgumentError, message, fn ->
-        Xandra.execute(conn, "USE nonexistend_keyspace", [], retry_strategy: InvalidStrategy)
+        Xandra.execute(conn, "USE nonexistent_keyspace", [], retry_strategy: InvalidStrategy)
       end
     after
       :code.delete(InvalidStrategy)
@@ -60,7 +64,7 @@ defmodule Xandra.RetryStrategiesTest do
     end
   end
 
-  describe "RetryStrategy on cluster level" do
+  describe "on cluster level" do
     defmodule MockXandra do
       use GenServer
 
@@ -81,88 +85,71 @@ defmodule Xandra.RetryStrategiesTest do
       end
     end
 
-    defmodule MockCluster do
-      @behaviour :gen_statem
-
-      alias Xandra.Cluster.Host
-
-      def child_spec(arg) do
-        %{
-          id: __MODULE__,
-          start: {__MODULE__, :start_link, [arg]}
-        }
-      end
-
-      def start_link(nodes_count: nodes_count, conn: conn, client: client) do
-        hosts =
-          Enum.map(1..nodes_count, fn n ->
-            {:ok, xandra_conn} = MockXandra.start_link(%{conn: conn, client: client})
-            {xandra_conn, %Host{address: {127, 0, 0, n}}}
-          end)
-
-        :gen_statem.start_link(__MODULE__, hosts, [])
-      end
-
-      def callback_mode(),
-        do: [:handle_event_function]
-
-      def init(hosts) do
-        {:ok, :state, hosts}
-      end
-
-      def handle_event({:call, from}, :checkout, _state, hosts) do
-        {:keep_state_and_data, {:reply, from, {:ok, hosts}}}
-      end
-    end
-
-    test "works with target_connection", %{conn: conn} do
+    test "works with target_connection", %{start_options: start_options} do
       defmodule AllNodesStrategy do
         @behaviour Xandra.RetryStrategy
 
+        @impl true
         def new(options) do
-          if options[:execution_level] == :cluster do
-            [_already_tried_node | rest_of_nodes] = options[:connected_hosts]
-
-            rest_of_nodes
-          end
+          send(:all_nodes_strategy_test_pid, {:new_called, options})
+          Keyword.fetch!(options, :connected_hosts)
         end
 
-        def retry(_error, options, state) do
-          case options[:execution_level] do
-            :xandra ->
-              :error
+        @impl true
+        def retry(_error, options, [{conn_pid, _host} | rest_of_nodes] = state) do
+          send(:all_nodes_strategy_test_pid, {:retry_called, state})
+          {:retry, options, rest_of_nodes, conn_pid}
+        end
 
-            :cluster ->
-              case state do
-                [] ->
-                  :error
-
-                [{conn, _host} | rest_of_nodes] ->
-                  options = Keyword.put(options, :target_connection, conn)
-
-                  {:retry, options, rest_of_nodes}
-              end
-          end
+        def retry(_error, _options, []) do
+          send(:all_nodes_strategy_test_pid, {:retry_called, []})
+          :error
         end
       end
 
-      {:ok, mock_cluster} =
-        start_supervised({MockCluster, [nodes_count: 3, conn: conn, client: self()]})
+      Process.register(self(), :all_nodes_strategy_test_pid)
 
-      assert {:ok, [{pid1, _host1}, {pid2, _host2}, {pid3, _host3}]} =
-               Xandra.Cluster.Pool.checkout(mock_cluster)
+      cluster = start_supervised!({Xandra.Cluster, start_options})
 
       assert {:error, %Xandra.Error{reason: :invalid}} =
-               Xandra.Cluster.execute(mock_cluster, "USE nonexistent_keyspace", [],
+               Xandra.Cluster.execute(cluster, "USE nonexistent_keyspace", [],
                  retry_strategy: AllNodesStrategy
                )
 
-      assert_receive({:received_request, ^pid1})
-      assert_receive({:received_request, ^pid2})
-      assert_receive({:received_request, ^pid3})
+      assert_received {:new_called, options}
+      assert [{conn_pid, %Host{}}] = options[:connected_hosts]
+
+      assert_received {:retry_called, [{^conn_pid, %Host{}}]}
+      assert_received {:retry_called, []}
     after
       :code.delete(AllNodesStrategy)
       :code.purge(AllNodesStrategy)
+    end
+
+    test "raises an error if c:retry/3 returns an invalid value", %{conn: conn} do
+      defmodule InvalidClusterStrategy do
+        @behaviour Xandra.RetryStrategy
+
+        @impl true
+        def new(_options), do: %{}
+
+        @impl true
+        def retry(_error, _options, _state), do: :invalid_value
+      end
+
+      message = """
+      invalid return value from retry strategy callback \
+      Xandra.RetryStrategiesTest.InvalidClusterStrategy.retry/3 with state %{}: :invalid_value\
+      """
+
+      assert_raise ArgumentError, message, fn ->
+        Xandra.execute(conn, "USE nonexistent_keyspace", [],
+          retry_strategy: InvalidClusterStrategy
+        )
+      end
+    after
+      :code.delete(InvalidClusterStrategy)
+      :code.purge(InvalidClusterStrategy)
     end
   end
 end

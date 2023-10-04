@@ -417,7 +417,13 @@ defmodule Xandra.Cluster do
   end
 
   def execute(cluster, %Batch{} = batch, options) when is_list(options) do
-    with_conn_and_retrying(cluster, options, &Xandra.execute(&1, batch, options))
+    options_without_retry_strategy = Keyword.delete(options, :retry_strategy)
+
+    with_conn_and_retrying(
+      cluster,
+      options,
+      &Xandra.execute(&1, batch, options_without_retry_strategy)
+    )
   end
 
   @doc """
@@ -433,7 +439,13 @@ defmodule Xandra.Cluster do
   @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), keyword) ::
           {:ok, Xandra.result()} | {:error, Xandra.error()}
   def execute(cluster, query, params, options) do
-    with_conn_and_retrying(cluster, options, &Xandra.execute(&1, query, params, options))
+    options_without_retry_strategy = Keyword.delete(options, :retry_strategy)
+
+    with_conn_and_retrying(
+      cluster,
+      options,
+      &Xandra.execute(&1, query, params, options_without_retry_strategy)
+    )
   end
 
   @doc """
@@ -507,14 +519,14 @@ defmodule Xandra.Cluster do
     Pool.connected_hosts(cluster)
   end
 
-  defp with_conn_and_retrying(cluster, options, fun) do
+  defp with_conn_and_retrying(cluster, options, fun) when is_function(fun, 1) do
     case Pool.checkout(cluster) do
       {:error, :empty} ->
         action = "checkout from cluster #{inspect(cluster)}"
         {:error, ConnectionError.new(action, {:cluster, :not_connected})}
 
       {:ok, connected_hosts} ->
-        RetryStrategy.run_cluster_with_retrying(options, connected_hosts, fun)
+        RetryStrategy.run_on_cluster(options, connected_hosts, fun)
     end
   end
 

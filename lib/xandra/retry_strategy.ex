@@ -51,20 +51,22 @@ defmodule Xandra.RetryStrategy do
   To distinguish these cases, Xandra always passes the `:execution_level` option
   to `c:new/1`. This option has the type `t:execution_level/0`.
 
-  If the execution level is `:single_connection`, Xandra doens't inject any additional
-  options.
+  If the execution level is `:single_connection`, Xandra doesn't inject any additional
+  options. When the execution level is `:single_connection`, `c:retry/3` can only return
+  the 3-element version of the `{:retry, ...}` tuple.
 
   If the execution level is `:cluster`, Xandra injects these options when calling `c:new/1`:
 
-    * `:connected_hosts` — a list of `{connection_pid, host}` tuples, where `connection_pid`
-      (a `t:pid/0`) is the PID of the connection and `host` (a `t:Xandra.Cluster.Host.t/0`)
-      is the corresponding host information. You can use this option to determine on which
-      node to retry a query. In order to pick the a connection to use for the next attempt,
-      inject the `:target_connection` option into the given options when you return them
-      from `c:retry/3`. Elements in this list are ordered according to the
-      `Xandra.Cluster.LoadBalancingPolicy` used by the cluster. If you want to keep track
-      of the original `:connected_hosts`, you'll need to store them in the state of the
-      retry strategy returned by `c:new/1`.
+    * `:connected_hosts` — a list of `{connection_pid, host}` tuples, where
+      `connection_pid` (a `t:pid/0`) is the PID of the connection and `host` (a
+      `t:Xandra.Cluster.Host.t/0`) is the corresponding host information. You can use
+      this option to determine on which node to retry a query. Elements in this list
+      are ordered according to the `Xandra.Cluster.LoadBalancingPolicy` used by the
+      cluster. If you want to keep track of the original `:connected_hosts`, you'll
+      need to store them in the state of the retry strategy returned by `c:new/1`.
+
+  When the execution level is `:single_connection`, `c:retry/3` can only return
+  the 4-element version of the `{:retry, ...}` tuple.
 
   ## Examples
 
@@ -158,16 +160,16 @@ defmodule Xandra.RetryStrategy do
           :error
         end
 
-        # Try on the next node.
         def retry(_error, options, [{conn_pid, %Host{}} | remaining_nodes]) do
-          options = Keyword.put(options, :target_connection, conn_pid)
-          {:retry, options, remaining_nodes}
+          {:retry, options, _new_state = remaining_nodes, conn_pid}
         end
       end
 
   """
 
   alias Xandra.Cluster.Host
+
+  ## Types
 
   @typedoc """
   The possible values of the `:execution_level` option injected into the options
@@ -181,10 +183,14 @@ defmodule Xandra.RetryStrategy do
   """
   @type state() :: term()
 
+  @typep return_value() :: {:ok, term()} | {:error, Xandra.error()}
+
+  ## Callbacks
+
   @doc """
   Initializes the state of a retry strategy based on the given `options`.
   """
-  @callback new(options :: keyword) :: state
+  @callback new(options :: keyword()) :: state()
 
   @doc """
   Determines whether to retry the failed query or return the error to the caller.
@@ -207,100 +213,129 @@ defmodule Xandra.RetryStrategy do
   again: in that case, `c:retry/3` will be invoked again with `new_state` as its
   third argument. This sequence of steps will repeat until either the query is executed
   successfully or this callback returns `:error`.
+
+  The last possible return value is `{:retry, new_options, new_state, conn_pid}`.
+  This can only be returned by retry strategies used by `Xandra.Cluster`, and any
+  attempt to return this when using `Xandra` function will result in an error. This
+  return value is *available since v0.18.0*.
   """
-  @callback retry(error :: term, options :: keyword, state) ::
-              :error | {:retry, new_options :: keyword, new_state :: state}
+  @callback retry(error :: Xandra.error(), options :: keyword(), state()) ::
+              :error
+              | {:retry, new_options :: keyword(), new_state :: state()}
+              | {:retry, new_options :: keyword(), new_state :: state(), conn_pid :: pid()}
+
+  ## Internal API
 
   @doc false
-  @spec run_with_retrying(keyword, (-> result)) :: result when result: var
-  def run_with_retrying(options, fun) do
-    options = Keyword.put(options, :execution_level, :xandra)
-
-    case Keyword.pop(options, :retry_strategy) do
-      {nil, _options} -> fun.()
-      {retry_strategy, options} -> run_with_retrying(options, retry_strategy, fun)
+  @spec run_on_single_conn(keyword(), (-> result)) :: result when result: return_value()
+  def run_on_single_conn(options, fun) when is_function(fun, 0) do
+    if Keyword.has_key?(options, :execution_level) do
+      raise ArgumentError, "the :execution_level option must be set by Xandra"
     end
-  end
 
-  def run_with_retrying(options, retry_strategy, fun) do
-    with {:error, reason} <- fun.() do
-      {retry_state, options} =
-        Keyword.pop_lazy(options, :retrying_state, fn ->
-          retry_strategy.new(options)
-        end)
-
-      case retry_strategy.retry(reason, options, retry_state) do
-        :error ->
-          {:error, reason}
-
-        {:retry, new_options, new_retry_state} ->
-          new_options = Keyword.put(new_options, :retrying_state, new_retry_state)
-          run_with_retrying(new_options, retry_strategy, fun)
-
-        other ->
-          raise ArgumentError,
-                "invalid return value #{inspect(other)} from " <>
-                  "retry strategy #{inspect(retry_strategy)} " <>
-                  "with state #{inspect(retry_state)}"
-      end
-    end
-  end
-
-  @spec run_cluster_with_retrying(Keyword.t(), [{pid(), Host.t()}, ...], (pid() -> result)) ::
-          result
-        when result: var
-  def run_cluster_with_retrying(options, connected_hosts, fun) do
-    [{conn, _host} | _connected_hosts] = connected_hosts
-
-    options =
-      Keyword.merge(options,
-        execution_level: :cluster,
-        connected_hosts: connected_hosts,
-        target_connection: conn
-      )
+    options = Keyword.put(options, :execution_level, :single_connection)
 
     case Keyword.pop(options, :retry_strategy) do
       {nil, _options} ->
-        fun.(conn)
+        fun.()
 
       {retry_strategy, options} ->
-        run_cluster_with_retrying(options, connected_hosts, retry_strategy, fun)
+        # Always initialize the retry strategy, even if the query didn't fail yet.
+        retry_state = retry_strategy.new(options)
+
+        run_on_single_conn(retry_strategy, retry_state, options, fun)
     end
   end
 
-  defp run_cluster_with_retrying(options, connected_hosts, retry_strategy, fun) do
-    {conn, options} =
-      case Keyword.pop(options, :target_connection) do
-        {conn, options} when is_pid(conn) ->
-          {conn, options}
+  defp run_on_single_conn(retry_strategy, retry_state, options, fun) do
+    case fun.() do
+      {:error, reason} ->
+        case retry_strategy.retry(reason, options, retry_state) do
+          :error ->
+            {:error, reason}
 
-        {nil, _options} ->
-          [{conn, _host}] = Enum.take_random(connected_hosts, 1)
-          {conn, options}
-      end
+          {:retry, new_options, new_retry_state} ->
+            run_on_single_conn(retry_strategy, new_retry_state, new_options, fun)
 
-    with {:error, reason} <- fun.(conn) do
-      {retry_state, options} =
-        Keyword.pop_lazy(options, :retrying_state, fn ->
-          retry_strategy.new(options)
-        end)
+          {:retry, _new_options, _new_retry_state, conn_pid} = value when is_pid(conn_pid) ->
+            raise ArgumentError, """
+            invalid return value from #{Exception.format_mfa(retry_strategy, :retry, 3)}, \
+            which includes the connection PID to use for the next query. This return \
+            value is only supported by Xandra.Cluster functions, but this retry strategy \
+            was invoked on a single Xandra connection function.\ The return value was:
 
-      case retry_strategy.retry(reason, options, retry_state) do
-        :error ->
-          {:error, reason}
+              #{inspect(value)}
 
-        {:retry, new_options, new_retry_state} ->
-          new_options =
-            Keyword.put(new_options, :retrying_state, new_retry_state)
+            """
 
-          run_cluster_with_retrying(new_options, connected_hosts, retry_strategy, fun)
+          other ->
+            raise ArgumentError, """
+            invalid return value from retry strategy callback \
+            #{Exception.format_mfa(retry_strategy, :retry, 3)} with state \
+            #{inspect(retry_state)}: #{inspect(other)}\
+            """
+        end
 
-        other ->
-          raise ArgumentError,
-                "invalid return value #{inspect(other)} from " <>
-                  "retry strategy #{inspect(retry_strategy)} " <>
-                  "with state #{inspect(retry_state)}"
-      end
+      {:ok, _value} = result ->
+        result
+    end
+  end
+
+  @doc false
+  @spec run_on_cluster(keyword(), [host, ...], (pid() -> result)) :: result
+        when result: return_value(), host: {pid(), Host.t()}
+  def run_on_cluster(options, [{conn_pid, _host} | _rest] = connected_hosts, fun)
+      when is_function(fun, 1) do
+    if Keyword.has_key?(options, :execution_level) do
+      raise ArgumentError, "the :execution_level option must be set by Xandra"
+    end
+
+    case Keyword.pop(options, :retry_strategy) do
+      {nil, _options} ->
+        fun.(conn_pid)
+
+      {retry_strategy, options} ->
+        # Let's initialize the retry state even if the query hasn't failed yet.
+        retry_state =
+          options
+          |> Keyword.merge(execution_level: :cluster, connected_hosts: connected_hosts)
+          |> retry_strategy.new()
+
+        run_on_cluster(retry_strategy, retry_state, options, conn_pid, fun)
+    end
+  end
+
+  defp run_on_cluster(retry_strategy, retry_state, options, conn_pid, fun) do
+    case fun.(conn_pid) do
+      {:error, error} ->
+        case retry_strategy.retry(error, options, retry_state) do
+          :error ->
+            {:error, error}
+
+          {:retry, _new_options, _new_retry_state} = value ->
+            raise ArgumentError, """
+            invalid return value from #{Exception.format_mfa(retry_strategy, :retry, 3)}, \
+            which doesn't include the connection PID to use for the next query. This return \
+            value is only supported by single Xandra connection functions, but this retry \
+            strategy was invoked on a Xandra.Cluster function.\ The return value was:
+
+              #{inspect(value)}
+
+            """
+
+          {:retry, new_options, new_retry_state, new_conn_pid} ->
+            run_on_cluster(retry_strategy, new_retry_state, new_options, new_conn_pid, fun)
+
+          other ->
+            raise ArgumentError, """
+            invalid return value from retry strategy callback \
+            #{Exception.format_mfa(retry_strategy, :retry, 3)} with state \
+            #{inspect(retry_state)}: #{inspect(other)}\
+            """
+        end
+
+      {:ok, _value} = result ->
+        result
     end
   end
 end
