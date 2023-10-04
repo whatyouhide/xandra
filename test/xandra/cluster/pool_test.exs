@@ -297,8 +297,35 @@ defmodule Xandra.Cluster.PoolTest do
          %{cluster_options: cluster_options, pool_options: pool_options} do
       assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
 
-      assert {:ok, pool_pid} = Pool.checkout(pid)
+      assert {:ok, [{pool_pid, %Host{}}]} = Pool.checkout(pid)
       assert is_pid(pool_pid)
+    end
+
+    test "returns all connected pools",
+         %{cluster_options: cluster_options, pool_options: pool_options} do
+      assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
+
+      hosts_with_statuses = [
+        {%Host{address: {127, 0, 0, 1}, port: 8091}, :up},
+        {%Host{address: {127, 0, 0, 1}, port: 8092}, :down},
+        {%Host{address: {127, 0, 0, 1}, port: 8093}, :connected}
+      ]
+
+      wait_until_connected(pid)
+      send(pid, {:add_test_hosts, hosts_with_statuses})
+
+      assert {:ok, pids_with_hosts} = Pool.checkout(pid)
+      assert is_list(pids_with_hosts)
+
+      assert Enum.all?(pids_with_hosts, fn {conn, %Host{}} -> is_pid(conn) end)
+
+      expected_set_of_connected_hosts =
+        MapSet.new([{{127, 0, 0, 1}, @port}, {{127, 0, 0, 1}, 8093}])
+
+      existing_set_of_connected_hosts =
+        MapSet.new(pids_with_hosts, fn {_, host} -> Host.to_peername(host) end)
+
+      assert existing_set_of_connected_hosts == expected_set_of_connected_hosts
     end
 
     test "returns {:error, :empty} when there are no pools",
@@ -321,7 +348,7 @@ defmodule Xandra.Cluster.PoolTest do
       cluster_options = Keyword.merge(cluster_options, sync_connect: 1000)
       cluster = start_supervised!(spec(cluster_options, pool_options))
 
-      assert {:ok, pool_pid} = Pool.checkout(cluster)
+      assert {:ok, [{pool_pid, %Host{}}]} = Pool.checkout(cluster)
       ref = Process.monitor(pool_pid)
 
       Process.exit(pool_pid, :kill)
@@ -385,6 +412,21 @@ defmodule Xandra.Cluster.PoolTest do
 
       # Make sure we reconnect to the control connection.
       assert_telemetry [:control_connection, :connected], _meta
+    end
+  end
+
+  defp wait_until_connected(pid, retries \\ 10)
+
+  defp wait_until_connected(_pid, 0), do: :error
+
+  defp wait_until_connected(pid, retries) do
+    case :sys.get_state(pid) do
+      {:has_connected_once, _} ->
+        :ok
+
+      _ ->
+        Process.sleep(10)
+        wait_until_connected(pid, retries - 1)
     end
   end
 

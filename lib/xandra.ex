@@ -709,7 +709,7 @@ defmodule Xandra do
       exactly the same as calling `execute(conn, query, params_or_options, [])`.
 
   When `query` is a batch query, successful results will always be `Xandra.Void`
-  structs.
+  structs. See `execute/4` for full documentation on all supported options.
 
   When `{:error, error}` is returned, `error` can be either a `Xandra.Error` or
   a `Xandra.ConnectionError` struct. See the module documentation for more
@@ -729,6 +729,9 @@ defmodule Xandra do
     * `:timestamp` - using this option means that the provided
       timestamp will apply to all the statements in the batch that do not
       explicitly specify a timestamp.
+
+  See `execute/4` for full documentation on all supported options if `query` is not a batch
+  query.
 
   ## Examples
 
@@ -948,6 +951,17 @@ defmodule Xandra do
   result's module.
 
   ## Options
+
+  This function supports any arbitrary option, since Xandra passes those down
+  to the `Xandra.RetryStrategy` module passed in `:retry_strategy`. However, below
+  is a list of the options that are specific to Xandra and that Xandra uses when executing
+  the query. Note that we might *add* options to this list in the future, which could
+  potentially change the meaning of custom options you use to implement your own retry
+  strategy, and we wouldn't consider this a breaking change. Because of this, we recommend
+  *scoping* custom options in your retry strategy module (for example, by prefixing them
+  with `<my_module>_<option_name`).
+
+  Here are the Xandra-specific options:
 
   #{NimbleOptions.docs(@execute_opts_schema)}
 
@@ -1177,7 +1191,7 @@ defmodule Xandra do
     {xandra_opts, other_opts} = Keyword.split(options, @execute_opts_keys)
     options = NimbleOptions.validate!(xandra_opts, @execute_opts_schema) ++ other_opts
 
-    RetryStrategy.run_with_retrying(options, fn ->
+    RetryStrategy.run_on_single_conn(options, fn ->
       execute_without_retrying(conn, query, params, options)
     end)
   end

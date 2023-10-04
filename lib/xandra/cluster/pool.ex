@@ -75,7 +75,8 @@ defmodule Xandra.Cluster.Pool do
     :gen_statem.stop(pid, reason, timeout)
   end
 
-  @spec checkout(:gen_statem.server_ref()) :: {:ok, pid()} | {:error, :empty}
+  @spec checkout(:gen_statem.server_ref()) ::
+          {:ok, [{pid(), Host.t()}, ...]} | {:error, :empty}
   def checkout(pid) do
     :gen_statem.call(pid, :checkout)
   end
@@ -348,6 +349,30 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state, data}
   end
 
+  # For testing purposes
+  def handle_event(:info, {:add_test_hosts, hosts_with_status}, _state, %__MODULE__{} = data) do
+    data =
+      Enum.reduce(hosts_with_status, data, fn {%Host{} = host, status}, data_acc ->
+        data_acc =
+          update_in(data_acc.load_balancing_state, fn current_state ->
+            current_state = data_acc.load_balancing_module.host_added(current_state, host)
+            apply(data_acc.load_balancing_module, :"host_#{status}", [current_state, host])
+          end)
+
+        update_in(
+          data_acc.peers,
+          &Map.put(&1, Host.to_peername(host), %{
+            host: host,
+            status: status,
+            pool_pid: Process.spawn(fn -> nil end, []),
+            pool_ref: make_ref()
+          })
+        )
+      end)
+
+    {:keep_state, data}
+  end
+
   # Sent by the connection itself.
   def handle_event(
         :info,
@@ -457,20 +482,26 @@ defmodule Xandra.Cluster.Pool do
         data.load_balancing_module.query_plan(lb_state)
       end)
 
-    # Find the first host in the plan for which we have a pool.
+    # Find all connected hosts
+    connected_hosts =
+      for host <- query_plan,
+          %{pool_pid: pid, host: host} = Map.get(data.peers, Host.to_peername(host)),
+          not is_nil(host),
+          is_pid(pid),
+          do: {pid, host}
+
     reply =
-      query_plan
-      |> Stream.map(fn %Host{} = host -> Map.fetch(data.peers, Host.to_peername(host)) end)
-      |> Enum.find_value(_default = {:error, :empty}, fn
-        {:ok, %{pool_pid: pid}} when is_pid(pid) -> {:ok, pid}
-        _other -> nil
-      end)
+      case connected_hosts do
+        [] -> {:error, :empty}
+        connected_hosts -> {:ok, connected_hosts}
+      end
 
     {data, {:reply, from, reply}}
   end
 
   defp handle_host_added(%__MODULE__{} = data, %Host{} = host) do
-    data = update_in(data.load_balancing_state, &data.load_balancing_module.host_added(&1, host))
+    data =
+      update_in(data.load_balancing_state, &data.load_balancing_module.host_added(&1, host))
 
     data =
       put_in(data.peers[Host.to_peername(host)], %{
