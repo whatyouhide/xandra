@@ -23,7 +23,7 @@ defmodule Xandra.Cluster.Pool do
     {genstatem_opts, cluster_opts} = Keyword.split(cluster_opts, @genstatem_opts)
     genstatem_opts = Keyword.merge(genstatem_opts, Keyword.take(cluster_opts, [:name]))
 
-    sync_connect_alias_or_nil = if sync_connect_timeout, do: erlang_alias([:reply]), else: nil
+    sync_connect_alias_or_nil = if sync_connect_timeout, do: Process.alias([:reply]), else: nil
 
     start_arg = {cluster_opts, pool_opts, sync_connect_alias_or_nil}
 
@@ -42,31 +42,18 @@ defmodule Xandra.Cluster.Pool do
             Process.demonitor(ref, [:flush])
             {:ok, pid}
 
-          {:DOWN, ^ref, _, _, _} ->
-            erlang_unalias(sync_connect_alias_or_nil)
-            {:error, :sync_connect_timeout}
+          {:DOWN, ^ref, _, _, reason} ->
+            if sync_connect_alias_or_nil, do: Process.unalias(sync_connect_alias_or_nil)
+            exit(reason)
         after
           sync_connect_timeout ->
-            if sync_connect_alias_or_nil, do: erlang_unalias(sync_connect_alias_or_nil)
+            if sync_connect_alias_or_nil, do: Process.unalias(sync_connect_alias_or_nil)
             Process.demonitor(ref, [:flush])
             {:error, :sync_connect_timeout}
         end
 
       other ->
         other
-    end
-  end
-
-  if function_exported?(:erlang, :alias, 1) do
-    defp erlang_alias(options), do: :erlang.alias(options)
-    defp erlang_unalias(options), do: :erlang.unalias(options)
-  else
-    defp erlang_alias(_options) do
-      raise ArgumentError, "the :sync_connect option requires OTP 24+"
-    end
-
-    defp erlang_unalias(_options) do
-      raise ArgumentError, "the :sync_connect option requires OTP 24+"
     end
   end
 
