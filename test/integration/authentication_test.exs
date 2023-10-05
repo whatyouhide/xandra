@@ -13,7 +13,7 @@ defmodule AuthenticationTest do
   @moduletag :authentication
 
   test "challenge is passed to cluster connections", %{start_options: start_options} do
-    cluster = TestHelper.start_link_supervised!({Xandra.Cluster, start_options})
+    cluster = start_link_supervised!({Xandra.Cluster, start_options})
     TestHelper.await_cluster_connected(cluster)
   end
 end

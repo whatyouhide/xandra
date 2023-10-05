@@ -55,22 +55,10 @@ defmodule Xandra.Cluster.LoadBalancingPolicy do
   @doc """
   Called to return a "plan", which is an enumerable of hosts to query in order.
   """
-  # TODO: remove the check once we depend on Elixir 1.14+. Enumerable.t/1 was
-  # introduced in 1.14.
-  if Version.match?(System.version(), ">= 1.14.0") do
-    @callback query_plan(state()) :: {Enumerable.t(Host.t()), state()}
-  else
-    @callback query_plan(state()) :: {Enumerable.t(), state()}
-  end
+  @callback query_plan(state()) :: {Enumerable.t(Host.t()), state()}
 
   @doc """
   Called to return a "plan", which is an enumerable of hosts to start connections in order.
   """
-  # TODO: remove the check once we depend on Elixir 1.14+. Enumerable.t/1 was
-  # introduced in 1.14.
-  if Version.match?(System.version(), ">= 1.14.0") do
-    @callback hosts_plan(state()) :: {Enumerable.t(Host.t()), state()}
-  else
-    @callback hosts_plan(state()) :: {Enumerable.t(), state()}
-  end
+  @callback hosts_plan(state()) :: {Enumerable.t(Host.t()), state()}
 end

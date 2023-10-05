@@ -15,7 +15,7 @@ defmodule XandraTest.IntegrationCase do
             unquote(start_options)
           )
 
-        conn = Xandra.TestHelper.start_link_supervised!({Xandra, start_options})
+        conn = start_link_supervised!({Xandra, start_options})
 
         unquote(case_template).setup_keyspace(conn, keyspace)
 

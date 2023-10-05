@@ -6,7 +6,6 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   import ExUnit.CaptureLog
 
   alias Xandra.Frame
-  alias Xandra.TestHelper
   alias Xandra.Transport
 
   alias Xandra.Cluster.{
@@ -283,7 +282,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
 
   defp start_control_connection!(start_options, overrides \\ []) do
     options = Keyword.merge(start_options, overrides)
-    TestHelper.start_link_supervised!({ControlConnection, options})
+    start_link_supervised!({ControlConnection, options})
   end
 
   defp mirror(parent, ref) do

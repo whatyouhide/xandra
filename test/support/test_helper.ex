@@ -21,19 +21,6 @@ defmodule Xandra.TestHelper do
       end
   end
 
-  # TODO: remove once we have ExUnit.Callbacks.start_link_supervised!/1 (Elixir 1.14+).
-  if function_exported?(ExUnit.Callbacks, :start_link_supervised!, 2) do
-    defdelegate start_link_supervised!(spec), to: ExUnit.Callbacks
-    defdelegate start_link_supervised!(spec, opts), to: ExUnit.Callbacks
-  else
-    @spec start_link_supervised!(Supervisor.child_spec(), keyword) :: pid
-    def start_link_supervised!(spec, opts \\ []) do
-      pid = ExUnit.Callbacks.start_supervised!(spec, opts)
-      true = Process.link(pid)
-      pid
-    end
-  end
-
   @spec wait_for_passing(pos_integer, (-> result)) :: result when result: var
   def wait_for_passing(time_left, fun)
 

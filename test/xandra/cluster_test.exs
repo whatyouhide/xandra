@@ -1,7 +1,6 @@
 defmodule Xandra.ClusterTest do
   use ExUnit.Case, async: false
 
-  alias Xandra.TestHelper
   alias Xandra.Cluster.Host
 
   @protocol_version XandraTest.IntegrationCase.protocol_version()
@@ -126,7 +125,7 @@ defmodule Xandra.ClusterTest do
           opts
         end
 
-      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+      cluster = start_link_supervised!({Xandra.Cluster, opts})
 
       assert [%Host{} = host] = Xandra.Cluster.connected_hosts(cluster)
 
@@ -155,7 +154,7 @@ defmodule Xandra.ClusterTest do
           opts
         end
 
-      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+      cluster = start_link_supervised!({Xandra.Cluster, opts})
 
       assert {:ok, %Xandra.Page{}} =
                Xandra.Cluster.execute(cluster, "SELECT * FROM system.local")
@@ -182,7 +181,7 @@ defmodule Xandra.ClusterTest do
           opts
         end
 
-      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+      cluster = start_link_supervised!({Xandra.Cluster, opts})
 
       assert %Xandra.Page{} = Xandra.Cluster.execute!(cluster, "SELECT * FROM system.local")
 
@@ -210,7 +209,7 @@ defmodule Xandra.ClusterTest do
           opts
         end
 
-      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+      cluster = start_link_supervised!({Xandra.Cluster, opts})
 
       assert {:ok, %Xandra.Prepared{} = prepared} =
                Xandra.Cluster.prepare(cluster, "SELECT * FROM system.local")
@@ -231,7 +230,7 @@ defmodule Xandra.ClusterTest do
           opts
         end
 
-      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+      cluster = start_link_supervised!({Xandra.Cluster, opts})
 
       assert %Xandra.Prepared{} =
                prepared = Xandra.Cluster.prepare!(cluster, "SELECT * FROM system.local")
@@ -248,7 +247,7 @@ defmodule Xandra.ClusterTest do
         nodes: ["node1"]
       ]
 
-      cluster = TestHelper.start_link_supervised!({Xandra.Cluster, opts})
+      cluster = start_link_supervised!({Xandra.Cluster, opts})
       assert_control_connection_started(test_ref)
 
       assert Xandra.Cluster.stop(cluster) == :ok

@@ -6,7 +6,6 @@ defmodule Xandra.Cluster.PoolTest do
   alias Xandra.Cluster.ControlConnection
   alias Xandra.Cluster.Host
   alias Xandra.Cluster.Pool
-  alias Xandra.TestHelper
 
   defmacrop assert_telemetry(postfix, meta) do
     quote do
@@ -111,7 +110,7 @@ defmodule Xandra.Cluster.PoolTest do
           [:xandra, :connected]
         ])
 
-      pid = TestHelper.start_link_supervised!(spec(cluster_options, pool_options))
+      pid = start_link_supervised!(spec(cluster_options, pool_options))
 
       assert_telemetry [:control_connection, :connected], %{
         cluster_pid: ^pid,
@@ -399,7 +398,7 @@ defmodule Xandra.Cluster.PoolTest do
         ])
 
       cluster_options = Keyword.merge(cluster_options, sync_connect: 1000)
-      cluster = TestHelper.start_link_supervised!(spec(cluster_options, pool_options))
+      cluster = start_link_supervised!(spec(cluster_options, pool_options))
 
       assert_telemetry [:control_connection, :connected], _meta
 
