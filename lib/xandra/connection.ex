@@ -9,6 +9,7 @@ defmodule Xandra.Connection do
   alias Xandra.ConnectionError
   alias Xandra.Connection.Utils
   alias Xandra.Frame
+  alias Xandra.GenStatemHelpers
   alias Xandra.Prepared
   alias Xandra.SetKeyspace
   alias Xandra.Simple
@@ -40,34 +41,9 @@ defmodule Xandra.Connection do
   ## Public API
 
   @spec start_link(keyword()) :: :gen_statem.start_ret()
-  def start_link(options) when is_list(options) do
-    {gen_statem_opts, options} = Keyword.split(options, [:hibernate_after, :debug, :spawn_opt])
-
-    case Keyword.fetch(options, :name) do
-      :error ->
-        :gen_statem.start_link(__MODULE__, options, gen_statem_opts)
-
-      {:ok, atom} when is_atom(atom) ->
-        :gen_statem.start_link({:local, atom}, __MODULE__, options, gen_statem_opts)
-
-      {:ok, {:global, _term} = tuple} ->
-        :gen_statem.start_link(tuple, __MODULE__, options, gen_statem_opts)
-
-      {:ok, {:via, via_module, _term} = tuple} when is_atom(via_module) ->
-        :gen_statem.start_link(tuple, __MODULE__, options, gen_statem_opts)
-
-      {:ok, other} ->
-        raise ArgumentError, """
-        expected :name option to be one of the following:
-
-          * nil
-          * atom
-          * {:global, term}
-          * {:via, module, term}
-
-        Got: #{inspect(other)}
-        """
-    end
+  def start_link(opts) when is_list(opts) do
+    {gen_statem_opts, opts} = Keyword.split(opts, GenStatemHelpers.start_opts())
+    GenStatemHelpers.start_link_with_name_registration(__MODULE__, opts, gen_statem_opts)
   end
 
   @spec prepare(:gen_statem.server_ref(), Prepared.t(), keyword()) ::

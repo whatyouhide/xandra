@@ -201,6 +201,17 @@ defmodule Xandra.Cluster.PoolTest do
       cluster_options = Keyword.merge(cluster_options, sync_connect: 0)
       assert {:error, :sync_connect_timeout} = Pool.start_link(cluster_options, pool_options)
     end
+
+    for name <- [:my_cluster_pool, {:global, :global_cluster_pool}] do
+      test "supports GenServer name registration with name #{inspect(name)}",
+           %{cluster_options: cluster_opts, pool_options: pool_opts} do
+        name = unquote(name)
+        cluster_opts = Keyword.put(cluster_opts, :name, name)
+        pid = start_supervised!(spec(cluster_opts, pool_opts), id: name)
+        assert GenServer.whereis(name) == pid
+        stop_supervised!(name)
+      end
+    end
   end
 
   describe "handling change events" do

@@ -18,28 +18,6 @@ defmodule Xandra.OptionsValidators do
     end
   end
 
-  @spec validate_genstatem_name(term()) :: {:ok, term()} | {:error, String.t()}
-  def validate_genstatem_name(term)
-
-  def validate_genstatem_name(atom) when is_atom(atom), do: {:ok, {:local, atom}}
-  def validate_genstatem_name({:global, _term} = name), do: {:ok, name}
-  def validate_genstatem_name({:via, mod, _term} = name) when is_atom(mod), do: {:ok, name}
-
-  def validate_genstatem_name(other) do
-    message = """
-    expected :name option to be one of the following:
-
-      * nil
-      * atom
-      * {:global, term}
-      * {:via, module, term}
-
-    Got: #{inspect(other)}
-    """
-
-    {:error, message}
-  end
-
   @spec validate_authentication(term()) :: {:ok, module()} | {:error, String.t()}
   def validate_authentication({module, keyword} = value)
       when is_atom(module) and is_list(keyword) do

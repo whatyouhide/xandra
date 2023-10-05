@@ -10,8 +10,7 @@ defmodule Xandra.Cluster.Pool do
   @behaviour :gen_statem
 
   alias Xandra.Cluster.{Host, LoadBalancingPolicy}
-
-  @genstatem_opts [:debug, :hibernate_after, :spawn_opt]
+  alias Xandra.GenStatemHelpers
 
   ## Public API
 
@@ -20,20 +19,15 @@ defmodule Xandra.Cluster.Pool do
     {sync_connect_timeout, cluster_opts} = Keyword.pop!(cluster_opts, :sync_connect)
 
     # Split out gen_statem-specific options from the cluster options.
-    {genstatem_opts, cluster_opts} = Keyword.split(cluster_opts, @genstatem_opts)
-    genstatem_opts = Keyword.merge(genstatem_opts, Keyword.take(cluster_opts, [:name]))
+    {gen_statem_opts, cluster_opts} = Keyword.split(cluster_opts, GenStatemHelpers.start_opts())
 
     sync_connect_alias_or_nil = if sync_connect_timeout, do: Process.alias([:reply]), else: nil
 
-    start_arg = {cluster_opts, pool_opts, sync_connect_alias_or_nil}
-
-    cluster_opts
-    |> Keyword.fetch(:name)
-    |> case do
-      {:ok, name} -> :gen_statem.start_link(name, __MODULE__, start_arg, genstatem_opts)
-      :error -> :gen_statem.start_link(__MODULE__, start_arg, genstatem_opts)
-    end
-    |> case do
+    case GenStatemHelpers.start_link_with_name_registration(
+           __MODULE__,
+           {cluster_opts, pool_opts, sync_connect_alias_or_nil},
+           gen_statem_opts
+         ) do
       {:ok, pid} when is_integer(sync_connect_timeout) ->
         ref = Process.monitor(pid)
 
