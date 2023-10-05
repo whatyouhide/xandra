@@ -461,38 +461,40 @@ defmodule Xandra.Connection do
           {:error, %Xandra.Error{} = error} ->
             raise error
 
-          {:error, _reason} = error ->
-            # disconnect(reason, state)
-            raise "TODO"
-            error
+          {:error, reason}   ->
+            {:keep_state, data, {:next_event, :internal, {:failed_to_connect, reason}}}
         end
 
       {:error, reason} ->
-        ipfied_address =
-          case :inet.parse_address(data.address) do
-            {:ok, ip} -> ip
-            {:error, _reason} -> data.address
-          end
+        {:keep_state, data, {:next_event, :internal, {:failed_to_connect, reason}}}
+    end
+  end
 
-        :telemetry.execute(
-          [:xandra, :failed_to_connect],
-          %{},
-          telemetry_meta(data, %{reason: reason})
-        )
+  def disconnected(:internal, {:failed_to_connect, reason}, %__MODULE__{} = data) do
+    ipfied_address =
+      case :inet.parse_address(data.address) do
+        {:ok, ip} -> ip
+        {:error, _reason} -> data.address
+      end
 
-        if data.cluster_pid do
-          send(
-            data.cluster_pid,
-            {:xandra, :failed_to_connect, {ipfied_address, data.port}, self()}
-          )
-        end
+    :telemetry.execute(
+      [:xandra, :failed_to_connect],
+      %{},
+      telemetry_meta(data, %{reason: reason})
+    )
 
-        if data.backoff do
-          {backoff_time, data} = get_and_update_in(data.backoff, &Backoff.backoff/1)
-          {:keep_state, data, {{:timeout, :reconnect}, backoff_time, _content = nil}}
-        else
-          {:stop, reason}
-        end
+    if data.cluster_pid do
+      send(
+        data.cluster_pid,
+        {:xandra, :failed_to_connect, {ipfied_address, data.port}, self()}
+      )
+    end
+
+    if data.backoff do
+      {backoff_time, data} = get_and_update_in(data.backoff, &Backoff.backoff/1)
+      {:keep_state, data, {{:timeout, :reconnect}, backoff_time, _content = nil}}
+    else
+      {:stop, reason}
     end
   end
 
