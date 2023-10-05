@@ -461,7 +461,7 @@ defmodule Xandra.Connection do
           {:error, %Xandra.Error{} = error} ->
             raise error
 
-          {:error, reason}   ->
+          {:error, reason} ->
             {:keep_state, data, {:next_event, :internal, {:failed_to_connect, reason}}}
         end
 
