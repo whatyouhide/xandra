@@ -1,5 +1,5 @@
 defmodule XandraTest do
-  use ExUnit.Case, async: true
+  use XandraTest.IntegrationCase, async: true
 
   import XandraTest.IntegrationCase, only: [default_start_options: 0]
 
@@ -7,8 +7,8 @@ defmodule XandraTest do
 
   doctest Xandra
 
-  describe "options validation in Xandra.start_link/1" do
-    test "with invalid nodes" do
+  describe "start_link/1" do
+    test "validates the :nodes option" do
       assert_raise NimbleOptions.ValidationError, ~r{invalid node: "foo:bar"}, fn ->
         Xandra.start_link(nodes: ["foo:bar"])
       end
@@ -27,13 +27,13 @@ defmodule XandraTest do
       end
     end
 
-    test "with invalid :authentication" do
+    test "validates the :authentication option" do
       assert_raise NimbleOptions.ValidationError, ~r{invalid value for :authentication}, fn ->
         Xandra.start_link(authentication: :nope)
       end
     end
 
-    test "with invalid :compressor" do
+    test "validates the :compressor option" do
       message =
         "invalid value for :compressor option: compressor module :nonexisting_module is not loaded"
 
@@ -47,14 +47,130 @@ defmodule XandraTest do
         Xandra.start_link(compressor: "not even an atom")
       end
     end
+
+    test "returns an error if the connection is not established" do
+      options = Keyword.merge(default_start_options(), nodes: ["nonexistent-domain"])
+
+      conn = start_supervised!({Xandra, options})
+
+      assert {:error, %ConnectionError{action: "request", reason: :not_connected}} =
+               Xandra.execute(conn, "USE some_keyspace")
+    end
+
+    test "supports the :keyspace option", %{keyspace: keyspace, start_options: start_options} do
+      assert {:ok, conn} = start_supervised({Xandra, [keyspace: keyspace] ++ start_options})
+
+      assert {:connected, state} = :sys.get_state(conn)
+      assert state.current_keyspace == keyspace
+    end
+
+    # Regression for https://github.com/lexhide/xandra/issues/266
+    test "supports the :default_consistency option",
+         %{keyspace: keyspace, start_options: start_options} do
+      telemetry_ref =
+        :telemetry_test.attach_event_handlers(self(), [
+          [:xandra, :execute_query, :stop]
+        ])
+
+      assert {:ok, test_conn} =
+               start_supervised({Xandra, [default_consistency: :three] ++ start_options})
+
+      Xandra.execute!(test_conn, "USE #{keyspace}", _params = [],
+        telemetry_metadata: %{ref: telemetry_ref}
+      )
+
+      assert_receive {[:xandra, :execute_query, :stop], ^telemetry_ref, %{},
+                      %{
+                        connection: ^test_conn,
+                        extra_metadata: %{ref: ^telemetry_ref},
+                        query: query
+                      }}
+
+      assert %Xandra.Simple{} = query
+      assert query.default_consistency == :three
+    end
+
+    test "supports the :configure option, as an anonymous function",
+         %{start_options: start_options} do
+      test_pid = self()
+      ref = make_ref()
+
+      configure_fun = fn options ->
+        send(test_pid, {ref, options})
+        Keyword.replace!(options, :nodes, start_options[:nodes])
+      end
+
+      modified_start_options =
+        Keyword.merge(start_options, configure: configure_fun, nodes: ["localhost:9999"])
+
+      assert {:ok, _test_conn} = start_supervised({Xandra, modified_start_options})
+
+      assert_receive {^ref, configure_start_options}
+      assert configure_start_options[:node] == {~c"localhost", 9999}
+    end
+
+    test "supports the :configure option, as a MFA tuple", %{start_options: start_options} do
+      ref = make_ref()
+
+      configure_fun = {__MODULE__, :configure_fun, [start_options, self(), ref]}
+
+      modified_start_options =
+        Keyword.merge(start_options, configure: configure_fun, nodes: ["localhost:9999"])
+
+      assert {:ok, _test_conn} = start_supervised({Xandra, modified_start_options})
+
+      assert_receive {^ref, configure_start_options}
+      assert configure_start_options[:node] == {~c"localhost", 9999}
+    end
+
+    test "handles connection drops that happen right after connecting" do
+      telemetry_ref =
+        :telemetry_test.attach_event_handlers(self(), [
+          [:xandra, :failed_to_connect]
+        ])
+
+      assert {:ok, listen_socket} = :gen_tcp.listen(0, active: false, mode: :binary)
+      assert {:ok, port} = :inet.port(listen_socket)
+
+      task =
+        Task.async(fn ->
+          # Accept a socket (so that Xandra's :gen_tcp.connect/3 call succeeds),
+          # and then shut the socket down right away.
+          assert {:ok, socket} = :gen_tcp.accept(listen_socket, :infinity)
+          :ok = :gen_tcp.close(socket)
+        end)
+
+      assert {:ok, conn} = start_supervised({Xandra, nodes: ["localhost:#{port}"]})
+
+      assert {:error, %ConnectionError{action: "request", reason: :not_connected}} =
+               Xandra.execute(conn, "SELECT * FROM system.local")
+
+      assert :ok = Task.await(task)
+
+      assert_received {[:xandra, :failed_to_connect], ^telemetry_ref, %{}, %{connection: ^conn}}
+    end
   end
 
-  test "returns an error if the connection is not established" do
-    options = Keyword.merge(default_start_options(), nodes: ["nonexistent-domain"])
+  describe "execute/3,4" do
+    test "supports the :timeout option", %{conn: conn} do
+      assert {:error, %ConnectionError{} = error} =
+               Xandra.execute(conn, "SELECT * FROM system.local", [], timeout: 0)
 
-    conn = start_supervised!({Xandra, options})
+      assert error.reason == :timeout
+    end
+  end
 
-    assert {:error, %ConnectionError{action: "request", reason: :not_connected}} =
-             Xandra.execute(conn, "USE some_keyspace")
+  describe "prepare/3" do
+    test "supports the :timeout option", %{conn: conn} do
+      assert {:error, %ConnectionError{} = error} =
+               Xandra.prepare(conn, "SELECT * FROM system.local", timeout: 0)
+
+      assert error.reason == :timeout
+    end
+  end
+
+  def configure_fun(options, original_start_options, pid, ref) do
+    send(pid, {ref, options})
+    Keyword.replace!(options, :nodes, original_start_options[:nodes])
   end
 end
