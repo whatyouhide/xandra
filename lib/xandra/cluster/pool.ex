@@ -9,23 +9,23 @@ defmodule Xandra.Cluster.Pool do
 
   @behaviour :gen_statem
 
-  alias Xandra.Cluster.{Host, LoadBalancingPolicy}
+  alias Xandra.Cluster.{ConnectionPool, Host, LoadBalancingPolicy}
   alias Xandra.GenStatemHelpers
 
   ## Public API
 
   @spec start_link(keyword(), keyword()) :: :gen_statem.start_ret()
-  def start_link(cluster_opts, pool_opts) do
+  def start_link(cluster_opts, connection_opts) do
     {sync_connect_timeout, cluster_opts} = Keyword.pop!(cluster_opts, :sync_connect)
 
     # Split out gen_statem-specific options from the cluster options.
-    {gen_statem_opts, cluster_opts} = Keyword.split(cluster_opts, GenStatemHelpers.start_opts())
+    {gen_statem_opts, cluster_opts} = GenStatemHelpers.split_opts(cluster_opts)
 
     sync_connect_alias_or_nil = if sync_connect_timeout, do: Process.alias([:reply]), else: nil
 
     case GenStatemHelpers.start_link_with_name_registration(
            __MODULE__,
-           {cluster_opts, pool_opts, sync_connect_alias_or_nil},
+           {cluster_opts, connection_opts, sync_connect_alias_or_nil},
            gen_statem_opts
          ) do
       {:ok, pid} when is_integer(sync_connect_timeout) ->
@@ -71,7 +71,7 @@ defmodule Xandra.Cluster.Pool do
 
   defstruct [
     # Options for the underlying connection pools.
-    :pool_options,
+    :connection_options,
 
     # Contact nodes.
     :contact_nodes,
@@ -97,6 +97,9 @@ defmodule Xandra.Cluster.Pool do
 
     # The number of target pools.
     :target_pools,
+
+    # The number of connections in each pool to a node.
+    :pool_size,
 
     # Erlang alias to send back the ":connected" message to make :sync_connect work.
     # This is nil if :sync_connect was not used.
@@ -137,7 +140,7 @@ defmodule Xandra.Cluster.Pool do
   def init({cluster_opts, pool_opts, sync_connect_alias_or_nil}) do
     Process.flag(:trap_exit, true)
 
-    # Start supervisor for the pools.
+    # Start supervisor for the connections.
     {:ok, pool_sup} = Supervisor.start_link([], strategy: :one_for_one)
 
     {lb_mod, lb_opts} =
@@ -151,7 +154,7 @@ defmodule Xandra.Cluster.Pool do
     queue_before_connecting_timeout = Keyword.fetch!(queue_before_connecting_opts, :timeout)
 
     data = %__MODULE__{
-      pool_options: pool_opts,
+      connection_options: pool_opts,
       contact_nodes: Keyword.fetch!(cluster_opts, :nodes),
       load_balancing_module: lb_mod,
       load_balancing_state: lb_mod.init(lb_opts),
@@ -160,6 +163,7 @@ defmodule Xandra.Cluster.Pool do
       control_conn_mod: Keyword.fetch!(cluster_opts, :control_connection_module),
       target_pools: Keyword.fetch!(cluster_opts, :target_pools),
       name: Keyword.get(cluster_opts, :name),
+      pool_size: Keyword.fetch!(cluster_opts, :pool_size),
       pool_supervisor: pool_sup,
       refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval),
       reqs_before_connecting: %{
@@ -214,7 +218,7 @@ defmodule Xandra.Cluster.Pool do
     {:keep_state, data, reply_actions}
   end
 
-  # If we connected once, we already flush this queue, so we ignore this timeout.
+  # If we connected once, we already flushed this queue, so we ignore this timeout.
   def handle_event(
         {:timeout, :flush_queue_before_connecting},
         nil,
@@ -331,7 +335,12 @@ defmodule Xandra.Cluster.Pool do
   end
 
   # For testing purposes
-  def handle_event(:info, {:add_test_hosts, hosts_with_status}, _state, %__MODULE__{} = data) do
+  def handle_event(
+        {:call, from},
+        {:add_test_hosts, hosts_with_status},
+        _state,
+        %__MODULE__{} = data
+      ) do
     data =
       Enum.reduce(hosts_with_status, data, fn {%Host{} = host, status}, data_acc ->
         data_acc =
@@ -340,18 +349,17 @@ defmodule Xandra.Cluster.Pool do
             apply(data_acc.load_balancing_module, :"host_#{status}", [current_state, host])
           end)
 
-        update_in(
-          data_acc.peers,
-          &Map.put(&1, Host.to_peername(host), %{
-            host: host,
-            status: status,
-            pool_pid: Process.spawn(fn -> nil end, []),
-            pool_ref: make_ref()
-          })
-        )
+        put_in(data_acc.peers[Host.to_peername(host)], %{
+          host: host,
+          status: status,
+          pool_pid: nil,
+          pool_ref: nil
+        })
       end)
 
-    {:keep_state, data}
+    data = maybe_start_pools(data)
+
+    {:keep_state, data, {:reply, from, :ok}}
   end
 
   # Sent by the connection itself.
@@ -466,9 +474,10 @@ defmodule Xandra.Cluster.Pool do
     # Find all connected hosts
     connected_hosts =
       for host <- query_plan,
-          %{pool_pid: pid, host: host} = Map.get(data.peers, Host.to_peername(host)),
+          %{pool_pid: pool_pid, host: host} = Map.get(data.peers, Host.to_peername(host)),
           not is_nil(host),
-          is_pid(pid),
+          is_pid(pool_pid) and Process.alive?(pool_pid),
+          pid = ConnectionPool.checkout(pool_pid),
           do: {pid, host}
 
     reply =
@@ -515,12 +524,19 @@ defmodule Xandra.Cluster.Pool do
   # peer, and it'll only start it once.
   defp start_pool(%__MODULE__{} = data, %Host{} = host) do
     conn_options =
-      Keyword.merge(data.pool_options, nodes: [Host.format_address(host)], cluster_pid: self())
+      Keyword.merge(data.connection_options,
+        nodes: [Host.format_address(host)],
+        cluster_pid: self()
+      )
 
     peername = Host.to_peername(host)
 
     pool_spec =
-      Supervisor.child_spec({data.xandra_mod, conn_options}, id: peername, restart: :transient)
+      Supervisor.child_spec(
+        {data.xandra_mod, connection_options: conn_options, pool_size: data.pool_size},
+        id: peername,
+        restart: :transient
+      )
 
     case Supervisor.start_child(data.pool_supervisor, pool_spec) do
       {:ok, pool} ->
@@ -615,7 +631,7 @@ defmodule Xandra.Cluster.Pool do
       cluster_pid: self(),
       cluster_name: data.name,
       contact_node: {host.address, host.port},
-      connection_options: data.pool_options,
+      connection_options: data.connection_options,
       autodiscovered_nodes_port: data.autodiscovered_nodes_port,
       refresh_topology_interval: data.refresh_topology_interval
     ]

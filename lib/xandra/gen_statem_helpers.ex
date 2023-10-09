@@ -4,9 +4,11 @@ defmodule Xandra.GenStatemHelpers do
   # We use :gen_statem in some places, but name registration for it is tricky for example.
   # This module provides a few helpers to mitigate that.
 
-  @spec start_opts() :: [atom(), ...]
-  def start_opts do
-    [:debug, :hibernate_after, :spawn_opt, :name]
+  @spec split_opts(keyword()) :: {keyword(), keyword()}
+  def split_opts(opts) when is_list(opts) do
+    {gen_statem_opts, other_opts} = Keyword.split(opts, [:debug, :hibernate_after, :spawn_opt])
+    gen_statem_opts = Keyword.merge(gen_statem_opts, Keyword.take(other_opts, [:name]))
+    {gen_statem_opts, other_opts}
   end
 
   @spec start_link_with_name_registration(module(), term(), keyword()) :: :gen_statem.start_ret()
@@ -37,7 +39,7 @@ defmodule Xandra.GenStatemHelpers do
           * {:global, term}
           * {:via, module, term}
 
-        Instead, got: #{inspect(other)}
+        Instead, got: #{inspect(other)}\
         """
     end
   end

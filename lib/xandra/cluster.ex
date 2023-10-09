@@ -172,11 +172,10 @@ defmodule Xandra.Cluster do
       type: :pos_integer,
       default: 2,
       doc: """
-      The number of nodes to start pools to. Each pool will use the `:pool_size` option
-      (see `Xandra.start_link/1`) to determine how many single connections to open to that
-      node. This number is a *target* number, which means that sometimes there might not
-      be enough nodes to start this many pools. Xandra won't ever start more than
-      `:target_pools` pools. *Available since v0.15.0*.
+      The number of nodes to start pools to. Each pool will use the `:pool_size` option to
+      determine how many single connections to open to that node. This number is a *target*
+      number, which means that sometimes there might not be enough nodes to start this many
+      pools. Xandra won't ever start more than `:target_pools` pools. *Available since v0.15.0*.
       """
     ],
     name: [
@@ -238,6 +237,13 @@ defmodule Xandra.Cluster do
       ],
       default: []
     ],
+    pool_size: [
+      type: :pos_integer,
+      default: 1,
+      doc: """
+      The number of connections to open to each node in the cluster. *Available since v0.18.0*.
+      """
+    ],
     debug: [
       type: :any,
       doc: """
@@ -259,7 +265,7 @@ defmodule Xandra.Cluster do
     ],
 
     # Internal for testing, not exposed.
-    xandra_module: [type: :atom, default: Xandra, doc: false],
+    xandra_module: [type: :atom, default: Xandra.Cluster.ConnectionPool, doc: false],
     control_connection_module: [type: :atom, default: ControlConnection, doc: false],
     test_discovered_hosts: [type: :any, default: [], doc: false]
   ]
@@ -318,9 +324,9 @@ defmodule Xandra.Cluster do
   @spec start_link([option]) :: GenServer.on_start()
         when option: Xandra.start_option() | start_option()
   def start_link(options) when is_list(options) do
-    {cluster_opts, pool_opts} = Keyword.split(options, @start_link_opts_schema_keys)
+    {cluster_opts, connection_opts} = Keyword.split(options, @start_link_opts_schema_keys)
     cluster_opts = NimbleOptions.validate!(cluster_opts, @start_link_opts_schema)
-    Pool.start_link(cluster_opts, pool_opts)
+    Pool.start_link(cluster_opts, connection_opts)
   end
 
   @doc false

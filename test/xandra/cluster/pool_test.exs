@@ -7,6 +7,19 @@ defmodule Xandra.Cluster.PoolTest do
   alias Xandra.Cluster.Host
   alias Xandra.Cluster.Pool
 
+  defmodule PoolMock do
+    use Supervisor
+
+    def start_link(opts), do: Supervisor.start_link(__MODULE__, Map.new(opts))
+
+    @impl true
+    def init(opts) do
+      {test_pid, test_ref} = :persistent_term.get(:clustering_test_info)
+      send(test_pid, {test_ref, __MODULE__, :init_called, opts})
+      Supervisor.init([], strategy: :one_for_one)
+    end
+  end
+
   defmacrop assert_telemetry(postfix, meta) do
     quote do
       event = [:xandra, :cluster] ++ unquote(postfix)
@@ -28,7 +41,8 @@ defmodule Xandra.Cluster.PoolTest do
       nodes: [{~c"127.0.0.1", @port}],
       load_balancing: :random,
       autodiscovered_nodes_port: @port,
-      xandra_module: Xandra,
+      xandra_module: Xandra.Cluster.ConnectionPool,
+      pool_size: 1,
       target_pools: 2,
       sync_connect: false,
       refresh_topology_interval: 60_000,
@@ -313,6 +327,7 @@ defmodule Xandra.Cluster.PoolTest do
 
     test "returns all connected pools",
          %{cluster_options: cluster_options, pool_options: pool_options} do
+      cluster_options = Keyword.put(cluster_options, :xandra_mod, PoolMock)
       assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
 
       hosts_with_statuses = [
@@ -322,7 +337,7 @@ defmodule Xandra.Cluster.PoolTest do
       ]
 
       wait_until_connected(pid)
-      send(pid, {:add_test_hosts, hosts_with_statuses})
+      :ok = :gen_statem.call(pid, {:add_test_hosts, hosts_with_statuses})
 
       assert {:ok, pids_with_hosts} = Pool.checkout(pid)
       assert is_list(pids_with_hosts)
@@ -353,12 +368,30 @@ defmodule Xandra.Cluster.PoolTest do
   end
 
   describe "resiliency" do
+    @tag :capture_log
+    test "if a single connection crashes, the pool process stays up and cleans up",
+         %{cluster_options: cluster_options, pool_options: pool_options} do
+      cluster_options = Keyword.merge(cluster_options, sync_connect: 1000)
+      cluster = start_supervised!(spec(cluster_options, pool_options))
+
+      assert %{pool_pid: pool_pid} = get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
+
+      assert {:ok, [{conn_pid, %Host{}}]} = Pool.checkout(cluster)
+      ref = Process.monitor(conn_pid)
+
+      Process.exit(conn_pid, :kill)
+      assert_receive {:DOWN, ^ref, _, _, _}
+
+      assert %{pool_pid: ^pool_pid} = get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
+    end
+
+    @tag :capture_log
     test "if a connection pool crashes, the pool process stays up and cleans up",
          %{cluster_options: cluster_options, pool_options: pool_options} do
       cluster_options = Keyword.merge(cluster_options, sync_connect: 1000)
       cluster = start_supervised!(spec(cluster_options, pool_options))
 
-      assert {:ok, [{pool_pid, %Host{}}]} = Pool.checkout(cluster)
+      assert %{pool_pid: pool_pid} = get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
       ref = Process.monitor(pool_pid)
 
       Process.exit(pool_pid, :kill)

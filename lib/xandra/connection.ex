@@ -42,7 +42,7 @@ defmodule Xandra.Connection do
 
   @spec start_link(keyword()) :: :gen_statem.start_ret()
   def start_link(opts) when is_list(opts) do
-    {gen_statem_opts, opts} = Keyword.split(opts, GenStatemHelpers.start_opts())
+    {gen_statem_opts, opts} = GenStatemHelpers.split_opts(opts)
     GenStatemHelpers.start_link_with_name_registration(__MODULE__, opts, gen_statem_opts)
   end
 

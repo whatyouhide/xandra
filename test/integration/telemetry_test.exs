@@ -14,9 +14,7 @@ defmodule TelemetryTest do
     test "sends event on connection/disconnection", %{start_options: start_options} do
       ref = :telemetry_test.attach_event_handlers(self(), [[:xandra, :connected]])
 
-      start_supervised!(
-        {Xandra, [name: :telemetry_test_connection, pool_size: 1] ++ start_options}
-      )
+      start_supervised!({Xandra, [name: :telemetry_test_connection] ++ start_options})
 
       assert_receive {[:xandra, :connected], ^ref, measurements, metadata}
 

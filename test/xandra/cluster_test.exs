@@ -7,15 +7,15 @@ defmodule Xandra.ClusterTest do
   @port String.to_integer(System.get_env("CASSANDRA_PORT", "9052"))
 
   defmodule PoolMock do
-    use GenServer
+    use Supervisor
 
-    def start_link(opts), do: GenServer.start_link(__MODULE__, Map.new(opts))
+    def start_link(opts), do: Supervisor.start_link(__MODULE__, Map.new(opts))
 
     @impl true
     def init(opts) do
       {test_pid, test_ref} = :persistent_term.get(:clustering_test_info)
       send(test_pid, {test_ref, __MODULE__, :init_called, opts})
-      {:ok, {test_pid, test_ref}}
+      Supervisor.init([], strategy: :one_for_one)
     end
   end
 
@@ -91,9 +91,9 @@ defmodule Xandra.ClusterTest do
     end
 
     test "validates the :name option" do
-      message = ~r/invalid value for :name option/
+      message = ~r/expected :name/
 
-      assert_raise NimbleOptions.ValidationError, message, fn ->
+      assert_raise ArgumentError, message, fn ->
         Xandra.Cluster.start_link(nodes: ["example.com:9042"], name: "something something")
       end
     end
