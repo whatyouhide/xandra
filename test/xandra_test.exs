@@ -4,6 +4,7 @@ defmodule XandraTest do
   import XandraTest.IntegrationCase, only: [default_start_options: 0]
 
   alias Xandra.ConnectionError
+  alias Xandra.Transport
 
   doctest Xandra
 
@@ -166,6 +167,43 @@ defmodule XandraTest do
                Xandra.prepare(conn, "SELECT * FROM system.local", timeout: 0)
 
       assert error.reason == :timeout
+    end
+  end
+
+  describe "failure handling" do
+    test "reconnects if the connection drops", %{start_options: start_options} do
+      telemetry_ref =
+        :telemetry_test.attach_event_handlers(self(), [
+          [:xandra, :connected],
+          [:xandra, :disconnected]
+        ])
+
+      conn = start_supervised!({Xandra, start_options ++ [backoff_min: 0]})
+      assert_receive {[:xandra, :connected], ^telemetry_ref, %{}, %{connection: ^conn}}
+
+      assert {:ok, %Transport{} = transport} = Xandra.Connection.get_transport(conn)
+      assert :ok = transport.module.shutdown(transport.socket, :read_write)
+
+      assert_receive {[:xandra, :disconnected], ^telemetry_ref, %{}, %{connection: ^conn}}
+      assert_receive {[:xandra, :connected], ^telemetry_ref, %{}, %{connection: ^conn}}
+    end
+
+    test "reconnects if the connection errors out", %{start_options: start_options} do
+      telemetry_ref =
+        :telemetry_test.attach_event_handlers(self(), [
+          [:xandra, :connected],
+          [:xandra, :disconnected]
+        ])
+
+      conn = start_supervised!({Xandra, start_options ++ [backoff_min: 0]})
+      assert_receive {[:xandra, :connected], ^telemetry_ref, %{}, %{connection: ^conn}}
+
+      # Yuck, we have to send the connection a fake TCP error message here.
+      assert {:ok, %Transport{} = transport} = Xandra.Connection.get_transport(conn)
+      send(conn, {:tcp_error, transport.socket, :econnrefused})
+
+      assert_receive {[:xandra, :disconnected], ^telemetry_ref, %{}, %{connection: ^conn}}
+      assert_receive {[:xandra, :connected], ^telemetry_ref, %{}, %{connection: ^conn}}
     end
   end
 

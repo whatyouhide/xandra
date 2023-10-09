@@ -250,6 +250,11 @@ defmodule Xandra.Connection do
     end
   end
 
+  # Made public for testing. Only meant to be used in tests.
+  def get_transport(conn) do
+    :gen_statem.call(conn, :get_transport)
+  end
+
   ## Data
 
   # [short] - a 2-byte integer, which clients can only use as a *positive* integer (so
@@ -337,7 +342,13 @@ defmodule Xandra.Connection do
       end)
 
     data = put_in(data.in_flight_requests, %{})
-    {:keep_state, data, {{:timeout, :reconnect}, @default_timeout, _content = nil}}
+
+    if data.backoff do
+      {backoff_time, data} = get_and_update_in(data.backoff, &Backoff.backoff/1)
+      {:keep_state, data, {{:timeout, :reconnect}, backoff_time, _content = nil}}
+    else
+      {:stop, reason}
+    end
   end
 
   def disconnected(:internal, :connect, %__MODULE__{} = data) do
@@ -483,6 +494,10 @@ defmodule Xandra.Connection do
     {:keep_state_and_data, {:reply, from, reply}}
   end
 
+  def disconnected({:call, from}, :get_transport, %__MODULE__{}) do
+    {:keep_state_and_data, {:reply, from, {:error, :disconnected}}}
+  end
+
   def disconnected(:cast, {:set_keyspace, _keyspace}, _data) do
     :keep_state_and_data
   end
@@ -550,6 +565,10 @@ defmodule Xandra.Connection do
     data = put_in(data.in_flight_requests[stream_id], req_alias)
 
     {:keep_state, data, {:reply, from, {:ok, response}}}
+  end
+
+  def connected({:call, from}, :get_transport, %__MODULE__{transport: transport}) do
+    {:keep_state_and_data, {:reply, from, {:ok, transport}}}
   end
 
   def connected(:info, message, data) when is_data_message(data.transport, message) do
