@@ -568,7 +568,9 @@ defmodule Xandra.Cluster.Pool do
   defp stop_pool(data, %Host{} = host) do
     peername = Host.to_peername(host)
 
-    Process.demonitor(data.peers[peername].pool_ref, [:flush])
+    if monitor_ref = data.peers[peername].pool_ref do
+      Process.demonitor(monitor_ref, [:flush])
+    end
 
     execute_telemetry(data, [:pool, :stopped], %{}, %{host: host})
     _ = Supervisor.terminate_child(data.pool_supervisor, peername)
