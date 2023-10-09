@@ -50,9 +50,13 @@ defmodule XandraTest do
     end
 
     test "returns an error if the connection is not established" do
+      telemetry_ref =
+        :telemetry_test.attach_event_handlers(self(), [[:xandra, :failed_to_connect]])
+
       options = Keyword.merge(default_start_options(), nodes: ["nonexistent-domain"])
 
       conn = start_supervised!({Xandra, options})
+      assert_receive {[:xandra, :failed_to_connect], ^telemetry_ref, %{}, %{connection: ^conn}}
 
       assert {:error, %ConnectionError{action: "request", reason: :not_connected}} =
                Xandra.execute(conn, "USE some_keyspace")

@@ -32,6 +32,7 @@ defmodule Xandra.Telemetry do
   | -------------------------------------------------------------- | --------- |
   | `[:xandra, :connected]`                                        | info      |
   | `[:xandra, :disconnected]`                                     | warn      |
+  | `[:xandra, :failed_to_connect]`                                | warn      |
   | `[:xandra, :prepared_cache, :hit]`                             | debug     |
   | `[:xandra, :prepared_cache, :miss]`                            | debug     |
   | `[:xandra, :prepare_query, :start]`                            | debug     |
@@ -62,6 +63,7 @@ defmodule Xandra.Telemetry do
     events = [
       [:xandra, :connected],
       [:xandra, :disconnected],
+      [:xandra, :failed_to_connect],
       [:xandra, :prepared_cache, :hit],
       [:xandra, :prepared_cache, :miss],
       [:xandra, :prepare_query, :stop],
@@ -73,6 +75,7 @@ defmodule Xandra.Telemetry do
       [:xandra, :cluster, :control_connection, :failed_to_connect],
       [:xandra, :cluster, :pool, :started],
       [:xandra, :cluster, :pool, :restarted],
+      [:xandra, :cluster, :pool, :stopped],
       [:xandra, :cluster, :discovered_peers]
     ]
 
@@ -157,6 +160,9 @@ defmodule Xandra.Telemetry do
 
       [:disconnected] ->
         Logger.warning("Disconnected with reason: #{inspect(metadata.reason)}", logger_meta)
+
+      [:failed_to_connect] ->
+        Logger.warning("Failed to connect with reason: #{inspect(metadata.reason)}", logger_meta)
 
       [:server_warnings] ->
         Logger.warning("Received warnings: #{inspect(measurements.warnings)}", logger_meta)
