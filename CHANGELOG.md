@@ -6,7 +6,7 @@ This is a big release. The main deal here is that we removed the [`db_connection
 
 This change is breaking, and affect Xandra pretty significantly. The user-facing changes are:
 
-  * `Xandra` doesn't start a pool of connections anymore, only a single connection. Pooling is on you. We recommend [registry-based pooling](https://andrealeopardi.com/posts/process-pools-with-elixirs-registry/). We might eventually add built-in registry-based pooling, but we're evaluating it.
+  * `Xandra` doesn't start a pool of connections anymore, only a single connection. Pooling is on you. We recommend [registry-based pooling](https://andrealeopardi.com/posts/process-pools-with-elixirs-registry/) if you want to keep the single-node aspect of `Xandra`. Alternatively, use `Xandra.Cluster` with a single node (`Xandra.Cluster` supports pooling). We might eventually add built-in registry-based pooling, but we're evaluating it.
 
   * `Xandra.start_link/1` doesn't support `DBConnection.start_link/2` options anymore. Make sure to refer to the updated documentation for `Xandra.start_link/1` to know the exact supported options.
 
@@ -14,6 +14,7 @@ This change is breaking, and affect Xandra pretty significantly. The user-facing
 
 ### Breaking Changes
 
+  * The `Xandra` module doesn't support pooling anymore and is now only a single connection.
   * Removed the `Xandra.db_connection_start_option/0` type.
   * Removed the `Xandra.xandra_start_option/0` type.
   * Removed `DBConnection.start_link/2` options in `Xandra.start_link/1`.
