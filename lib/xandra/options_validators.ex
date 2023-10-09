@@ -28,20 +28,6 @@ defmodule Xandra.OptionsValidators do
     {:error, "expected :authentication to be a {module, options} tuple, got: #{inspect(other)}"}
   end
 
-  @spec validate_port(term()) :: {:ok, :inet.port_number()} | {:error, String.t()}
-  def validate_port(port) do
-    cond do
-      is_integer(port) and port in 0..65535 ->
-        {:ok, port}
-
-      is_integer(port) ->
-        {:error, "expected port to be an integer between 0 and 65535, got: #{inspect(port)}"}
-
-      true ->
-        {:error, "expected port to be an integer, got: #{inspect(port)}"}
-    end
-  end
-
   @spec validate_node(term()) :: {:ok, {charlist(), integer()}} | {:error, String.t()}
   def validate_node(value) when is_binary(value) do
     case String.split(value, ":", parts: 2) do

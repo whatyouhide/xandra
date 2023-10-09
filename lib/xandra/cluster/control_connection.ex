@@ -32,7 +32,7 @@ defmodule Xandra.Cluster.ControlConnection do
       required: true
     ],
     autodiscovered_nodes_port: [
-      type: {:custom, Xandra.OptionsValidators, :validate_port, []},
+      type: {:in, 0..65535},
       required: true
     ],
     refresh_topology_interval: [type: :timeout, required: true]
