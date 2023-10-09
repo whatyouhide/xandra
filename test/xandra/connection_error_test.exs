@@ -27,12 +27,32 @@ defmodule Xandra.ConnectionErrorTest do
                ~s(action "connect" failed with reason: not connected to any of the nodes)
     end
 
+    test "with reason :disconnected" do
+      assert message("connect", :disconnected) ==
+               ~s(action "connect" failed with reason: connection dropped in the middle of a request)
+    end
+
+    test "with reason :not_connected" do
+      assert message("connect", :not_connected) ==
+               ~s(action "connect" failed with reason: there is currently no connection established with the server)
+    end
+
+    test "with reason {:connection_process_crashed, reason}" do
+      assert message("connect", {:connection_process_crashed, :banana}) ==
+               ~s(action "connect" failed with reason: connection process crashed before sending a response with reason: :banana)
+    end
+
     test "with POSIX reason from :inet" do
       assert message("connect", :enomem) ==
                ~s(action "connect" failed with reason: not enough memory)
 
       assert message("connect", :econnrefused) ==
                ~s(action "connect" failed with reason: connection refused)
+    end
+
+    test "with reason :timeout" do
+      assert message("connect", :timeout) ==
+               ~s(action "connect" failed with reason: request timeout)
     end
 
     test "with any other reason" do

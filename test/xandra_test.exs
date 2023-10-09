@@ -58,6 +58,27 @@ defmodule XandraTest do
                Xandra.execute(conn, "USE some_keyspace")
     end
 
+    test "supports the :name option as an atom", %{start_options: start_options} do
+      assert {:ok, conn} = start_supervised({Xandra, [name: :my_test_conn] ++ start_options})
+      assert Process.whereis(:my_test_conn) == conn
+    end
+
+    test "supports the :name option as {:global, name}", %{start_options: start_options} do
+      name = {:global, :my_global_test_conn}
+      assert {:ok, conn} = start_supervised({Xandra, [name: name] ++ start_options})
+      assert GenServer.whereis(name) == conn
+    end
+
+    test "supports the :name option as {:via, mod, term}",
+         %{start_options: start_options, test: test_name} do
+      registry_name = :"Registry_#{test_name}"
+      start_supervised!({Registry, keys: :unique, name: registry_name})
+
+      name = {:via, Registry, {registry_name, :my_via_test_conn}}
+      assert {:ok, conn} = start_supervised({Xandra, [name: name] ++ start_options})
+      assert GenServer.whereis(name) == conn
+    end
+
     test "supports the :keyspace option", %{keyspace: keyspace, start_options: start_options} do
       assert {:ok, conn} = start_supervised({Xandra, [keyspace: keyspace] ++ start_options})
 
