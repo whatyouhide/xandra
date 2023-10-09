@@ -17,7 +17,6 @@ defmodule Xandra.Connection do
 
   @behaviour :gen_statem
 
-  @default_timeout 5000
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
   @max_concurrent_requests 5000
 
@@ -270,6 +269,7 @@ defmodule Xandra.Connection do
           cluster_pid: pid() | nil,
           compressor: module() | nil,
           configure: {module(), atom(), [term()]} | (keyword() -> keyword()) | nil,
+          connect_timeout: timeout(),
           connection_name: term(),
           current_keyspace: String.t() | nil,
           default_consistency: atom(),
@@ -293,6 +293,7 @@ defmodule Xandra.Connection do
     :cluster_pid,
     :compressor,
     :configure,
+    :connect_timeout,
     :connection_name,
     :default_consistency,
     :disconnection_reason,
@@ -380,6 +381,7 @@ defmodule Xandra.Connection do
         atom_keys?: Keyword.fetch!(options, :atom_keys),
         address: address,
         port: port,
+        connect_timeout: Keyword.fetch!(options, :connect_timeout),
         connection_name: Keyword.get(options, :name),
         cluster_pid: Keyword.get(options, :cluster_pid),
         protocol_version: Keyword.get(options, :protocol_version),
@@ -389,7 +391,7 @@ defmodule Xandra.Connection do
             Backoff.new(Keyword.take(options, [:backoff_type, :backoff_min, :backoff_max]))
     }
 
-    case Transport.connect(data.transport, data.address, data.port, @default_timeout) do
+    case Transport.connect(data.transport, data.address, data.port, data.connect_timeout) do
       {:ok, transport} ->
         {:ok, peername} = Transport.address_and_port(transport)
         data = %__MODULE__{data | transport: transport, peername: peername}

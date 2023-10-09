@@ -28,6 +28,7 @@ This change is breaking, and affect Xandra pretty significantly. The user-facing
   * Fix a few bugs with rogue data in the native protocol parser.
   * Fix a small bug when negotiating the native protocol version.
   * Fix IPv6 support in `Xandra.Cluster`.
+  * Add the `:connect_timeout` option to `Xandra.start_link/1` and `Xandra.Cluster.start_link/1`.
 
 ## v0.17.0
 

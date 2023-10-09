@@ -419,6 +419,15 @@ defmodule Xandra do
       Name registration, just like `GenServer`.
       """
     ],
+    connect_timeout: [
+      type: :timeout,
+      default: 5000,
+      doc: """
+      Time to wait (in milliseconds) for Xandra to establish a network connection.
+      If the timeout is reached, the connection considers it as a failed connection attempt
+      and behaves according to the `:backoff_type` option. *Available since v0.18.0*.
+      """
+    ],
 
     # Internal options, used by Xandra.Cluster.
     cluster_pid: [doc: false, type: :pid]

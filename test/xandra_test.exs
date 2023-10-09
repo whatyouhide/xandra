@@ -58,6 +58,17 @@ defmodule XandraTest do
                Xandra.execute(conn, "USE some_keyspace")
     end
 
+    test "supports the :connect_timeout option", %{start_options: start_options} do
+      assert {:ok, conn} =
+               start_supervised(
+                 {Xandra, [connect_timeout: 0, backoff_type: :stop] ++ start_options}
+               )
+
+      ref = Process.monitor(conn)
+      assert_receive {:DOWN, ^ref, _, _, reason}
+      assert reason == :timeout
+    end
+
     test "supports the :name option as an atom", %{start_options: start_options} do
       assert {:ok, conn} = start_supervised({Xandra, [name: :my_test_conn] ++ start_options})
       assert Process.whereis(:my_test_conn) == conn
