@@ -28,17 +28,17 @@ defmodule Xandra.OptionsValidators do
     {:error, "expected :authentication to be a {module, options} tuple, got: #{inspect(other)}"}
   end
 
-  @spec validate_node(term()) :: {:ok, {charlist(), integer()}} | {:error, String.t()}
+  @spec validate_node(term()) :: {:ok, {String.t(), integer()}} | {:error, String.t()}
   def validate_node(value) when is_binary(value) do
     case String.split(value, ":", parts: 2) do
       [address, port] ->
         case Integer.parse(port) do
-          {port, ""} -> {:ok, {String.to_charlist(address), port}}
+          {port, ""} -> {:ok, {address, port}}
           _ -> {:error, "invalid node: #{inspect(value)}"}
         end
 
       [address] ->
-        {:ok, {String.to_charlist(address), 9042}}
+        {:ok, {address, 9042}}
     end
   end
 
@@ -60,8 +60,8 @@ defmodule Xandra.OptionsValidators do
     end
   end
 
-  def validate_contact_node({hostname, port}) when is_list(hostname) do
-    case :inet.parse_address(hostname) do
+  def validate_contact_node({hostname, port}) when is_binary(hostname) do
+    case hostname |> String.to_charlist() |> :inet.parse_address() do
       {:ok, ip} -> {:ok, {ip, port}}
       {:error, :einval} -> {:ok, {hostname, port}}
     end
@@ -69,7 +69,11 @@ defmodule Xandra.OptionsValidators do
 
   def validate_contact_node({other, _port}) do
     {:error,
-     "expected address in Host to be an IP tuple or a hostname charlist, got: #{inspect(other)}"}
+     "expected address in Host to be an IP tuple or a hostname string, got: #{inspect(other)}"}
+  end
+
+  def validate_contact_node(other) do
+    {:error, "expected :contact_node to be a {address_or_ip, port} tuple, got: #{inspect(other)}"}
   end
 
   @spec validate_binary(term(), atom()) :: {:ok, binary()} | {:error, String.t()}

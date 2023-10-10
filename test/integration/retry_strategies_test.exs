@@ -109,6 +109,7 @@ defmodule Xandra.RetryStrategiesTest do
 
       Process.register(self(), :all_nodes_strategy_test_pid)
 
+      start_options = Keyword.merge(start_options, sync_connect: 1000)
       cluster = start_supervised!({Xandra.Cluster, start_options})
 
       assert {:error, %Xandra.Error{reason: :invalid}} =

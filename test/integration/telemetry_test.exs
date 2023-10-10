@@ -20,7 +20,7 @@ defmodule TelemetryTest do
 
       assert measurements == %{}
       assert metadata.connection_name == :telemetry_test_connection
-      assert metadata.address == ~c"127.0.0.1"
+      assert metadata.address == "127.0.0.1"
       assert metadata.port == @port
     end
   end
@@ -39,7 +39,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.address == ~c"127.0.0.1"
+    assert metadata.address == "127.0.0.1"
     assert metadata.port == @port
 
     # Successive call to prepare uses cache.
@@ -49,7 +49,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.address == ~c"127.0.0.1"
+    assert metadata.address == "127.0.0.1"
     assert metadata.port == @port
 
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement, force: true)
@@ -58,7 +58,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.address == ~c"127.0.0.1"
+    assert metadata.address == "127.0.0.1"
     assert metadata.port == @port
   end
 
@@ -77,7 +77,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.address == ~c"127.0.0.1"
+    assert metadata.address == "127.0.0.1"
     assert metadata.port == @port
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(system_time)
@@ -86,7 +86,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.address == ~c"127.0.0.1"
+    assert metadata.address == "127.0.0.1"
     assert metadata.port == @port
     assert metadata.extra_metadata == %{foo: :bar}
     assert metadata.reprepared == false
@@ -99,7 +99,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.address == ~c"127.0.0.1"
+    assert metadata.address == "127.0.0.1"
     assert metadata.port == @port
     assert metadata.extra_metadata == %{foo: :bar}
     assert metadata.reprepared == true
@@ -123,7 +123,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.address == ~c"127.0.0.1"
+    assert metadata.address == "127.0.0.1"
     assert metadata.port == @port
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(system_time)
@@ -132,7 +132,7 @@ defmodule TelemetryTest do
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
-    assert metadata.address == ~c"127.0.0.1"
+    assert metadata.address == "127.0.0.1"
     assert metadata.port == @port
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(duration)

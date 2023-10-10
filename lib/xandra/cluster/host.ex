@@ -15,7 +15,7 @@ defmodule Xandra.Cluster.Host do
     * `:address` - the address of the host. It can be either an IP address
       or a hostname. If Xandra managed to *connect* to this host, then the `:address` will
       be the actual IP peer (see `:inet.peername/1`). Otherwise, the `:address` will be
-      the parsed IP or the charlist hostname. For example, if you pass `~c"10.0.2.1"` as
+      the parsed IP or the charlist hostname. For example, if you pass `"10.0.2.1"` as
       the address, Xandra will normalize it to `{10, 0, 2, 1}`.
 
     * `:port` - the port of the host.
@@ -41,7 +41,7 @@ defmodule Xandra.Cluster.Host do
   """
   @typedoc since: "0.15.0"
   @type t() :: %__MODULE__{
-          address: :inet.ip_address() | :inet.hostname(),
+          address: :inet.ip_address() | String.t(),
           port: :inet.port_number(),
           data_center: String.t(),
           host_id: String.t(),
@@ -77,6 +77,10 @@ defmodule Xandra.Cluster.Host do
       iex> Xandra.Cluster.Host.format_address(host)
       "127.0.0.1:9042"
 
+      iex> host = %Xandra.Cluster.Host{address: "example.com", port: 9042}
+      iex> Xandra.Cluster.Host.format_address(host)
+      "example.com:9042"
+
   """
   @doc since: "0.15.0"
   @spec format_address(t()) :: String.t()
@@ -88,20 +92,20 @@ defmodule Xandra.Cluster.Host do
 
   @doc false
   @doc since: "0.15.0"
-  @spec to_peername(t()) :: {:inet.ip_address() | :inet.hostname(), :inet.port_number()}
+  @spec to_peername(t()) :: {:inet.ip_address() | String.t(), :inet.port_number()}
   def to_peername(%__MODULE__{address: address, port: port}) do
     {address, port}
   end
 
   @doc false
   @doc since: "0.15.0"
-  @spec format_peername({:inet.ip_address() | :inet.hostname(), :inet.port_number()}) ::
+  @spec format_peername({:inet.ip_address() | String.t(), :inet.port_number()}) ::
           String.t()
-  def format_peername({address, port}) do
+  def format_peername({address, port}) when is_integer(port) and port in 0..65_535 do
     if ip_address?(address) do
       "#{:inet.ntoa(address)}:#{port}"
     else
-      "#{address}:#{port}"
+      address <> ":#{port}"
     end
   end
 

@@ -143,7 +143,7 @@ defmodule XandraTest do
       assert {:ok, _test_conn} = start_supervised({Xandra, modified_start_options})
 
       assert_receive {^ref, configure_start_options}
-      assert configure_start_options[:node] == {~c"localhost", 9999}
+      assert configure_start_options[:node] == {"localhost", 9999}
     end
 
     test "supports the :configure option, as a MFA tuple", %{start_options: start_options} do
@@ -157,7 +157,7 @@ defmodule XandraTest do
       assert {:ok, _test_conn} = start_supervised({Xandra, modified_start_options})
 
       assert_receive {^ref, configure_start_options}
-      assert configure_start_options[:node] == {~c"localhost", 9999}
+      assert configure_start_options[:node] == {"localhost", 9999}
     end
 
     test "handles connection drops that happen right after connecting" do

@@ -640,8 +640,14 @@ defmodule Xandra.Cluster.Pool do
     ]
 
     case data.control_conn_mod.start_link(control_conn_opts) do
-      {:ok, control_conn} -> {:ok, control_conn}
-      {:error, _reason} -> start_control_connection(data, hosts)
+      {:ok, control_conn} ->
+        {:ok, control_conn}
+
+      {:error, {:__caught__, kind, reason, stacktrace}} ->
+        :erlang.raise(kind, reason, stacktrace)
+
+      {:error, _reason} ->
+        start_control_connection(data, hosts)
     end
   end
 

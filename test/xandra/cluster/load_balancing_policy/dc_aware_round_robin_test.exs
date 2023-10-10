@@ -230,9 +230,10 @@ defmodule Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobinTest do
 
   defp host(address_and_port, dc) do
     [address, port] = String.split(address_and_port, ":", parts: 2)
+    {:ok, ip} = address |> String.to_charlist() |> :inet.parse_address()
 
     %Host{
-      address: address |> String.to_charlist() |> :inet.parse_address(),
+      address: ip,
       port: String.to_integer(port),
       data_center: dc
     }

@@ -262,7 +262,7 @@ defmodule Xandra.Connection do
 
   # This type is just for documentation.
   @type t() :: %__MODULE__{
-          address: term(),
+          address: String.t(),
           atom_keys?: boolean(),
           backoff: Backoff.t(),
           buffer: binary(),
@@ -278,7 +278,7 @@ defmodule Xandra.Connection do
           in_flight_requests: %{optional(stream_id()) => term()},
           options: keyword(),
           original_options: keyword(),
-          peername: term(),
+          peername: {:inet.ip_address(), :inet.port_number()},
           port: term(),
           prepared_cache: term(),
           protocol_module: module(),
@@ -391,7 +391,7 @@ defmodule Xandra.Connection do
             Backoff.new(Keyword.take(options, [:backoff_type, :backoff_min, :backoff_max]))
     }
 
-    case Transport.connect(data.transport, data.address, data.port, data.connect_timeout) do
+    case Transport.connect(transport, String.to_charlist(address), port, data.connect_timeout) do
       {:ok, transport} ->
         {:ok, peername} = Transport.address_and_port(transport)
         data = %__MODULE__{data | transport: transport, peername: peername}
@@ -461,7 +461,7 @@ defmodule Xandra.Connection do
 
   def disconnected(:internal, {:failed_to_connect, reason}, %__MODULE__{} = data) do
     ipfied_address =
-      case :inet.parse_address(data.address) do
+      case data.address |> String.to_charlist() |> :inet.parse_address() do
         {:ok, ip} -> ip
         {:error, _reason} -> data.address
       end

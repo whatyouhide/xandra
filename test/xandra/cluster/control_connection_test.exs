@@ -30,7 +30,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       refresh_topology_interval: 60_000,
       autodiscovered_nodes_port: @port,
       connection_options: [protocol_version: @protocol_version],
-      contact_node: {~c"127.0.0.1", @port}
+      contact_node: {"127.0.0.1", @port}
     ]
 
     %{mirror_ref: mirror_ref, mirror: mirror, start_options: start_options}
@@ -86,7 +86,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
         [:xandra, :cluster, :control_connection, :connected]
       ])
 
-    options = Keyword.put(start_options, :contact_node, {~c"localhost", @port})
+    options = Keyword.put(start_options, :contact_node, {"localhost", @port})
     start_control_connection!(options)
 
     assert_receive {^mirror_ref, {:discovered_hosts, [_local_peer]}}
@@ -102,7 +102,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     telemetry_event = [:xandra, :cluster, :control_connection, :failed_to_connect]
     telemetry_ref = :telemetry_test.attach_event_handlers(self(), [telemetry_event])
 
-    options = Keyword.put(start_options, :contact_node, {~c"127.0.0.1", 9039})
+    options = Keyword.put(start_options, :contact_node, {"127.0.0.1", 9039})
     assert {:error, _} = start_supervised({ControlConnection, options})
 
     assert_receive {^telemetry_event, ^telemetry_ref, %{}, metadata}

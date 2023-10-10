@@ -76,12 +76,8 @@ defmodule Xandra.Cluster.ControlConnection do
     connection_opts = Keyword.fetch!(options, :connection_options)
     {transport, connection_opts} = transport_from_connection_opts(connection_opts)
 
-    %Host{} =
-      contact_node =
-      case Keyword.fetch!(options, :contact_node) do
-        {host, port} when is_list(host) -> %Host{address: host, port: port}
-        {host, port} when is_tuple(host) -> %Host{address: host, port: port}
-      end
+    {contact_host, contact_port} = Keyword.fetch!(options, :contact_node)
+    contact_node = %Host{address: contact_host, port: contact_port}
 
     state = %__MODULE__{
       cluster_pid: Keyword.fetch!(options, :cluster_pid),
@@ -135,6 +131,10 @@ defmodule Xandra.Cluster.ControlConnection do
 
         {:stop, {:shutdown, reason}}
     end
+  catch
+    kind, reason ->
+      execute_telemetry(state, [:control_connection, :failed_to_connect], %{}, %{reason: reason})
+      {:stop, {:__caught__, kind, reason, __STACKTRACE__}}
   end
 
   @impl true
@@ -198,7 +198,12 @@ defmodule Xandra.Cluster.ControlConnection do
     # A nil :protocol_version means "negotiate". A non-nil one means "enforce".
     proto_vsn = Keyword.get(options, :protocol_version)
 
-    case Transport.connect(transport, host.address, host.port, @default_connect_timeout) do
+    case Transport.connect(
+           transport,
+           if(is_tuple(host.address), do: host.address, else: String.to_charlist(host.address)),
+           host.port,
+           @default_connect_timeout
+         ) do
       {:ok, transport} ->
         state = %__MODULE__{state | transport: transport}
 

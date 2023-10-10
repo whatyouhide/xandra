@@ -318,6 +318,25 @@ defmodule Xandra do
       and its supported options. See `Xandra.Authenticator`.
       """
     ],
+    backoff_min: [
+      type: :non_neg_integer,
+      default: 1000,
+      doc: "The minimum backoff interval (in milliseconds)."
+    ],
+    backoff_max: [
+      type: :non_neg_integer,
+      default: 30_000,
+      doc: "The maximum backoff interval (in milliseconds)."
+    ],
+    backoff_type: [
+      type: {:in, [:stop, :exp, :rand, :rand_exp]},
+      default: :rand_exp,
+      doc: """
+      The backoff strategy. `:stop` means the connection will stop when a disconnection happens,
+      `:exp` means exponential backoff, `:rand` is random backoff, and `:rand_exp` is random
+      exponential backoff.
+      """
+    ],
     compressor: [
       type: {:custom, Xandra.OptionsValidators, :validate_module, ["compressor"]},
       type_doc: "`t:module/0`",
@@ -476,7 +495,7 @@ defmodule Xandra do
         {[], _opts} ->
           raise ArgumentError, "the :nodes option can't be an empty list"
 
-        {[node], opts} ->
+        {[{_address, _port} = node], opts} ->
           {node, opts}
 
         {nodes, _opts} ->

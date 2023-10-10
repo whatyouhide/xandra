@@ -45,7 +45,7 @@ defmodule Xandra.Cluster.PoolTest do
   setup do
     base_cluster_options = [
       control_connection_module: ControlConnection,
-      nodes: [{~c"127.0.0.1", @port}],
+      nodes: [{"127.0.0.1", @port}],
       load_balancing: :random,
       autodiscovered_nodes_port: @port,
       xandra_module: Xandra.Cluster.ConnectionPool,
@@ -72,7 +72,7 @@ defmodule Xandra.Cluster.PoolTest do
   describe "startup" do
     test "doesn't fail to start if the control connection fails to connect",
          %{cluster_options: cluster_options, pool_options: pool_options} do
-      cluster_opts = Keyword.put(cluster_options, :nodes, [{~c"127.0.0.1", _bad_port = 8092}])
+      cluster_opts = Keyword.put(cluster_options, :nodes, [{"127.0.0.1", _bad_port = 8092}])
       assert {:ok, pid} = start_supervised(spec(cluster_opts, pool_options))
       :sys.get_state(pid)
     end
@@ -86,14 +86,14 @@ defmodule Xandra.Cluster.PoolTest do
 
       LBPMock
       |> expect(:init, fn _pid -> nil end)
-      |> expect(:query_plan, fn nil -> {[%Host{address: ~c"127.0.0.1", port: 8091}], nil} end)
+      |> expect(:query_plan, fn nil -> {[%Host{address: "127.0.0.1", port: 8091}], nil} end)
 
       cluster_opts =
         Keyword.merge(cluster_options,
           nodes: [
-            {~c"127.0.0.1", _bad_port = 8092},
-            {~c"127.0.0.1", _bad_port = 8093},
-            {~c"127.0.0.1", _bad_port = 8094}
+            {"127.0.0.1", _bad_port = 8092},
+            {"127.0.0.1", _bad_port = 8093},
+            {"127.0.0.1", _bad_port = 8094}
           ],
           load_balancing: {LBPMock, self()}
         )
@@ -150,7 +150,7 @@ defmodule Xandra.Cluster.PoolTest do
       }
 
       assert_receive {[:xandra, :connected], ^telemetry_ref, %{},
-                      %{address: ~c"127.0.0.1", port: @port}}
+                      %{address: "127.0.0.1", port: @port}}
 
       cluster_state = get_state(pid)
       assert map_size(cluster_state.peers) == 1
@@ -195,7 +195,12 @@ defmodule Xandra.Cluster.PoolTest do
       }
 
       assert_receive {[:xandra, :failed_to_connect], ^telemetry_ref, %{},
-                      %{address: ~c"127.0.0.1", port: 8092}}
+                      %{address: "127.0.0.1", port: 8092}}
+
+      assert_telemetry [:pool, :started], %{
+        cluster_pid: ^pid,
+        host: %Host{address: {127, 0, 0, 1}, port: 8092}
+      }
 
       assert_telemetry [:pool, :stopped], %{
         cluster_pid: ^pid,
@@ -260,6 +265,12 @@ defmodule Xandra.Cluster.PoolTest do
         ])
 
       assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
+
+      assert_receive {^pool_mock_ref, PoolMock, :init_called,
+                      %{
+                        pool_size: 1,
+                        connection_options: [nodes: ["127.0.0.1:9052"], cluster_pid: ^pid]
+                      }}
 
       remote_host = %Host{address: {198, 10, 0, 1}, port: @port, data_center: "remote_dc"}
       local_host1 = %Host{address: {198, 0, 0, 1}, port: @port, data_center: "local_dc"}
@@ -408,26 +419,18 @@ defmodule Xandra.Cluster.PoolTest do
     end
 
     test "returns all connected pools",
-         %{cluster_options: cluster_options, pool_options: pool_options} do
-      cluster_options = Keyword.put(cluster_options, :xandra_mod, PoolMock)
+         %{
+           cluster_options: cluster_options,
+           pool_options: pool_options
+         } do
       assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
-
-      hosts_with_statuses = [
-        {%Host{address: {127, 0, 0, 1}, port: 8091}, :up},
-        {%Host{address: {127, 0, 0, 1}, port: 8092}, :down},
-        {%Host{address: {127, 0, 0, 1}, port: 8093}, :connected}
-      ]
-
-      wait_until_connected(pid)
-      :ok = :gen_statem.call(pid, {:add_test_hosts, hosts_with_statuses})
 
       assert {:ok, pids_with_hosts} = Pool.checkout(pid)
       assert is_list(pids_with_hosts)
 
       assert Enum.all?(pids_with_hosts, fn {conn, %Host{}} -> is_pid(conn) end)
 
-      expected_set_of_connected_hosts =
-        MapSet.new([{{127, 0, 0, 1}, @port}, {{127, 0, 0, 1}, 8093}])
+      expected_set_of_connected_hosts = MapSet.new([{{127, 0, 0, 1}, @port}])
 
       existing_set_of_connected_hosts =
         MapSet.new(pids_with_hosts, fn {_, host} -> Host.to_peername(host) end)
@@ -439,7 +442,7 @@ defmodule Xandra.Cluster.PoolTest do
          %{cluster_options: cluster_options, pool_options: pool_options} do
       cluster_options =
         Keyword.merge(cluster_options,
-          nodes: [{~c"127.0.0.1", 8092}],
+          nodes: [{"127.0.0.1", 8092}],
           queue_before_connecting: [timeout: 0, buffer_size: 0]
         )
 
@@ -537,21 +540,6 @@ defmodule Xandra.Cluster.PoolTest do
 
       # Make sure we reconnect to the control connection.
       assert_telemetry [:control_connection, :connected], _meta
-    end
-  end
-
-  defp wait_until_connected(pid, retries \\ 10)
-
-  defp wait_until_connected(_pid, 0), do: :error
-
-  defp wait_until_connected(pid, retries) do
-    case :sys.get_state(pid) do
-      {:has_connected_once, _} ->
-        :ok
-
-      _ ->
-        Process.sleep(10)
-        wait_until_connected(pid, retries - 1)
     end
   end
 
