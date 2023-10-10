@@ -36,6 +36,13 @@ defmodule Xandra.Cluster.PoolTest do
   setup :verify_on_exit!
 
   setup do
+    ref = make_ref()
+    :persistent_term.put(:clustering_test_info, {self(), ref})
+    on_exit(fn -> :persistent_term.erase(:clustering_test_info) end)
+    %{pool_mock_ref: ref}
+  end
+
+  setup do
     base_cluster_options = [
       control_connection_module: ControlConnection,
       nodes: [{~c"127.0.0.1", @port}],
@@ -225,6 +232,81 @@ defmodule Xandra.Cluster.PoolTest do
         assert GenServer.whereis(name) == pid
         stop_supervised!(name)
       end
+    end
+
+    @tag :capture_log
+    test "starts pools in the order reported by the LBP",
+         %{
+           cluster_options: cluster_options,
+           pool_options: pool_options,
+           pool_mock_ref: pool_mock_ref
+         } do
+      cluster_options =
+        Keyword.merge(cluster_options,
+          target_pools: 2,
+          xandra_module: PoolMock,
+          load_balancing:
+            {Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin, local_data_center: "local_dc"}
+        )
+
+      telemetry_ref =
+        :telemetry_test.attach_event_handlers(self(), [
+          [:xandra, :cluster, :control_connection, :connected],
+          [:xandra, :cluster, :pool, :started],
+          [:xandra, :cluster, :pool, :stopped],
+          [:xandra, :cluster, :change_event],
+          [:xandra, :connected],
+          [:xandra, :failed_to_connect]
+        ])
+
+      assert {:ok, pid} = start_supervised(spec(cluster_options, pool_options))
+
+      remote_host = %Host{address: {198, 10, 0, 1}, port: @port, data_center: "remote_dc"}
+      local_host1 = %Host{address: {198, 0, 0, 1}, port: @port, data_center: "local_dc"}
+      local_host2 = %Host{address: {198, 0, 0, 2}, port: @port, data_center: "local_dc"}
+
+      # Send the remote host first in the list.
+      send(pid, {:discovered_hosts, [remote_host, local_host1, local_host2]})
+
+      assert_telemetry [:pool, :started], %{
+        cluster_pid: ^pid,
+        host: %Host{address: {198, 0, 0, 1}, port: @port, data_center: "local_dc"}
+      }
+
+      assert_telemetry [:pool, :started], %{
+        cluster_pid: ^pid,
+        host: %Host{address: {198, 0, 0, 2}, port: @port, data_center: "local_dc"}
+      }
+
+      assert_receive {^pool_mock_ref, PoolMock, :init_called,
+                      %{
+                        pool_size: 1,
+                        connection_options: [nodes: ["198.0.0.1:9052"], cluster_pid: ^pid]
+                      }}
+
+      assert_receive {^pool_mock_ref, PoolMock, :init_called,
+                      %{
+                        pool_size: 1,
+                        connection_options: [nodes: ["198.0.0.2:9052"], cluster_pid: ^pid]
+                      }}
+
+      refute_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{},
+                      %{
+                        cluster_pid: ^pid,
+                        host: %Host{
+                          address: {198, 10, 0, 1},
+                          port: @port,
+                          data_center: "remote_dc"
+                        }
+                      }}
+
+      cluster_state = get_state(pid)
+
+      assert %{pool_pid: pid, status: :up} = cluster_state.peers[{{198, 0, 0, 1}, @port}]
+      assert is_pid(pid)
+      assert %{pool_pid: pid, status: :up} = cluster_state.peers[{{198, 0, 0, 2}, @port}]
+      assert is_pid(pid)
+      assert %{pool_pid: nil, status: :up} = cluster_state.peers[{{198, 10, 0, 1}, @port}]
     end
   end
 

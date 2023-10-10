@@ -331,6 +331,7 @@ defmodule Xandra.Cluster.Pool do
         handle_host_added(data_acc, Map.fetch!(new_peers_map, peername))
       end)
 
+    data = maybe_start_pools(data)
     {:keep_state, data}
   end
 
@@ -503,7 +504,7 @@ defmodule Xandra.Cluster.Pool do
 
     execute_telemetry(data, [:change_event], %{}, %{event_type: :host_added, host: host})
 
-    maybe_start_pools(data)
+    data
   end
 
   defp handle_host_removed(%__MODULE__{} = data, %Host{} = host) do
@@ -588,19 +589,19 @@ defmodule Xandra.Cluster.Pool do
       {hosts_plan, data} =
         get_and_update_in(data.load_balancing_state, &data.load_balancing_module.hosts_plan/1)
 
-      Enum.reduce_while(hosts_plan, data, fn %Host{} = host, state ->
-        case Map.fetch!(data.peers, Host.to_peername(host)) do
+      Enum.reduce_while(hosts_plan, data, fn %Host{} = host, data_acc ->
+        case Map.fetch!(data_acc.peers, Host.to_peername(host)) do
           %{pool_pid: pid} when is_pid(pid) ->
-            {:cont, state}
+            {:cont, data_acc}
 
           %{pool_pid: nil} ->
-            data = start_pool(data, host)
+            data_acc = start_pool(data_acc, host)
 
-            if Enum.count(data.peers, fn {_peername, %{pool_pid: pid}} -> is_pid(pid) end) ==
+            if Enum.count(data_acc.peers, fn {_peername, %{pool_pid: pid}} -> is_pid(pid) end) ==
                  target do
-              {:halt, data}
+              {:halt, data_acc}
             else
-              {:cont, data}
+              {:cont, data_acc}
             end
         end
       end)
