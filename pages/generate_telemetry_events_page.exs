@@ -80,7 +80,7 @@ shared_connection_meta = [
     doc: "the PID of the connection process"
   ],
   connection_name: [
-    type: "`t:String.t/0` or `nil`",
+    type: "`t:term/0` or `nil`",
     doc: "given name of the connection or `nil` if not set"
   ],
   address: [
@@ -140,7 +140,7 @@ data = %{
             shared_connection_meta ++
               [
                 reason: [
-                  type: "usually a `DBConnection.ConnectionError`",
+                  type: "usually a `t:Exception.t/0`",
                   doc: "the reason for the disconnection"
                 ]
               ]
@@ -152,7 +152,7 @@ data = %{
             shared_connection_meta ++
               [
                 reason: [
-                  type: "usually a `DBConnection.ConnectionError`",
+                  type: "usually a `t:Exception.t/0`",
                   doc: "the reason for the disconnection"
                 ]
               ]

@@ -260,16 +260,19 @@ defmodule Xandra do
   """
   @type custom_payload :: %{optional(String.t()) => binary()}
 
-  @typedoc "Options for `start_link/1`."
-  @type start_option ::
-          {:nodes, [String.t()]}
-          | {:compressor, module}
-          | {:authentication, {module, keyword}}
-          | {:atom_keys, boolean}
-          | {:protocol_version,
-             unquote(
-               Enum.reduce(Frame.supported_protocols(), &quote(do: unquote(&1) | unquote(&2)))
-             )}
+  @typedoc """
+  Cassandra native protocol version.
+  """
+  @typedoc since: "0.18.0"
+  @type native_protocol_version() ::
+          unquote(Enum.reduce(Frame.supported_protocols(), &quote(do: unquote(&1) | unquote(&2))))
+
+  @typedoc """
+  Possible values for the `:configure` option in `start_link/1`.
+  """
+  @typedoc since: "0.18.0"
+  @type configure_fun() ::
+          {module(), function_name :: atom(), [term()]} | (keyword() -> keyword())
 
   @valid_consistencies [
     :one,
@@ -283,6 +286,16 @@ defmodule Xandra do
     :each_quorum,
     :local_serial
   ]
+
+  @typedoc """
+  Consistency level for queries.
+
+  This is supported as the default consistency on the connection level (see `start_link/1`)
+  or as a per-query consistency (see `execute/3` and `execute/4`).
+  """
+  @typedoc since: "0.18.0"
+  @type consistency ::
+          unquote(Enum.reduce(@valid_consistencies, &quote(do: unquote(&1) | unquote(&2))))
 
   # Raw NimbleOptions schema before parsing. Broken out to work around
   # `mix format`.
@@ -299,7 +312,7 @@ defmodule Xandra do
     ],
     authentication: [
       type: {:custom, Xandra.OptionsValidators, :validate_authentication, []},
-      type_doc: "`{module(), term()}`",
+      type_doc: "tuple with `t:module/0` and `t:term/0`",
       doc: """
       Two-element tuple: the authenticator module to use for authentication
       and its supported options. See `Xandra.Authenticator`.
@@ -314,13 +327,33 @@ defmodule Xandra do
       this option is not present, which means no compression is used.
       """
     ],
+    configure: [
+      type: {:or, [:mfa, {:fun, 1}]},
+      type_doc: "`t:configure_fun/0`",
+      doc: """
+      A function to run before every connect attempt to dynamically configure the options. It's
+      either a 1-arity fun which gets called with the options and must return options, or a
+      `{module, function, args}` tuple with the options prepended to `args` (the return value
+      of the function must still be options). By default, options are not modified. This
+      function is called in the connection process. *Available since v0.18.0*.
+      """
+    ],
+    connect_timeout: [
+      type: :timeout,
+      default: 5000,
+      doc: """
+      Time to wait (in milliseconds) for Xandra to establish a network connection.
+      If the timeout is reached, the connection considers it as a failed connection attempt
+      and behaves according to the `:backoff_type` option. *Available since v0.18.0*.
+      """
+    ],
     default_consistency: [
       type: {:in, @valid_consistencies},
+      type_doc: "`t:consistency/0`",
       default: :one,
       doc: """
-      The default consistency to set for all queries. For a list of values,
-      look at the `:consistency` option in `execute/4`. Can be overridden
-      through the `:consistency` option in `execute/4`.
+      The default consistency to set for all queries. Can be overridden on a per-query
+      basis through the `:consistency` option in `execute/4`.
       """
     ],
     encryption: [
@@ -329,6 +362,20 @@ defmodule Xandra do
       doc: """
       Whether to connect to Cassandra using SSL. If you want to set up SSL
       options, see the `:transport_options` option.
+      """
+    ],
+    keyspace: [
+      type: :string,
+      doc: """
+      `USE` this keyspace right after establishing a connection to the server. This effectively
+      replaces most uses of the `:after_connect` option that was available before v0.18.0.
+      *Available since v0.18.0*.
+      """
+    ],
+    name: [
+      type: :any,
+      doc: """
+      Name registration, just like `GenServer`.
       """
     ],
     nodes: [
@@ -343,16 +390,9 @@ defmodule Xandra do
       connecting to multiple nodes.
       """
     ],
-    pool_size: [
-      type: :non_neg_integer,
-      default: 1,
-      doc: """
-      The number of connections to start for the pool. The default pool size of `1`
-      means that a single connection is started to the given node.
-      """
-    ],
     protocol_version: [
       type: {:in, Frame.supported_protocols()},
+      type_doc: "`t:native_protocol_version/0`",
       doc: """
       The enforced version of the Cassandra native protocol to use. If this option
       is not present, Xandra will negotiate the protocol with the server, starting
@@ -377,61 +417,13 @@ defmodule Xandra do
       TCP (see the `:gen_tcp` Erlang module).
       """
     ],
-    keyspace: [
-      type: :string,
-      doc: """
-      `USE` this keyspace right after establishing a connection to the server. This effectively
-      replaces most uses of the `:after_connect` option that was available before v0.18.0.
-      *Available since v0.18.0*.
-      """
-    ],
-    configure: [
-      type: {:or, [:mfa, {:fun, 1}]},
-      doc: """
-      A function to run before every connect attempt to dynamically configure the options. It's
-      either a 1-arity fun, a `{module, function, args}` with options prepended to `args`, or
-      `nil` where only returned options are passed to connect callback. This function is
-      called in the connection process. *Available since v0.18.0*.
-      """
-    ],
-    backoff_min: [
-      type: :non_neg_integer,
-      default: 1000,
-      doc: "The minimum backoff interval (in milliseconds)."
-    ],
-    backoff_max: [
-      type: :non_neg_integer,
-      default: 30_000,
-      doc: "The maximum backoff interval (in milliseconds)."
-    ],
-    backoff_type: [
-      type: {:in, [:stop, :exp, :rand, :rand_exp]},
-      default: :rand_exp,
-      doc: """
-      The backoff strategy. `:stop` means the connection will stop when a disconnection happens,
-      `:exp` means exponential backoff, `:rand` is random backoff, and `:rand_exp` is random
-      exponential backoff.
-      """
-    ],
-    name: [
-      type: :any,
-      doc: """
-      Name registration, just like `GenServer`.
-      """
-    ],
-    connect_timeout: [
-      type: :timeout,
-      default: 5000,
-      doc: """
-      Time to wait (in milliseconds) for Xandra to establish a network connection.
-      If the timeout is reached, the connection considers it as a failed connection attempt
-      and behaves according to the `:backoff_type` option. *Available since v0.18.0*.
-      """
-    ],
 
     # Internal options, used by Xandra.Cluster.
     cluster_pid: [doc: false, type: :pid]
   ]
+
+  @typedoc "Options for `start_link/1`."
+  @type start_option() :: unquote(NimbleOptions.option_typespec(@start_link_opts_schema))
 
   @doc """
   Returns the `NimbleOptions` schema used for validating the options for `start_link/1`.
@@ -487,9 +479,14 @@ defmodule Xandra do
         {[node], opts} ->
           {node, opts}
 
-        {_nodes, _opts} ->
-          raise ArgumentError,
-                "cannot use multiple nodes in the :nodes option with Xandra, use Xandra.Cluster for that"
+        {nodes, _opts} ->
+          raise ArgumentError, """
+          cannot use multiple nodes in the :nodes option with a single Xandra connection.
+          Use Xandra.Cluster for that. The :nodes option was set to:
+
+            #{inspect(nodes)}
+
+          """
       end
 
     options =

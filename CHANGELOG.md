@@ -18,6 +18,7 @@ This change is breaking, and affect Xandra pretty significantly. The user-facing
   * Removed the `Xandra.db_connection_start_option/0` type.
   * Removed the `Xandra.xandra_start_option/0` type.
   * Removed `DBConnection.start_link/2` options in `Xandra.start_link/1`.
+  * Removed the `:pool_size` option in `Xandra.start_link/1`.
   * Require Elixir 1.15+.
 
 ### Improvements and Bug Fixes
@@ -29,6 +30,8 @@ This change is breaking, and affect Xandra pretty significantly. The user-facing
   * Fix a small bug when negotiating the native protocol version.
   * Fix IPv6 support in `Xandra.Cluster`.
   * Add the `:connect_timeout` option to `Xandra.start_link/1` and `Xandra.Cluster.start_link/1`.
+  * Add the `Xandra.native_protocol_version/0` type.
+  * Add the `Xandra.consistency/0` type.
 
 ## v0.17.0
 
