@@ -201,28 +201,31 @@ defmodule Xandra.Cluster do
       the cluster could connect once and then drop connections right away, so this doesn't
       mean that the cluster is connected, but rather that it *connected at least once*.
       This is useful, for example, in test suites where you're not worried about
-      resiliency but rather race conditions. In most cases, the `:queue_before_connecting`
-      option is what you want.
+      resiliency but rather race conditions. In most cases, the
+      `:queue_checkouts_before_connecting` option is what you want.
       """
     ],
-    queue_before_connecting: [
+    queue_checkouts_before_connecting: [
       type: :keyword_list,
       doc: """
-      Controls how to handle requests that go through the cluster *before* the cluster
-      is able to establish a connection to **any node**. This is useful because if you
-      try to use the Xandra cluster right away after starting it, you'll likely get errors
-      since the cluster needs to establish at least a connection to at least one node first.
-      The strategy that `Xandra.Cluster` uses is to queue requests until a connection
-      is established, and at that point flush those requests. If you don't want this behaviour,
-      you can set `:buffer_size` to `0`. *Available since v0.18.0*. This option supports these
-      keys:
+      Controls how to handle checkouts that go through the cluster *before* the cluster
+      is able to establish a connection to **any node**. Whenever you run a cluster function,
+      the cluster checks out a connection from one of the connected nodes and executes the
+      request on that connection. However, if you try to run any cluster function before the
+      cluster connects to any of the nodes, you'll likely get `Xandra.ConnectionError`s
+      with reason `{:cluster, :not_connected}`. This is because the cluster needs to establish
+      at least one connection to one node before it can execute requests. This option addresses
+      this issue by queueing "checkout requests" until the cluster establishes a connection
+      to a node. Once the connection is established, the cluster starts to hand over
+      connections. If you want to **disable this behavior**, set `:max_size` to `0`. *Available
+      since v0.18.0*. This option supports the following sub-options:
       """,
       keys: [
-        buffer_size: [
+        max_size: [
           type: :non_neg_integer,
           default: 100,
           doc: """
-          The number of requests to queue in the cluster and flush as soon as a connection
+          The number of checkouts to queue in the cluster and flush as soon as a connection
           is established.
           """
         ],
@@ -230,8 +233,8 @@ defmodule Xandra.Cluster do
           type: :timeout,
           default: 5_000,
           doc: """
-          How long to hold on to requests for. When this timeout expires, all requests
-          are dropped and an error is returned to the caller.
+          How long to hold on to checkout requests for. When this timeout expires, all requests
+          are dropped and a connection error is returned to each caller.
           """
         ]
       ],

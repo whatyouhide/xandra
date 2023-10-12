@@ -3,6 +3,7 @@ defmodule Xandra.ClusterTest do
 
   import Mox
 
+  alias Xandra.ConnectionError
   alias Xandra.Cluster
   alias Xandra.Cluster.Host
   alias Xandra.Cluster.Pool
@@ -46,7 +47,7 @@ defmodule Xandra.ClusterTest do
     quote do
       event = [:xandra, :cluster] ++ unquote(postfix)
       telemetry_ref = var!(telemetry_ref)
-      assert_receive {^event, ^telemetry_ref, measurements, unquote(meta)}
+      assert_receive {^event, ^telemetry_ref, measurements, unquote(meta)}, 2000
       assert measurements == %{}
     end
   end
@@ -581,7 +582,7 @@ defmodule Xandra.ClusterTest do
         Keyword.merge(opts,
           nodes: ["127.0.0.1:8092"],
           sync_connect: false,
-          queue_before_connecting: [timeout: 0, buffer_size: 0]
+          queue_checkouts_before_connecting: [timeout: 0, max_size: 0]
         )
 
       pid = start_supervised!({Cluster, opts})
@@ -778,6 +779,30 @@ defmodule Xandra.ClusterTest do
       |> ToxiproxyEx.down!(fn ->
         assert_telemetry [:pool, :stopped], %{cluster_pid: ^pid}
       end)
+    end
+
+    @tag :toxiproxy
+    @tag telemetry_events: [
+           [:xandra, :cluster, :control_connection, :failed_to_connect],
+           [:xandra, :cluster, :control_connection, :connected]
+         ]
+    test "reconnects to the control connection if it goes down",
+         %{base_options: opts, telemetry_ref: telemetry_ref} do
+      test_pid = self()
+      test_ref = make_ref()
+      opts = Keyword.merge(opts, sync_connect: false, nodes: ["127.0.0.1:19052"])
+
+      ToxiproxyEx.get!(:xandra_test_cassandra)
+      |> ToxiproxyEx.down!(fn ->
+        pid = start_link_supervised!({Cluster, opts})
+        send(test_pid, {test_ref, :cluster_pid, pid})
+        assert_telemetry [:control_connection, :failed_to_connect], %{cluster_pid: ^pid} = meta
+        assert %ConnectionError{reason: :closed} = meta.reason
+      end)
+
+      assert_receive {^test_ref, :cluster_pid, pid}
+
+      assert_telemetry [:control_connection, :connected], %{cluster_pid: ^pid}
     end
   end
 
