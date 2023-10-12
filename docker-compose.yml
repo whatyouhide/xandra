@@ -96,3 +96,8 @@ services:
       - "19052:19052"
     environment:
       LOG_LEVEL: trace
+    healthcheck:
+      test: [ "CMD-shell", "exit 0" ]
+      interval: 2s
+      timeout: 4s
+      retries: 5
