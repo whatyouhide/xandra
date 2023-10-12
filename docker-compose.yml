@@ -94,10 +94,3 @@ services:
     ports:
       - "8474:8474"
       - "19052:19052"
-    environment:
-      LOG_LEVEL: trace
-    healthcheck:
-      test: [ "CMD-SHELL", "echo healthy" ]
-      interval: 2s
-      timeout: 4s
-      retries: 5
