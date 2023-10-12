@@ -88,3 +88,9 @@ services:
       driver: "json-file"
       options:
         max-size: 50m
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy
+    ports:
+      - "8474:8474"
+      - "19052:19052"

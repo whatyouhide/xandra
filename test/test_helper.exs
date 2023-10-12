@@ -3,6 +3,14 @@ if System.get_env("XANDRA_DEBUG") do
   Xandra.Telemetry.attach_debug_handler()
 end
 
+ToxiproxyEx.populate!([
+  %{
+    name: "xandra_test_cassandra",
+    listen: "0.0.0.0:19052",
+    upstream: "cassandra:9042"
+  }
+])
+
 Logger.configure(level: String.to_existing_atom(System.get_env("LOG_LEVEL", "info")))
 
 excluded =

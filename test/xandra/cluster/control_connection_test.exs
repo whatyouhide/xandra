@@ -275,7 +275,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     socket = :sys.get_state(ctrl_conn).transport.socket
 
     :ok = :gen_tcp.shutdown(socket, :read_write)
-    GenServer.cast(ctrl_conn, {:refresh_topology, []})
+    send(ctrl_conn, :refresh_topology)
 
     assert_receive {:DOWN, ^ref, _, _, _}
   end

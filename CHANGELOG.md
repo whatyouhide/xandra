@@ -25,7 +25,7 @@ This change is breaking, and affect Xandra pretty significantly. The user-facing
 
   * Make retry strategies **cluster aware**, by adding the `{:retry, new_options, new_state, conn_pid}` return value to the `retry/3` callback. See the updated documentation for `Xandra.RetryStrategy`.
   * Support `GenServer.start_link/3` options in `Xandra.Cluster.start_link/1` (like `:spawn_opt` and friends).
-  * Add the `:queue_before_connecting` option to `Xandra.Cluster.start_link/1` to queue requests in the cluster until at least one connection to one node is established.
+  * Add the `:queue_checkouts_before_connecting` option to `Xandra.Cluster.start_link/1` to queue checkout requests in the cluster until at least one connection to one node is established.
   * Fix a few bugs with rogue data in the native protocol parser.
   * Fix a small bug when negotiating the native protocol version.
   * Fix IPv6 support in `Xandra.Cluster`.
