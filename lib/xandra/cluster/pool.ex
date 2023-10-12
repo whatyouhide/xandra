@@ -29,20 +29,12 @@ defmodule Xandra.Cluster.Pool do
            gen_statem_opts
          ) do
       {:ok, pid} when is_integer(sync_connect_timeout) ->
-        ref = Process.monitor(pid)
-
         receive do
           {^sync_connect_alias_or_nil, :connected} ->
-            Process.demonitor(ref, [:flush])
             {:ok, pid}
-
-          {:DOWN, ^ref, _, _, reason} ->
-            if sync_connect_alias_or_nil, do: Process.unalias(sync_connect_alias_or_nil)
-            exit(reason)
         after
           sync_connect_timeout ->
             if sync_connect_alias_or_nil, do: Process.unalias(sync_connect_alias_or_nil)
-            Process.demonitor(ref, [:flush])
             {:error, :sync_connect_timeout}
         end
 
@@ -198,15 +190,6 @@ defmodule Xandra.Cluster.Pool do
         :internal,
         :flush_queue_before_connecting,
         _state = :has_connected_once,
-        %__MODULE__{reqs_before_connecting: nil}
-      ) do
-    {:keep_state_and_data, timeout_action(:flush_queue_before_connecting, :infinity)}
-  end
-
-  def handle_event(
-        :internal,
-        :flush_queue_before_connecting,
-        _state = :has_connected_once,
         %__MODULE__{reqs_before_connecting: %{queue: queue}} = data
       ) do
     {reply_actions, data} =
@@ -225,13 +208,10 @@ defmodule Xandra.Cluster.Pool do
         _state = :never_connected,
         %__MODULE__{} = data
       ) do
-    froms =
-      case data.reqs_before_connecting do
-        nil -> []
-        %{queue: queue} -> :queue.to_list(queue)
-      end
+    actions =
+      for from <- :queue.to_list(data.reqs_before_connecting.queue),
+          do: {:reply, from, {:error, :empty}}
 
-    actions = for from <- froms, do: {:reply, from, {:error, :empty}}
     data = put_in(data.reqs_before_connecting, nil)
 
     {:keep_state, data, actions}

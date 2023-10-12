@@ -332,7 +332,8 @@ defmodule Xandra.Cluster do
   @doc false
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(options) do
-    %{id: __MODULE__, start: {__MODULE__, :start_link, [options]}}
+    id = Keyword.get(options, :name, __MODULE__)
+    %{id: id, start: {__MODULE__, :start_link, [options]}, type: :worker}
   end
 
   @doc """
