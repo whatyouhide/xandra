@@ -200,7 +200,7 @@ defmodule Xandra.Cluster.Pool do
         _state = :has_connected_once,
         %__MODULE__{reqs_before_connecting: nil}
       ) do
-    :keep_state_and_data
+    {:keep_state_and_data, timeout_action(:flush_queue_before_connecting, :infinity)}
   end
 
   def handle_event(
@@ -215,17 +215,8 @@ defmodule Xandra.Cluster.Pool do
         {reply_action, data}
       end)
 
-    {:keep_state, data, reply_actions}
-  end
-
-  # If we connected once, we already flushed this queue, so we ignore this timeout.
-  def handle_event(
-        {:timeout, :flush_queue_before_connecting},
-        nil,
-        _state = :has_connected_once,
-        %__MODULE__{}
-      ) do
-    :keep_state_and_data
+    {:keep_state, data,
+     reply_actions ++ [timeout_action(:flush_queue_before_connecting, :infinity)]}
   end
 
   def handle_event(
@@ -234,11 +225,13 @@ defmodule Xandra.Cluster.Pool do
         _state = :never_connected,
         %__MODULE__{} = data
       ) do
-    actions =
-      for from <- :queue.to_list(data.reqs_before_connecting.queue) do
-        {:reply, from, {:error, :empty}}
+    froms =
+      case data.reqs_before_connecting do
+        nil -> []
+        %{queue: queue} -> :queue.to_list(queue)
       end
 
+    actions = for from <- froms, do: {:reply, from, {:error, :empty}}
     data = put_in(data.reqs_before_connecting, nil)
 
     {:keep_state, data, actions}
@@ -333,34 +326,6 @@ defmodule Xandra.Cluster.Pool do
 
     data = maybe_start_pools(data)
     {:keep_state, data}
-  end
-
-  # For testing purposes
-  def handle_event(
-        {:call, from},
-        {:add_test_hosts, hosts_with_status},
-        _state,
-        %__MODULE__{} = data
-      ) do
-    data =
-      Enum.reduce(hosts_with_status, data, fn {%Host{} = host, status}, data_acc ->
-        data_acc =
-          update_in(data_acc.load_balancing_state, fn current_state ->
-            current_state = data_acc.load_balancing_module.host_added(current_state, host)
-            apply(data_acc.load_balancing_module, :"host_#{status}", [current_state, host])
-          end)
-
-        put_in(data_acc.peers[Host.to_peername(host)], %{
-          host: host,
-          status: status,
-          pool_pid: nil,
-          pool_ref: nil
-        })
-      end)
-
-    data = maybe_start_pools(data)
-
-    {:keep_state, data, {:reply, from, :ok}}
   end
 
   # Sent by the connection itself.
@@ -649,6 +614,10 @@ defmodule Xandra.Cluster.Pool do
       {:error, _reason} ->
         start_control_connection(data, hosts)
     end
+  end
+
+  defp timeout_action(name, time) do
+    {{:timeout, name}, time, _event_content = nil}
   end
 
   defp execute_telemetry(%__MODULE__{} = state, event_postfix, measurements, extra_meta) do
