@@ -765,6 +765,20 @@ defmodule Xandra.ClusterTest do
       # Make sure we reconnect to the control connection.
       assert_telemetry [:control_connection, :connected], _meta
     end
+
+    @tag :toxiproxy
+    @tag telemetry_events: [
+           [:xandra, :cluster, :pool, :stopped]
+         ]
+    test "when a single connection goes down", %{base_options: opts, telemetry_ref: telemetry_ref} do
+      opts = Keyword.merge(opts, sync_connect: 1000, nodes: ["127.0.0.1:19052"])
+      pid = start_link_supervised!({Cluster, opts})
+
+      ToxiproxyEx.get!(:xandra_test_cassandra)
+      |> ToxiproxyEx.down!(fn ->
+        assert_telemetry [:pool, :stopped], %{cluster_pid: ^pid}
+      end)
+    end
   end
 
   defp get_state(cluster) do
