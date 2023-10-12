@@ -74,33 +74,6 @@ defmodule Xandra.Connection.Utils do
     end
   end
 
-  @spec ping(Transport.t(), module(), nil | module()) ::
-          :ok
-          | {:error, ConnectionError.t() | Error.t()}
-          | {:error, {:use_this_protocol_instead, Frame.supported_protocol()}}
-  def ping(%Transport{} = transport, protocol_module, compressor)
-      when is_atom(protocol_module) and not is_nil(protocol_module) and is_atom(compressor) do
-    payload =
-      Frame.new(:options, compressor: compressor)
-      |> protocol_module.encode_request(nil)
-      |> Frame.encode(protocol_module)
-
-    protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
-
-    with :ok <- Transport.send(transport, payload),
-         {:ok, %Frame{} = frame, rest} <- recv_frame(transport, protocol_format, compressor) do
-      "" = rest
-
-      case protocol_module.decode_response(frame) do
-        %Error{} = error -> {:error, error}
-        %{} = _options -> :ok
-      end
-    else
-      {:error, reason} ->
-        {:error, ConnectionError.new("request options", reason)}
-    end
-  end
-
   @spec startup_connection(Transport.t(), map, module, nil | module) ::
           :ok | {:error, ConnectionError.t()}
   def startup_connection(
