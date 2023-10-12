@@ -473,7 +473,44 @@ defmodule Xandra.ClusterTest do
                )
     end
 
-    test "returns the result directly for the bang! version" do
+    test "executes batch queries", %{base_options: opts} do
+      cluster = start_link_supervised!({Cluster, opts})
+
+      Xandra.Cluster.run(cluster, fn conn ->
+        :ok = XandraTest.IntegrationCase.setup_keyspace(conn, "cluster_batch_test")
+      end)
+
+      Xandra.Cluster.execute!(
+        cluster,
+        "CREATE TABLE cluster_batch_test.cluster_batches (id int PRIMARY KEY)"
+      )
+
+      batch =
+        Xandra.Batch.new()
+        |> Xandra.Batch.add("INSERT INTO cluster_batch_test.cluster_batches(id) VALUES (?)", [
+          {"int", 1}
+        ])
+
+      assert {:ok, %Xandra.Void{}} = Xandra.Cluster.execute(cluster, batch)
+    end
+
+    test "returns an error if the cluster is not connected to any node", %{base_options: opts} do
+      opts =
+        Keyword.merge(opts,
+          nodes: ["127.0.0.1:8092"],
+          sync_connect: false,
+          queue_checkouts_before_connecting: [max_size: 0]
+        )
+
+      cluster = start_link_supervised!({Cluster, opts})
+
+      assert {:error, %ConnectionError{reason: {:cluster, :not_connected}}} =
+               Xandra.Cluster.execute(cluster, "SELECT * FROM system.local")
+    end
+  end
+
+  describe "execute!/3,4" do
+    test "returns the result directly" do
       opts = [
         nodes: ["127.0.0.1:#{@port}"],
         sync_connect: 1000
@@ -497,6 +534,30 @@ defmodule Xandra.ClusterTest do
                  _params = [{"varchar", "local"}],
                  _options = []
                )
+    end
+
+    test "raises errors" do
+      opts = [
+        nodes: ["127.0.0.1:#{@port}"],
+        sync_connect: 1000
+      ]
+
+      opts =
+        if @protocol_version do
+          Keyword.put(opts, :protocol_version, @protocol_version)
+        else
+          opts
+        end
+
+      cluster = start_link_supervised!({Xandra.Cluster, opts})
+
+      assert_raise Xandra.Error, "Keyspace 'nonexisting_keyspace' does not exist", fn ->
+        Xandra.Cluster.execute!(cluster, "USE nonexisting_keyspace")
+      end
+
+      assert_raise Xandra.Error, "Keyspace 'nonexisting_keyspace' does not exist", fn ->
+        Xandra.Cluster.execute!(cluster, "USE nonexisting_keyspace", _params = [], _options = [])
+      end
     end
   end
 
@@ -522,6 +583,22 @@ defmodule Xandra.ClusterTest do
       assert {:ok, _page} = Xandra.Cluster.execute(cluster, prepared)
     end
 
+    test "returns an error if the cluster is not connected to any node", %{base_options: opts} do
+      opts =
+        Keyword.merge(opts,
+          nodes: ["127.0.0.1:8092"],
+          sync_connect: false,
+          queue_checkouts_before_connecting: [max_size: 0]
+        )
+
+      cluster = start_link_supervised!({Cluster, opts})
+
+      assert {:error, %ConnectionError{reason: {:cluster, :not_connected}}} =
+               Xandra.Cluster.prepare(cluster, "SELECT * FROM system.local")
+    end
+  end
+
+  describe "prepare!/3" do
     test "returns the result directly for the bang! version" do
       opts = [
         nodes: ["127.0.0.1:#{@port}"],
@@ -541,6 +618,34 @@ defmodule Xandra.ClusterTest do
                prepared = Xandra.Cluster.prepare!(cluster, "SELECT * FROM system.local")
 
       assert {:ok, _page} = Xandra.Cluster.execute(cluster, prepared)
+    end
+
+    test "raises errors" do
+      opts = [
+        nodes: ["127.0.0.1:#{@port}"],
+        sync_connect: 1000
+      ]
+
+      opts =
+        if @protocol_version do
+          Keyword.put(opts, :protocol_version, @protocol_version)
+        else
+          opts
+        end
+
+      cluster = start_link_supervised!({Xandra.Cluster, opts})
+
+      assert_raise Xandra.Error, ~r/no viable alternative at input/, fn ->
+        Xandra.Cluster.prepare!(cluster, "SELECT bad syntax")
+      end
+    end
+  end
+
+  describe "stream_pages!/4" do
+    test "streams pages", %{base_options: opts} do
+      cluster = start_link_supervised!({Cluster, opts})
+      stream = Xandra.Cluster.stream_pages!(cluster, "SELECT * FROM system.local", _params = [])
+      assert [%{}] = Enum.to_list(stream)
     end
   end
 
