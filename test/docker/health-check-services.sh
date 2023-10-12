@@ -5,6 +5,10 @@ MAX_SECONDS=120
 END_SECONDS=$((SECONDS+MAX_SECONDS))
 
 for name in $(docker ps --format '{{.Names}}'); do
+  if [[ "$name" == *"toxiproxy"* ]]; then
+    continue
+  fi
+
   HEALTHY=false
 
   while [[ "$SECONDS" -lt "$END_SECONDS" ]]; do
