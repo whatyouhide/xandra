@@ -144,9 +144,17 @@ defmodule Xandra.ClusterTest do
   end
 
   describe "start_link/1" do
-    test "doesn't fail to start if the control connection fails to connect", %{base_options: opts} do
+    @tag telemetry_events: [[:xandra, :cluster, :control_connection, :failed_to_connect]]
+    test "doesn't fail to start if the control connection fails to connect",
+         %{base_options: opts, telemetry_ref: telemetry_ref} do
       opts = Keyword.merge(opts, nodes: ["127.0.0.1:8092"], sync_connect: false)
       pid = start_link_supervised!({Cluster, opts})
+
+      assert_telemetry [:control_connection, :failed_to_connect], %{
+        cluster_pid: ^pid,
+        reason: :econnrefused
+      }
+
       :sys.get_state(pid)
     end
 

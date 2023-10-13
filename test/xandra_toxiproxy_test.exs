@@ -35,7 +35,7 @@ defmodule XandraToxiproxyTest do
     conn = start_supervised!({Xandra, opts})
 
     ToxiproxyEx.get!(:xandra_test_cassandra)
-    |> ToxiproxyEx.toxic(:limit_data, bytes: 120)
+    |> ToxiproxyEx.toxic(:limit_data, bytes: 500)
     |> ToxiproxyEx.apply!(fn ->
       assert {:error, %ConnectionError{reason: :disconnected}} =
                Xandra.prepare(conn, "SELECT * FROM system.local")
