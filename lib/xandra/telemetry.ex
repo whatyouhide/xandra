@@ -145,6 +145,9 @@ defmodule Xandra.Telemetry do
       [:pool, :restarted] ->
         Logger.debug("Pool restarted", logger_meta)
 
+      [:pool, :stopped] ->
+        Logger.debug("Pool stopped", logger_meta)
+
       [:discovered_peers] ->
         Logger.debug("Discovered peers: #{inspect(measurements.peers)}", logger_meta)
     end
