@@ -186,7 +186,7 @@ defmodule Xandra.Cluster.Pool do
   end
 
   def handle_event(:internal, :flush_checkout_queue, :has_connected_once, %__MODULE__{} = data) do
-    checkout_queue(queue: queue) = data.checkout_queue
+    {checkout_queue(queue: queue), data} = get_and_update_in(data.checkout_queue, &{&1, nil})
 
     {reply_actions, data} =
       Enum.map_reduce(:queue.to_list(queue), data, fn from, data ->
