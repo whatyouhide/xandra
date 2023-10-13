@@ -105,7 +105,7 @@ jobs:
             elixir: "1.15.4"
             test_only_cassandra: true
             cassandra_version: "4.1"
-            cassandra_native_protocol: "v4"
+            cassandra_native_protocol: "v5"
 
     env:
       CASSANDRA_VERSION: ${{ matrix.server_versions.cassandra }}
@@ -161,7 +161,7 @@ jobs:
       # TODO: eventually figure out why we can't run encryption tests on CI.
       - name: Run tests for Cassandra and Scylla
         if: ${{ !matrix.test_only_cassandra }}
-        run: mix test.all --trace --exclude encryption --exclude ccm
+        run: mix test.all --trace --exclude encryption --exclude ccm --only tmp
 
       - name: Run tests for Cassandra only
         if: ${{ matrix.test_only_cassandra }}

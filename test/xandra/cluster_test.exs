@@ -917,6 +917,13 @@ defmodule Xandra.ClusterTest do
     end
   end
 
+  @tag :tmp
+  @tag :toxiproxy
+  test "[tmp] Toxiproxy goes through", %{base_options: opts} do
+    opts = Keyword.merge(opts, sync_connect: 1000, nodes: ["127.0.0.1:19052"])
+    assert {:ok, _pid} = start_supervised({Cluster, opts})
+  end
+
   defp get_state(cluster) do
     assert {_state, data} = :sys.get_state(cluster)
     data
