@@ -367,7 +367,6 @@ defmodule Xandra.Cluster.Pool do
   # connection process or the pool supervisor *crash*, we want to crash this so that
   # the whole thing is restarted.
   def handle_event(:info, {:EXIT, _pid, reason}, _state, %__MODULE__{} = _data) do
-    dbg()
     exit(reason)
   end
 
