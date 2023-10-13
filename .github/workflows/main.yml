@@ -105,14 +105,13 @@ jobs:
             elixir: "1.15.4"
             test_only_cassandra: true
             cassandra_version: "4.1"
-            cassandra_native_protocol: "v4"
+            cassandra_native_protocol: "v5"
 
     env:
       CASSANDRA_VERSION: ${{ matrix.server_versions.cassandra }}
       SCYLLA_VERSION: ${{ matrix.server_versions.scylla }}
       CASSANDRA_NATIVE_PROTOCOL: ${{ matrix.cassandra_native_protocol }}
       LOG_LEVEL: debug
-      XANDRA_DEBUG: true
 
     steps:
       - name: Clone the repository
@@ -162,11 +161,11 @@ jobs:
       # TODO: eventually figure out why we can't run encryption tests on CI.
       - name: Run tests for Cassandra and Scylla
         if: ${{ !matrix.test_only_cassandra }}
-        run: mix test.all --trace --exclude encryption --exclude ccm
+        run: mix test.all --trace --exclude encryption --exclude ccm --exclude toxiproxy
 
       - name: Run tests for Cassandra only
         if: ${{ matrix.test_only_cassandra }}
-        run: mix test --trace --exclude encryption --exclude ccm
+        run: mix test --trace --exclude encryption --exclude ccm --exclude toxiproxy
 
       - name: Dump Docker logs on failure
         uses: jwalton/gh-docker-logs@v1

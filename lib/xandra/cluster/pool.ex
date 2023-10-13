@@ -350,12 +350,16 @@ defmodule Xandra.Cluster.Pool do
   end
 
   # Handle the control connection shutting itself down.
+  # If we don't have a control connection PID (yet?) and some other PID shuts down
+  # with reason :shutdown, we assume it's the control connection we go on to
+  # starting the next control connection.
   def handle_event(
         :info,
         {:EXIT, control_connection_pid, {:shutdown, _reason}},
         _state,
-        %__MODULE__{control_connection: control_connection_pid}
-      ) do
+        %__MODULE__{control_connection: data_pid}
+      )
+      when data_pid == control_connection_pid or is_nil(data_pid) do
     {:keep_state_and_data, {:next_event, :internal, :start_control_connection}}
   end
 

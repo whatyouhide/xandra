@@ -132,10 +132,7 @@ defmodule Xandra.Connection do
       |> protocol_module.encode_request(prepared)
       |> Frame.encode(protocol_module)
 
-    case Transport.send(transport, payload) do
-      :ok -> :ok
-      {:error, reason} -> {:error, ConnectionError.new("prepare", reason)}
-    end
+    Transport.send(transport, payload)
   end
 
   @spec execute(:gen_statem.server_ref(), Batch.t(), nil, keyword()) ::

@@ -14,7 +14,14 @@ defmodule Xandra.ClusterTest do
   defmodule PoolMock do
     use Supervisor
 
-    def start_link(opts), do: Supervisor.start_link(__MODULE__, Map.new(opts))
+    def start_link(opts) do
+      map_opts =
+        opts
+        |> Map.new()
+        |> Map.update(:connection_options, %{}, &Map.new/1)
+
+      Supervisor.start_link(__MODULE__, map_opts)
+    end
 
     @impl true
     def init(opts) do
@@ -137,9 +144,17 @@ defmodule Xandra.ClusterTest do
   end
 
   describe "start_link/1" do
-    test "doesn't fail to start if the control connection fails to connect", %{base_options: opts} do
+    @tag telemetry_events: [[:xandra, :cluster, :control_connection, :failed_to_connect]]
+    test "doesn't fail to start if the control connection fails to connect",
+         %{base_options: opts, telemetry_ref: telemetry_ref} do
       opts = Keyword.merge(opts, nodes: ["127.0.0.1:8092"], sync_connect: false)
       pid = start_link_supervised!({Cluster, opts})
+
+      assert_telemetry [:control_connection, :failed_to_connect], %{
+        cluster_pid: ^pid,
+        reason: :econnrefused
+      }
+
       :sys.get_state(pid)
     end
 
@@ -305,10 +320,9 @@ defmodule Xandra.ClusterTest do
       pid = start_link_supervised!({Cluster, opts})
 
       assert_receive {^test_ref, PoolMock, :init_called,
-                      %{
-                        pool_size: 1,
-                        connection_options: [nodes: ["127.0.0.1:9052"], cluster_pid: ^pid]
-                      }}
+                      %{pool_size: 1, connection_options: %{cluster_pid: ^pid} = conn_opts}}
+
+      assert conn_opts[:nodes] == ["127.0.0.1:#{@port}"]
 
       remote_host = %Host{address: {198, 10, 0, 1}, port: @port, data_center: "remote_dc"}
       local_host1 = %Host{address: {198, 0, 0, 1}, port: @port, data_center: "local_dc"}
@@ -330,13 +344,13 @@ defmodule Xandra.ClusterTest do
       assert_receive {^test_ref, PoolMock, :init_called,
                       %{
                         pool_size: 1,
-                        connection_options: [nodes: ["198.0.0.1:9052"], cluster_pid: ^pid]
+                        connection_options: %{nodes: ["198.0.0.1:9052"], cluster_pid: ^pid}
                       }}
 
       assert_receive {^test_ref, PoolMock, :init_called,
                       %{
                         pool_size: 1,
-                        connection_options: [nodes: ["198.0.0.2:9052"], cluster_pid: ^pid]
+                        connection_options: %{nodes: ["198.0.0.2:9052"], cluster_pid: ^pid}
                       }}
 
       refute_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{},
@@ -909,6 +923,13 @@ defmodule Xandra.ClusterTest do
 
       assert_telemetry [:control_connection, :connected], %{cluster_pid: ^pid}
     end
+  end
+
+  @tag :tmp
+  @tag :toxiproxy
+  test "[tmp] Toxiproxy goes through", %{base_options: opts} do
+    opts = Keyword.merge(opts, sync_connect: 1000, nodes: ["127.0.0.1:19052"])
+    assert {:ok, _pid} = start_supervised({Cluster, opts})
   end
 
   defp get_state(cluster) do
