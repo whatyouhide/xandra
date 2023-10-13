@@ -41,4 +41,23 @@ defmodule XandraToxiproxyTest do
                Xandra.prepare(conn, "SELECT * FROM system.local")
     end)
   end
+
+  test "start_link/1 supports the :connect_timeout option", %{start_options: opts} do
+    opts =
+      Keyword.merge(opts,
+        connect_timeout: 0,
+        backoff_type: :stop,
+        nodes: ["127.0.0.1:19052"]
+      )
+
+    ToxiproxyEx.get!(:xandra_test_cassandra)
+    |> ToxiproxyEx.toxic(:timeout, timeout: 0)
+    |> ToxiproxyEx.apply!(fn ->
+      assert {:ok, conn} = start_supervised({Xandra, opts})
+
+      ref = Process.monitor(conn)
+      assert_receive {:DOWN, ^ref, _, _, reason}
+      assert reason == :timeout
+    end)
+  end
 end
