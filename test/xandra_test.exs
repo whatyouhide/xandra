@@ -58,7 +58,7 @@ defmodule XandraTest do
       conn = start_supervised!({Xandra, options})
       assert_receive {[:xandra, :failed_to_connect], ^telemetry_ref, %{}, %{connection: ^conn}}
 
-      assert {:error, %ConnectionError{action: "request", reason: :not_connected}} =
+      assert {:error, %ConnectionError{action: "check out connection", reason: :not_connected}} =
                Xandra.execute(conn, "USE some_keyspace")
     end
 
@@ -179,7 +179,7 @@ defmodule XandraTest do
 
       assert {:ok, conn} = start_supervised({Xandra, nodes: ["localhost:#{port}"]})
 
-      assert {:error, %ConnectionError{action: "request", reason: :not_connected}} =
+      assert {:error, %ConnectionError{action: "check out connection", reason: :not_connected}} =
                Xandra.execute(conn, "SELECT * FROM system.local")
 
       assert :ok = Task.await(task)

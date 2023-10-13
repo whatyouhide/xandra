@@ -111,6 +111,9 @@ defmodule Xandra.Connection do
               end
             end)
         end
+
+      {:error, error} ->
+        {:error, ConnectionError.new("check out connection", error)}
     end
   end
 
@@ -195,8 +198,8 @@ defmodule Xandra.Connection do
           {fun.(), telemetry_meta}
         end)
 
-      {:error, %ConnectionError{} = error} ->
-        {:error, error}
+      {:error, error} ->
+        {:error, ConnectionError.new("check out connection", error)}
     end
   end
 
@@ -237,7 +240,7 @@ defmodule Xandra.Connection do
         frame = %Frame{frame | atom_keys?: atom_keys?}
         {:ok, frame}
 
-      {^req_alias, {:error, %ConnectionError{} = error}} ->
+      {^req_alias, {:error, error}} ->
         {:error, error}
 
       {:DOWN, ^req_alias, _, _, reason} ->
@@ -338,7 +341,7 @@ defmodule Xandra.Connection do
 
     data =
       Enum.reduce(data.in_flight_requests, data, fn {stream_id, req_alias}, data_acc ->
-        send_reply(req_alias, {:error, ConnectionError.new("request", :disconnected)})
+        send_reply(req_alias, {:error, :disconnected})
         update_in(data_acc.free_stream_ids, &MapSet.put(&1, stream_id))
       end)
 
@@ -492,8 +495,7 @@ defmodule Xandra.Connection do
   end
 
   def disconnected({:call, from}, {:checkout_state_for_next_request, _req_alias}, _data) do
-    reply = {:error, ConnectionError.new("request", :not_connected)}
-    {:keep_state_and_data, {:reply, from, reply}}
+    {:keep_state_and_data, {:reply, from, {:error, :not_connected}}}
   end
 
   def disconnected({:call, from}, :get_transport, %__MODULE__{}) do

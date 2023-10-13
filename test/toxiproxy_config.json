@@ -1,0 +1,14 @@
+[
+    {
+        "name": "xandra_test_cassandra",
+        "listen": "0.0.0.0:9042",
+        "upstream": "cassandra:9042",
+        "enabled": true
+    },
+    {
+        "name": "xandra_test_cassandra_sliced",
+        "listen": "0.0.0.0:9043",
+        "upstream": "cassandra:9042",
+        "enabled": true
+    }
+]

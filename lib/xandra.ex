@@ -375,6 +375,7 @@ defmodule Xandra do
       basis through the `:consistency` option in `execute/4`.
       """
     ],
+    debug: [type: :any],
     encryption: [
       type: :boolean,
       default: false,
