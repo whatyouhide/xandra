@@ -112,7 +112,6 @@ jobs:
       SCYLLA_VERSION: ${{ matrix.server_versions.scylla }}
       CASSANDRA_NATIVE_PROTOCOL: ${{ matrix.cassandra_native_protocol }}
       LOG_LEVEL: debug
-      XANDRA_DEBUG: true
 
     steps:
       - name: Clone the repository
