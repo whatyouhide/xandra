@@ -14,7 +14,14 @@ defmodule Xandra.ClusterTest do
   defmodule PoolMock do
     use Supervisor
 
-    def start_link(opts), do: Supervisor.start_link(__MODULE__, Map.new(opts))
+    def start_link(opts) do
+      map_opts =
+        opts
+        |> Map.new()
+        |> Map.update(:connection_options, %{}, &Map.new/1)
+
+      Supervisor.start_link(__MODULE__, map_opts)
+    end
 
     @impl true
     def init(opts) do
@@ -305,10 +312,9 @@ defmodule Xandra.ClusterTest do
       pid = start_link_supervised!({Cluster, opts})
 
       assert_receive {^test_ref, PoolMock, :init_called,
-                      %{
-                        pool_size: 1,
-                        connection_options: [nodes: ["127.0.0.1:9052"], cluster_pid: ^pid]
-                      }}
+                      %{pool_size: 1, connection_options: %{cluster_pid: ^pid} = conn_opts}}
+
+      assert conn_opts[:nodes] == ["127.0.0.1:#{@port}"]
 
       remote_host = %Host{address: {198, 10, 0, 1}, port: @port, data_center: "remote_dc"}
       local_host1 = %Host{address: {198, 0, 0, 1}, port: @port, data_center: "local_dc"}
@@ -330,13 +336,13 @@ defmodule Xandra.ClusterTest do
       assert_receive {^test_ref, PoolMock, :init_called,
                       %{
                         pool_size: 1,
-                        connection_options: [nodes: ["198.0.0.1:9052"], cluster_pid: ^pid]
+                        connection_options: %{nodes: ["198.0.0.1:9052"], cluster_pid: ^pid}
                       }}
 
       assert_receive {^test_ref, PoolMock, :init_called,
                       %{
                         pool_size: 1,
-                        connection_options: [nodes: ["198.0.0.2:9052"], cluster_pid: ^pid]
+                        connection_options: %{nodes: ["198.0.0.2:9052"], cluster_pid: ^pid}
                       }}
 
       refute_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{},
