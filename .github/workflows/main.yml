@@ -122,20 +122,6 @@ jobs:
           docker-compose up --detach --build
           ./test/docker/health-check-services.sh
 
-      - name: Install Python (for ccm)
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.9.16"
-
-      - name: Install ccm
-        run: pip3 install ccm
-
-      - name: Install OpenJDK
-        uses: actions/setup-java@v2
-        with:
-          distribution: "zulu"
-          java-version: "11"
-
       - name: Install OTP and Elixir
         uses: erlef/setup-beam@v1
         with:
@@ -161,11 +147,11 @@ jobs:
       # TODO: eventually figure out why we can't run encryption tests on CI.
       - name: Run tests for Cassandra and Scylla
         if: ${{ !matrix.test_only_cassandra }}
-        run: mix test.all --trace --exclude encryption --exclude ccm --exclude toxiproxy
+        run: mix test.all --trace --exclude encryption --exclude toxiproxy
 
       - name: Run tests for Cassandra only
         if: ${{ matrix.test_only_cassandra }}
-        run: mix test --trace --exclude encryption --exclude ccm --exclude toxiproxy
+        run: mix test --trace --exclude encryption --exclude toxiproxy
 
       - name: Dump Docker logs on failure
         uses: jwalton/gh-docker-logs@v1

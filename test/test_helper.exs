@@ -13,19 +13,6 @@ excluded =
     nil -> [:skip_for_native_protocol_v4, :skip_for_native_protocol_v3]
   end
 
-excluded =
-  if System.find_executable("ccm") do
-    excluded
-  else
-    message = """
-    ccm was not found in your PATH. Xandra requires it in order to run cluster tests, so \
-    we're skipping ccm-based tests for now. Make sure you can run "ccm" in your shell.\
-    """
-
-    IO.puts(IO.ANSI.format([:yellow, "WARNING: ", :reset, message, ?\n]))
-    excluded ++ [:ccm]
-  end
-
 Mox.defmock(LBPMock, for: Xandra.Cluster.LoadBalancingPolicy)
 
 ExUnit.start(exclude: excluded, assert_receive_timeout: 1_000)
