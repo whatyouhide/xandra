@@ -300,7 +300,7 @@ defmodule Xandra.Cluster.Pool do
   def handle_event(
         :info,
         {:xandra, :connected, peername, _pid},
-        _state,
+        state,
         %__MODULE__{} = data
       )
       when is_peername(peername) do
@@ -315,7 +315,12 @@ defmodule Xandra.Cluster.Pool do
       send(alias, {alias, :connected})
     end
 
-    actions = [{:next_event, :internal, :flush_checkout_queue}]
+    actions =
+      case state do
+        :has_connected_once -> []
+        :never_connected -> [{:next_event, :internal, :flush_checkout_queue}]
+      end
+
     {:next_state, :has_connected_once, data, actions}
   end
 
