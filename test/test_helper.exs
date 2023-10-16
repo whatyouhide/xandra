@@ -15,4 +15,8 @@ excluded =
 
 Mox.defmock(LBPMock, for: Xandra.Cluster.LoadBalancingPolicy)
 
+ExUnit.after_suite(fn _result ->
+  ToxiproxyEx.reset!()
+end)
+
 ExUnit.start(exclude: excluded, assert_receive_timeout: 1_000)
