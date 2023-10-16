@@ -7,6 +7,8 @@ services:
       dockerfile: cassandra.dockerfile
       args:
         CASSANDRA_VERSION: "${CASSANDRA_VERSION:-4.1}"
+    expose:
+      - "9042"
     ports:
       - "9052:9042" # TCP connections
       - "9152:9142" # TLS/SSL connections
