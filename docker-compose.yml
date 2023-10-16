@@ -91,10 +91,9 @@ services:
 
   toxiproxy:
     image: ghcr.io/shopify/toxiproxy:2.6.0
-    command: -config=/config/toxiproxy.json -host 0.0.0.0
+    command: -config=/config/toxiproxy.json
     volumes:
       - ./test/toxiproxy_config.json:/config/toxiproxy.json
     ports:
       - "8474:8474"
       - "19052:9042"
-      - "19152:9043"

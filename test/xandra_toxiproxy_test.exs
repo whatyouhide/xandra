@@ -11,7 +11,7 @@ defmodule XandraToxiproxyTest do
     ToxiproxyEx.get!(:xandra_test_cassandra_sliced)
     |> ToxiproxyEx.toxic(:slicer, average_size: 50, size_variation: 25, delay: _microsec = 50)
     |> ToxiproxyEx.apply!(fn ->
-      opts = Keyword.merge(opts, nodes: ["127.0.0.1:19152"], keyspace: keyspace)
+      opts = Keyword.merge(opts, nodes: ["127.0.0.1:19052"], keyspace: keyspace)
       conn = start_supervised!({Xandra, opts})
       assert {:ok, prepared} = Xandra.prepare(conn, "SELECT * FROM system.local WHERE key = ?")
       assert {:ok, page} = Xandra.execute(conn, prepared, ["local"])
