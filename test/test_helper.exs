@@ -15,6 +15,9 @@ excluded =
 
 Mox.defmock(LBPMock, for: Xandra.Cluster.LoadBalancingPolicy)
 
+{proxies, _} = Code.eval_file("test/toxiproxy_proxies.exs")
+ToxiproxyEx.populate!(proxies)
+
 ExUnit.after_suite(fn _result ->
   ToxiproxyEx.reset!()
 end)

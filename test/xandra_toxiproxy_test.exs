@@ -14,7 +14,7 @@ defmodule XandraToxiproxyTest do
 
   test "execute/3,4 supports a network that slices packets",
        %{start_options: opts, keyspace: keyspace} do
-    ToxiproxyEx.get!(:xandra_test_cassandra_sliced)
+    ToxiproxyEx.get!(:xandra_test_cassandra)
     |> ToxiproxyEx.toxic(:slicer, average_size: 50, size_variation: 25, delay: _microsec = 50)
     |> ToxiproxyEx.apply!(fn ->
       opts = Keyword.merge(opts, keyspace: keyspace)
