@@ -7,6 +7,7 @@ services:
       dockerfile: cassandra.dockerfile
       args:
         CASSANDRA_VERSION: "${CASSANDRA_VERSION:-4.1}"
+    hostname: cassandra
     expose:
       - "9042"
     ports:
@@ -99,3 +100,5 @@ services:
     ports:
       - "8474:8474"
       - "19052:9042"
+    links:
+      - "cassandra"

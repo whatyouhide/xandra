@@ -6,12 +6,18 @@ defmodule XandraToxiproxyTest do
 
   @moduletag :toxiproxy
 
+  @toxic_proxy_node "localhost:19052"
+
+  setup %{start_options: opts} do
+    %{start_options: Keyword.merge(opts, nodes: [@toxic_proxy_node])}
+  end
+
   test "execute/3,4 supports a network that slices packets",
        %{start_options: opts, keyspace: keyspace} do
     ToxiproxyEx.get!(:xandra_test_cassandra_sliced)
     |> ToxiproxyEx.toxic(:slicer, average_size: 50, size_variation: 25, delay: _microsec = 50)
     |> ToxiproxyEx.apply!(fn ->
-      opts = Keyword.merge(opts, nodes: ["127.0.0.1:19052"], keyspace: keyspace)
+      opts = Keyword.merge(opts, keyspace: keyspace)
       conn = start_supervised!({Xandra, opts})
       assert {:ok, prepared} = Xandra.prepare(conn, "SELECT * FROM system.local WHERE key = ?")
       assert {:ok, page} = Xandra.execute(conn, prepared, ["local"])
@@ -20,7 +26,6 @@ defmodule XandraToxiproxyTest do
   end
 
   test "prepare/3 when the connection is down", %{start_options: opts} do
-    opts = Keyword.merge(opts, nodes: ["127.0.0.1:19052"])
     conn = start_supervised!({Xandra, opts})
 
     ToxiproxyEx.get!(:xandra_test_cassandra)
@@ -31,7 +36,6 @@ defmodule XandraToxiproxyTest do
   end
 
   test "prepare/3 when the connection goes down mid request", %{start_options: opts} do
-    opts = Keyword.merge(opts, nodes: ["127.0.0.1:19052"])
     conn = start_supervised!({Xandra, opts})
 
     ToxiproxyEx.get!(:xandra_test_cassandra)
@@ -43,12 +47,7 @@ defmodule XandraToxiproxyTest do
   end
 
   test "start_link/1 supports the :connect_timeout option", %{start_options: opts} do
-    opts =
-      Keyword.merge(opts,
-        connect_timeout: 0,
-        backoff_type: :stop,
-        nodes: ["127.0.0.1:19052"]
-      )
+    opts = Keyword.merge(opts, connect_timeout: 0, backoff_type: :stop)
 
     ToxiproxyEx.get!(:xandra_test_cassandra)
     |> ToxiproxyEx.toxic(:timeout, timeout: 0)
