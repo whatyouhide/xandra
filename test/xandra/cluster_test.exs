@@ -416,6 +416,25 @@ defmodule Xandra.ClusterTest do
       cluster_state = get_state(pid)
       assert %{status: :down} = cluster_state.peers[{{127, 0, 0, 1}, 8092}]
     end
+
+    @tag telemetry_events: [
+           [:xandra, :connected]
+         ]
+    test "starts multiple connections to each node through the :pool_size option",
+         %{base_options: opts, telemetry_ref: telemetry_ref} do
+      opts = Keyword.merge(opts, pool_size: 3)
+      pid = start_link_supervised!({Cluster, opts})
+
+      assert_receive {[:xandra, :connected], ^telemetry_ref, %{}, %{connection: pid1}}
+      assert_receive {[:xandra, :connected], ^telemetry_ref, %{}, %{connection: pid2}}
+      assert_receive {[:xandra, :connected], ^telemetry_ref, %{}, %{connection: pid3}}
+
+      # Assert that the connections are different.
+      assert Enum.uniq([pid1, pid2, pid3]) == [pid1, pid2, pid3]
+
+      # Get the state to make sure the process is alive.
+      get_state(pid)
+    end
   end
 
   describe "child_spec/1" do
