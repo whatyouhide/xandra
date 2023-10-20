@@ -5,6 +5,15 @@ end
 
 Logger.configure(level: String.to_existing_atom(System.get_env("LOG_LEVEL", "info")))
 
+ToxiproxyEx.populate!([
+  %{
+    name: "xandra_test_cassandra",
+    listen: "[::]:9042",
+    upstream: "cassandra:9042",
+    enabled: true
+  }
+])
+
 excluded =
   case XandraTest.IntegrationCase.protocol_version() do
     :v3 -> [:skip_for_native_protocol_v3]

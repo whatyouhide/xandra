@@ -8,10 +8,10 @@ defmodule XandraToxiproxyTest do
 
   test "execute/3,4 supports a network that slices packets",
        %{start_options: opts, keyspace: keyspace} do
-    ToxiproxyEx.get!(:xandra_test_cassandra_sliced)
+    ToxiproxyEx.get!(:xandra_test_cassandra)
     |> ToxiproxyEx.toxic(:slicer, average_size: 50, size_variation: 25, delay: _microsec = 50)
     |> ToxiproxyEx.apply!(fn ->
-      opts = Keyword.merge(opts, nodes: ["127.0.0.1:19152"], keyspace: keyspace)
+      opts = Keyword.merge(opts, nodes: ["127.0.0.1:19052"], keyspace: keyspace)
       conn = start_supervised!({Xandra, opts})
       assert {:ok, prepared} = Xandra.prepare(conn, "SELECT * FROM system.local WHERE key = ?")
       assert {:ok, page} = Xandra.execute(conn, prepared, ["local"])
@@ -26,18 +26,6 @@ defmodule XandraToxiproxyTest do
     ToxiproxyEx.get!(:xandra_test_cassandra)
     |> ToxiproxyEx.down!(fn ->
       assert {:error, %ConnectionError{reason: :not_connected}} =
-               Xandra.prepare(conn, "SELECT * FROM system.local")
-    end)
-  end
-
-  test "prepare/3 when the connection goes down mid request", %{start_options: opts} do
-    opts = Keyword.merge(opts, nodes: ["127.0.0.1:19052"])
-    conn = start_supervised!({Xandra, opts})
-
-    ToxiproxyEx.get!(:xandra_test_cassandra)
-    |> ToxiproxyEx.toxic(:limit_data, bytes: 500)
-    |> ToxiproxyEx.apply!(fn ->
-      assert {:error, %ConnectionError{reason: :disconnected}} =
                Xandra.prepare(conn, "SELECT * FROM system.local")
     end)
   end

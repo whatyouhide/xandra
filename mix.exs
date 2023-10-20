@@ -106,7 +106,7 @@ defmodule Xandra.Mixfile do
       {:mox, "~> 1.0", only: :test},
       {:stream_data, "~> 0.6.0", only: [:dev, :test]},
       {:nimble_lz4, "~> 0.1.3", only: [:dev, :test]},
-      {:toxiproxy_ex, "~> 1.1", only: :test}
+      {:toxiproxy_ex, github: "whatyouhide/toxiproxy_ex", only: :test}
     ]
   end
 end
