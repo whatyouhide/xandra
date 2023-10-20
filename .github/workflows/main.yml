@@ -94,7 +94,7 @@ jobs:
           - cassandra: "3"
             scylla: "4.6.3"
         include:
-          - opt: "25.3"
+          - otp: "25.3"
             elixir: "1.15.4"
             coverage: true
             server_versions:
