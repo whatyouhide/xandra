@@ -4,13 +4,14 @@ defmodule Xandra.Backoff do
   # This module provides a functional abstraction over backoffs with different types. It exposes
   # a struct and a couple of functions to work with it.
   @moduledoc false
+
   @compile :nowarn_deprecated_function
 
   @default_type :rand_exp
   @min 1_000
   @max 30_000
 
-  @type t :: %__MODULE__{
+  @type t() :: %__MODULE__{
           type: :stop | :rand | :exp | :rand_exp,
           min: non_neg_integer(),
           max: non_neg_integer(),
@@ -19,7 +20,7 @@ defmodule Xandra.Backoff do
 
   defstruct [:type, :min, :max, :state]
 
-  @spec new(keyword) :: t | nil
+  @spec new(keyword) :: t() | nil
   def new(opts) when is_list(opts) do
     case Keyword.get(opts, :backoff_type, @default_type) do
       :stop ->
