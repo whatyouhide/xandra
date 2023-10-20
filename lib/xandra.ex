@@ -1184,18 +1184,27 @@ defmodule Xandra do
 
   ## Helpers
 
-  defp reprepare_queries(conn, [%Simple{} | rest], options) do
-    reprepare_queries(conn, rest, options)
+  defp reprepare_queries(conn, queries, options) do
+    prepare_options =
+      options
+      |> Keyword.take(Keyword.keys(@prepare_opts_schema))
+      |> Keyword.put(:force, true)
+
+    {:ok, Enum.map(queries, &reprepare_query(conn, &1, prepare_options))}
+  catch
+    {:reprepare_error, error} ->
+      error
   end
 
-  defp reprepare_queries(conn, [%Prepared{statement: statement} | rest], options) do
-    with {:ok, _prepared} <- prepare(conn, statement, Keyword.put(options, :force, true)) do
-      reprepare_queries(conn, rest, options)
+  defp reprepare_query(_conn, %Simple{} = query, _prepare_options) do
+    query
+  end
+
+  defp reprepare_query(conn, %Prepared{statement: statement, values: values}, prepare_options) do
+    case prepare(conn, statement, prepare_options) do
+      {:ok, reprepared} -> %Prepared{reprepared | values: values}
+      other -> throw({:reprepare_error, other})
     end
-  end
-
-  defp reprepare_queries(_conn, [], _options) do
-    :ok
   end
 
   defp assert_valid_paging_state(options) do
@@ -1225,7 +1234,8 @@ defmodule Xandra do
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
     case Connection.execute(conn, batch, nil, options) do
       {:error, %Error{reason: :unprepared}} ->
-        with :ok <- reprepare_queries(conn, batch.queries, options) do
+        with {:ok, queries} <- reprepare_queries(conn, batch.queries, options) do
+          batch = %Batch{batch | queries: queries}
           execute(conn, batch, options)
         end
 
