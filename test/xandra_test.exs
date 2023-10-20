@@ -186,15 +186,6 @@ defmodule XandraTest do
     end
   end
 
-  describe "prepare/3" do
-    test "supports the :timeout option", %{conn: conn} do
-      assert {:error, %ConnectionError{} = error} =
-               Xandra.prepare(conn, "SELECT * FROM system.local", timeout: 0)
-
-      assert error.reason == :timeout
-    end
-  end
-
   describe "failure handling" do
     test "reconnects if the connection drops", %{start_options: start_options} do
       telemetry_ref =

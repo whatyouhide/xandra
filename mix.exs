@@ -34,7 +34,6 @@ defmodule Xandra.Mixfile do
       preferred_cli_env: [
         "test.cassandra": :test,
         "test.scylladb": :test,
-        "test.native_protocols": :test,
         "test.all": :test,
         "test.all_with_html_coverage": :test,
         "coveralls.html": :test
@@ -75,49 +74,68 @@ defmodule Xandra.Mixfile do
     ]
   end
 
+  defp run_cassandra_tests(args, extra_env \\ []) do
+    print_header("Running Cassandra tests")
+
+    mix_cmd_with_status_check(
+      ["test", "--exclude", "scylla_specific", ansi_option() | args],
+      [
+        {"CASSANDRA_PORT", "9052"},
+        {"CASSANDRA_WITH_AUTH_PORT", "9053"}
+      ] ++ extra_env
+    )
+  end
+
+  defp run_scylladb_tests(args, extra_env \\ []) do
+    print_header("Running ScyllaDB tests")
+
+    mix_cmd_with_status_check(
+      [
+        "test",
+        "--exclude",
+        "cassandra_specific",
+        "--exclude",
+        "encryption",
+        "--include",
+        "scylla_specific",
+        ansi_option() | args
+      ],
+      [
+        {"CASSANDRA_PORT", "9062"},
+        {"CASSANDRA_WITH_AUTH_PORT", "9063"}
+      ] ++ extra_env
+    )
+  end
+
+  defp run_tests_with_protocols_and_coverage(coverage_task, args) do
+    for protocol <- ["", "v5", "v4", "v3"] do
+      run_cassandra_tests(
+        ["--cover", "--export-coverage", "cassandra-#{protocol}" | args],
+        [{"CASSANDRA_NATIVE_PROTOCOL", to_string(protocol)}]
+      )
+    end
+
+    for protocol <- ["", "v4", "v3"] do
+      run_scylladb_tests(
+        ["--cover", "--export-coverage", "scylladb-#{protocol}" | args],
+        [{"CASSANDRA_NATIVE_PROTOCOL", to_string(protocol)}]
+      )
+    end
+
+    Mix.Task.run(coverage_task, ["--exclude", "test", "--import-cover", "cover"])
+  end
+
   defp aliases() do
     [
       test: "test --exclude scylla_specific",
-      "test.cassandra": fn args ->
-        print_header("Running Cassandra tests")
-
-        mix_cmd_with_status_check(
-          ["test", "--exclude", "scylla_specific", ansi_option() | args],
-          [
-            {"CASSANDRA_PORT", "9052"},
-            {"CASSANDRA_WITH_AUTH_PORT", "9053"}
-          ]
-        )
-      end,
-      "test.scylladb": fn args ->
-        print_header("Running ScyllaDB tests")
-
-        mix_cmd_with_status_check(
-          [
-            "test",
-            "--exclude",
-            "cassandra_specific",
-            "--exclude",
-            "encryption",
-            "--include",
-            "scylla_specific",
-            ansi_option() | args
-          ],
-          [
-            {"CASSANDRA_PORT", "9062"},
-            {"CASSANDRA_WITH_AUTH_PORT", "9063"}
-          ]
-        )
-      end,
+      "test.cassandra": &run_cassandra_tests/1,
+      "test.scylladb": &run_scylladb_tests/1,
       "test.all": fn args ->
         Mix.Task.run("test.cassandra", args)
         Mix.Task.run("test.scylladb", args)
       end,
-      "test.all_with_html_coverage": fn args ->
-        Mix.Task.run("test.cassandra", ["--cover", "--export-coverage", "cassandra" | args])
-        Mix.Task.run("test.scylladb", ["--cover", "--export-coverage", "scylla" | args])
-        Mix.Task.run("coveralls.html", ["--exclude", "test", "--import-cover", "cover"])
-      end,
+      "test.all_with_html_coverage": &run_tests_with_protocols_and_coverage("coveralls.html", &1),
+      "test.ci_with_coverage": &run_tests_with_protocols_and_coverage("coveralls.github", &1),
       docs: [
         "run pages/generate_telemetry_events_page.exs",
         "docs"
