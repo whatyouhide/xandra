@@ -32,8 +32,11 @@ defmodule Xandra.Mixfile do
 
       # Testing
       preferred_cli_env: [
+        "test.cassandra": :test,
         "test.scylladb": :test,
         "test.native_protocols": :test,
+        "test.all": :test,
+        "test.all_with_html_coverage": :test,
         "coveralls.html": :test
       ],
       test_coverage: [tool: ExCoveralls],
@@ -106,7 +109,15 @@ defmodule Xandra.Mixfile do
           ]
         )
       end,
-      "test.all": ["test.cassandra", "test.scylladb"],
+      "test.all": fn args ->
+        Mix.Task.run("test.cassandra", args)
+        Mix.Task.run("test.scylladb", args)
+      end,
+      "test.all_with_html_coverage": fn args ->
+        Mix.Task.run("test.cassandra", ["--cover", "--export-coverage", "cassandra" | args])
+        Mix.Task.run("test.scylladb", ["--cover", "--export-coverage", "scylla" | args])
+        Mix.Task.run("coveralls.html", ["--exclude", "test", "--import-cover", "cover"])
+      end,
       docs: [
         "run pages/generate_telemetry_events_page.exs",
         "docs"
