@@ -384,7 +384,7 @@ defmodule Xandra.Connection do
         connect_timeout: Keyword.fetch!(options, :connect_timeout),
         connection_name: Keyword.get(options, :name),
         cluster_pid: Keyword.get(options, :cluster_pid),
-        protocol_version: Keyword.get(options, :protocol_version),
+        protocol_version: data.protocol_version || Keyword.get(options, :protocol_version),
         options: options,
         backoff:
           data.backoff ||
