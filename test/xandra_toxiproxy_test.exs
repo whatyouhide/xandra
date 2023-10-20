@@ -31,6 +31,20 @@ defmodule XandraToxiproxyTest do
     end)
   end
 
+  test "prepare/3 supports the :timeout option", %{start_options: opts} do
+    opts = Keyword.merge(opts, nodes: ["127.0.0.1:19052"])
+    conn = start_supervised!({Xandra, opts})
+
+    ToxiproxyEx.get!(:xandra_test_cassandra)
+    |> ToxiproxyEx.toxic(:timeout, timeout: 100)
+    |> ToxiproxyEx.apply!(fn ->
+      assert {:error, %ConnectionError{} = error} =
+               Xandra.prepare(conn, "SELECT * FROM system.local", timeout: 0)
+
+      assert error.reason == :timeout
+    end)
+  end
+
   test "start_link/1 supports the :connect_timeout option", %{start_options: opts} do
     opts =
       Keyword.merge(opts,
