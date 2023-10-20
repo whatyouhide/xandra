@@ -136,15 +136,6 @@ defmodule Xandra.Mixfile do
       end,
       "test.all_with_html_coverage": &run_tests_with_protocols_and_coverage("coveralls.html", &1),
       "test.ci_with_coverage": &run_tests_with_protocols_and_coverage("coveralls.github", &1),
-      "test.ci": fn args ->
-        for protocol <- ["", "v5", "v4", "v3"] do
-          run_cassandra_tests(args, [{"CASSANDRA_NATIVE_PROTOCOL", to_string(protocol)}])
-        end
-
-        for protocol <- ["", "v4", "v3"] do
-          run_scylladb_tests(args, [{"CASSANDRA_NATIVE_PROTOCOL", to_string(protocol)}])
-        end
-      end,
       docs: [
         "run pages/generate_telemetry_events_page.exs",
         "docs"
