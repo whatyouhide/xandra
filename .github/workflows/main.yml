@@ -100,8 +100,8 @@ jobs:
         exclude:
           - coverage: true
             server_versions:
-              - cassandra: "3"
-                scylla: "4.6.3"
+              cassandra: "3"
+              scylla: "4.6.3"
 
 
     env:
