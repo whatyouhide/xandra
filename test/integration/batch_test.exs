@@ -149,7 +149,6 @@ defmodule BatchTest do
   # Regression for a bug we had (at Veeps) where we saw queries being reprepared, and
   # Xandra would pass the execute/3 options down to prepare/3, which fails on validating
   # most of those options.
-  @tag :regression
   test "if given prepared queries, potentially reprepares them", %{conn: conn, keyspace: keyspace} do
     statement = "INSERT INTO #{keyspace}.users (id, name) VALUES (:id, :name)"
     prepared_insert = Xandra.prepare!(conn, statement)
