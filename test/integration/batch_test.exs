@@ -145,4 +145,30 @@ defmodule BatchTest do
 
     assert {:ok, %Page{}} = Xandra.execute(conn, batch)
   end
+
+  # Regression for a bug we had (at Veeps) where we saw queries being reprepared, and
+  # Xandra would pass the execute/3 options down to prepare/3, which fails on validating
+  # most of those options.
+  @tag :regression
+  test "if given prepared queries, potentially reprepares them", %{conn: conn, keyspace: keyspace} do
+    statement = "INSERT INTO #{keyspace}.users (id, name) VALUES (:id, :name)"
+    prepared_insert = Xandra.prepare!(conn, statement)
+
+    # Hacky, but works.
+    prepared_insert = %Xandra.Prepared{prepared_insert | id: "invalid", result_columns: nil}
+
+    batch =
+      Batch.new(:logged)
+      |> Batch.add(prepared_insert, [1, "Homer"])
+      |> Batch.add(prepared_insert, [2, "Marge"])
+
+    assert {:ok, %Void{}} = Xandra.execute(conn, batch)
+
+    {:ok, result} = Xandra.execute(conn, "SELECT name FROM users")
+
+    assert Enum.to_list(Enum.sort(result)) == [
+             %{"name" => "Homer"},
+             %{"name" => "Marge"}
+           ]
+  end
 end
