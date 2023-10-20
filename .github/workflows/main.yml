@@ -90,15 +90,18 @@ jobs:
           - "25.3"
         elixir:
           - "1.15.4"
+        coverage:
+          - true
         server_versions:
           - cassandra: "4.1"
             scylla: "5.2"
           - cassandra: "3"
             scylla: "4.6.3"
-        include:
+        exclude:
           - coverage: true
-            cassandra: "4.1"
-            scylla: "5.2"
+            server_versions:
+              - cassandra: "3"
+                scylla: "4.6.3"
 
 
     env:
