@@ -1234,11 +1234,8 @@ defmodule Xandra do
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
     case Connection.execute(conn, batch, nil, options) do
       {:error, %Error{reason: :unprepared}} ->
-        dbg(batch)
-
         with {:ok, queries} <- reprepare_queries(conn, batch.queries, options) do
           batch = %Batch{batch | queries: queries}
-          dbg(batch)
           execute(conn, batch, options)
         end
 
