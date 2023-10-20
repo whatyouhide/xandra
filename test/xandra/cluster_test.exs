@@ -341,16 +341,19 @@ defmodule Xandra.ClusterTest do
         host: %Host{address: {198, 0, 0, 2}, port: @port, data_center: "local_dc"}
       }
 
+      node1_address = "198.0.0.1:#{@port}"
+      node2_address = "198.0.0.2:#{@port}"
+
       assert_receive {^test_ref, PoolMock, :init_called,
                       %{
                         pool_size: 1,
-                        connection_options: %{nodes: ["198.0.0.1:9052"], cluster_pid: ^pid}
+                        connection_options: %{nodes: [^node1_address], cluster_pid: ^pid}
                       }}
 
       assert_receive {^test_ref, PoolMock, :init_called,
                       %{
                         pool_size: 1,
-                        connection_options: %{nodes: ["198.0.0.2:9052"], cluster_pid: ^pid}
+                        connection_options: %{nodes: [^node2_address], cluster_pid: ^pid}
                       }}
 
       refute_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{},

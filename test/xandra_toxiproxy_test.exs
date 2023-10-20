@@ -6,6 +6,7 @@ defmodule XandraToxiproxyTest do
 
   @moduletag :toxiproxy
 
+  @tag :cassandra_specific
   test "execute/3,4 supports a network that slices packets",
        %{start_options: opts, keyspace: keyspace} do
     ToxiproxyEx.get!(:xandra_test_cassandra)

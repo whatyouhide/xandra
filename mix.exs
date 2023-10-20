@@ -32,8 +32,11 @@ defmodule Xandra.Mixfile do
 
       # Testing
       preferred_cli_env: [
+        "test.cassandra": :test,
         "test.scylladb": :test,
         "test.native_protocols": :test,
+        "test.all": :test,
+        "test.all_with_html_coverage": :test,
         "coveralls.html": :test
       ],
       test_coverage: [tool: ExCoveralls],
@@ -75,16 +78,45 @@ defmodule Xandra.Mixfile do
   defp aliases() do
     [
       test: "test --exclude scylla_specific",
-      "test.scylladb": [
-        fn _args ->
-          System.put_env("CASSANDRA_PORT", "9062")
-          System.put_env("CASSANDRA_WITH_AUTH_PORT", "9063")
-        end,
-        "test --exclude cassandra_specific --exclude encryption --include scylla_specific"
-      ],
+      "test.cassandra": fn args ->
+        print_header("Running Cassandra tests")
+
+        mix_cmd_with_status_check(
+          ["test", "--exclude", "scylla_specific", ansi_option() | args],
+          [
+            {"CASSANDRA_PORT", "9052"},
+            {"CASSANDRA_WITH_AUTH_PORT", "9053"}
+          ]
+        )
+      end,
+      "test.scylladb": fn args ->
+        print_header("Running ScyllaDB tests")
+
+        mix_cmd_with_status_check(
+          [
+            "test",
+            "--exclude",
+            "cassandra_specific",
+            "--exclude",
+            "encryption",
+            "--include",
+            "scylla_specific",
+            ansi_option() | args
+          ],
+          [
+            {"CASSANDRA_PORT", "9062"},
+            {"CASSANDRA_WITH_AUTH_PORT", "9063"}
+          ]
+        )
+      end,
       "test.all": fn args ->
-        Mix.Task.run(:test, args)
-        Mix.Task.run(:"test.scylladb", args)
+        Mix.Task.run("test.cassandra", args)
+        Mix.Task.run("test.scylladb", args)
+      end,
+      "test.all_with_html_coverage": fn args ->
+        Mix.Task.run("test.cassandra", ["--cover", "--export-coverage", "cassandra" | args])
+        Mix.Task.run("test.scylladb", ["--cover", "--export-coverage", "scylla" | args])
+        Mix.Task.run("coveralls.html", ["--exclude", "test", "--import-cover", "cover"])
       end,
       docs: [
         "run pages/generate_telemetry_events_page.exs",
@@ -108,5 +140,53 @@ defmodule Xandra.Mixfile do
       {:nimble_lz4, "~> 0.1.3", only: [:dev, :test]},
       {:toxiproxy_ex, github: "whatyouhide/toxiproxy_ex", only: :test}
     ]
+  end
+
+  defp mix_cmd_with_status_check(args, env) do
+    port =
+      Port.open({:spawn_executable, System.find_executable("mix")}, [
+        :binary,
+        :exit_status,
+        args: args,
+        env:
+          Enum.map(env, fn {key, val} ->
+            {String.to_charlist(key), String.to_charlist(val)}
+          end)
+      ])
+
+    # We want a port so that we can shut down the port if we shut down the system.
+    receive_loop(port)
+  end
+
+  defp receive_loop(port) do
+    receive do
+      {^port, {:data, data}} ->
+        :ok = IO.write(data)
+        receive_loop(port)
+
+      {^port, {:exit_status, 0}} ->
+        :ok
+
+      {^port, {:exit_status, status}} ->
+        Mix.raise("Mix failed with exit status #{status}")
+    after
+      10_000 ->
+        Mix.raise("Timed out waiting for Mix to send back any data (after 10s)")
+    end
+  end
+
+  defp ansi_option do
+    if IO.ANSI.enabled?(), do: "--color", else: "--no-color"
+  end
+
+  defp print_header(header) do
+    Mix.shell().info([:cyan, :bright, header, :reset])
+
+    Mix.shell().info([
+      :cyan,
+      :bright,
+      String.duplicate("=", String.length(header)) <> "\n",
+      :reset
+    ])
   end
 end
