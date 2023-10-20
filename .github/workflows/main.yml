@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Clone the repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install OTP and Elixir
         uses: erlef/setup-beam@v1
@@ -78,8 +78,7 @@ jobs:
       Test (Elixir ${{ matrix.elixir }},
       OTP ${{ matrix.otp }},
       C* ${{ matrix.server_versions.cassandra }},
-      Scylla ${{ matrix.server_versions.scylla }},
-      Native protocol ${{ matrix.cassandra_native_protocol }})
+      Scylla ${{ matrix.server_versions.scylla }} (coverage: ${{ matrix.coverage }})
 
     runs-on: ubuntu-20.04
 
@@ -93,29 +92,23 @@ jobs:
           - "1.15.4"
         server_versions:
           - cassandra: "4.1"
-            scylla: "5.1.6"
+            scylla: "5.2"
           - cassandra: "3"
             scylla: "4.6.3"
-        cassandra_native_protocol:
-          - "v3"
-          - "v4"
         include:
-          # Only C* 4.1+ supports native protocol v5.
-          - otp: "25.3"
-            elixir: "1.15.4"
-            test_only_cassandra: true
-            cassandra_version: "4.1"
-            cassandra_native_protocol: "v5"
+          - coverage: true
+            cassandra: "4.1"
+            scylla: "5.2"
+
 
     env:
       CASSANDRA_VERSION: ${{ matrix.server_versions.cassandra }}
       SCYLLA_VERSION: ${{ matrix.server_versions.scylla }}
-      CASSANDRA_NATIVE_PROTOCOL: ${{ matrix.cassandra_native_protocol }}
       LOG_LEVEL: debug
 
     steps:
       - name: Clone the repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Start Docker and wait for it to be up
         run: |
@@ -142,16 +135,16 @@ jobs:
 
       - name: Install and compile dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
-        run: mix do deps.get --only test, deps.compile
+        run: mix do deps.get --only test + deps.compile
 
       # TODO: eventually figure out why we can't run encryption tests on CI.
-      - name: Run tests for Cassandra and Scylla
-        if: ${{ !matrix.test_only_cassandra }}
-        run: mix test.all --trace --exclude encryption --exclude toxiproxy
+      - name: Run tests for Cassandra and Scylla (with coverage)
+        if: ${{ matrix.coverage }}
+        run: mix test.ci_with_coverage --exclude encryption --exclude toxiproxy
 
-      - name: Run tests for Cassandra only
-        if: ${{ matrix.test_only_cassandra }}
-        run: mix test --trace --exclude encryption --exclude toxiproxy
+      - name: Run tests for Cassandra and Scylla (without coverage)
+        if: ${{ !matrix.coverage }}
+        run: mix test.ci --exclude encryption --exclude toxiproxy
 
       - name: Dump Docker logs on failure
         uses: jwalton/gh-docker-logs@v1
