@@ -1,5 +1,5 @@
 defmodule BatchTest do
-  use XandraTest.IntegrationCase
+  use XandraTest.IntegrationCase, async: true
 
   alias Xandra.{Batch, Error, Void, Page}
 
@@ -9,7 +9,7 @@ defmodule BatchTest do
     :ok
   end
 
-  setup %{conn: conn} do
+  setup %{setup_conn: conn} do
     Xandra.execute!(conn, "TRUNCATE users")
     :ok
   end
@@ -93,6 +93,7 @@ defmodule BatchTest do
            ]
   end
 
+  @tag start_conn: false
   test "an error is raised if named parameters are used with simple queries" do
     message = ~r/non-prepared statements inside batch queries only support positional/
 

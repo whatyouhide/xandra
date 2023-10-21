@@ -1,5 +1,5 @@
 defmodule ProtocolNegotiationTest do
-  use ExUnit.Case, async: true
+  use XandraTest.IntegrationCase, async: true
 
   # This test tests a few things.
   #
@@ -9,8 +9,7 @@ defmodule ProtocolNegotiationTest do
   #     BETA flag (which we DO NOT support), so this test tests that Xandra can correctly
   #     downgrade to a lower version of the protocol
   #
-  test "beta protocol v5" do
-    conn = start_supervised!({Xandra, XandraTest.IntegrationCase.default_start_options()})
+  test "beta protocol v5", %{conn: conn} do
     assert %Xandra.Page{} = Xandra.execute!(conn, "SELECT * FROM system.local")
   end
 end

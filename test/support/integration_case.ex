@@ -1,50 +1,61 @@
 defmodule XandraTest.IntegrationCase do
   use ExUnit.CaseTemplate
 
+  import ExUnit.Assertions
+
   using options do
     quote bind_quoted: [
             start_options: Keyword.get(options, :start_options, []),
-            case_template: __MODULE__
+            case_template: __MODULE__,
+            generate_keyspace: Keyword.get(options, :generate_keyspace, true)
           ] do
       setup_all do
-        keyspace = unquote(case_template).gen_keyspace(__MODULE__)
-
         start_options =
           Keyword.merge(
             unquote(case_template).default_start_options(),
             unquote(start_options)
           )
 
-        conn = start_link_supervised!({Xandra, start_options})
+        if unquote(generate_keyspace) do
+          keyspace = unquote(case_template).gen_keyspace(__MODULE__)
+          conn = start_link_supervised!({Xandra, start_options})
 
-        unquote(case_template).setup_keyspace(conn, keyspace)
+          unquote(case_template).setup_keyspace(conn, keyspace)
 
-        on_exit(fn ->
-          unquote(case_template).drop_keyspace(keyspace, start_options)
-        end)
+          on_exit(fn ->
+            unquote(case_template).drop_keyspace(keyspace, start_options)
+          end)
 
-        %{keyspace: keyspace, start_options: start_options, setup_conn: conn}
+          %{keyspace: keyspace, start_options: start_options, setup_conn: conn}
+        else
+          %{start_options: start_options}
+        end
       end
     end
   end
 
-  setup %{keyspace: keyspace, start_options: start_options} do
-    conn = start_supervised!({Xandra, start_options}, id: "setup_conn_#{keyspace}")
-    Xandra.execute!(conn, "USE #{keyspace}")
-    %{conn: conn}
+  setup context do
+    start_conn? = Map.get(context, :start_conn, true)
+
+    case context do
+      %{keyspace: keyspace, start_options: start_options} when start_conn? ->
+        start_options = Keyword.put(start_options, :keyspace, keyspace)
+        conn = start_supervised!({Xandra, start_options}, id: "setup_conn_#{keyspace}")
+        %{conn: conn}
+
+      _other ->
+        %{}
+    end
   end
 
   @spec default_start_options() :: keyword()
   def default_start_options do
-    port = System.get_env("CASSANDRA_PORT", "9052")
+    options = [nodes: ["127.0.0.1:#{port()}"]]
 
-    options = [nodes: ["127.0.0.1:#{port}"]]
-
-    case System.get_env("CASSANDRA_NATIVE_PROTOCOL", "") do
-      "v3" -> Keyword.put(options, :protocol_version, :v3)
-      "v4" -> Keyword.put(options, :protocol_version, :v4)
-      "v5" -> Keyword.put(options, :protocol_version, :v5)
-      "" -> options
+    if protocol_version = protocol_version() do
+      Keyword.put(options, :protocol_version, protocol_version)
+    else
+      options
     end
   end
 
@@ -79,8 +90,31 @@ defmodule XandraTest.IntegrationCase do
     :ok = Xandra.stop(conn)
   end
 
-  @spec protocol_version() :: :v3 | :v4 | :v5
+  @spec protocol_version() :: :v3 | :v4 | :v5 | nil
   def protocol_version do
-    default_start_options()[:protocol_version]
+    case System.get_env("CASSANDRA_NATIVE_PROTOCOL", "") do
+      "v3" -> :v3
+      "v4" -> :v4
+      "v5" -> :v5
+      "" -> nil
+      other -> flunk("Unsupported value for the CASSANDRA_NATIVE_PROTOCOL env variable: #{other}")
+    end
   end
+
+  @spec port() :: :inet.port_number()
+  def port do
+    "CASSANDRA_PORT"
+    |> System.get_env("9052")
+    |> String.to_integer()
+  end
+
+  @spec port_with_auth() :: :inet.port_number()
+  def port_with_auth do
+    "CASSANDRA_WITH_AUTH_PORT"
+    |> System.get_env("9053")
+    |> String.to_integer()
+  end
+
+  @spec cassandra_port_with_ssl() :: :inet.port_number()
+  def cassandra_port_with_ssl, do: 9152
 end

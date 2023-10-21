@@ -16,7 +16,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
   }
 
   @protocol_version XandraTest.IntegrationCase.protocol_version()
-  @port String.to_integer(System.get_env("CASSANDRA_PORT", "9052"))
+  @port XandraTest.IntegrationCase.port()
 
   setup do
     parent = self()

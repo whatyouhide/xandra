@@ -20,11 +20,12 @@ defmodule ErrorsTest do
 
   @tag :cassandra_specific
   @tag :skip_for_native_protocol_v3
+  @tag start_conn: false
   test "function_failure error", %{keyspace: keyspace, start_options: start_options} do
     # This is only supported in native protocol v4.
     start_options = Keyword.put(start_options, :protocol_version, :v4)
 
-    {:ok, conn} = Xandra.start_link(start_options)
+    conn = start_supervised!({Xandra, start_options})
     Xandra.execute!(conn, "USE #{keyspace}")
     Xandra.execute!(conn, "CREATE TABLE funs (id int PRIMARY KEY, name text)")
 
