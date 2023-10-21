@@ -73,10 +73,11 @@ defmodule ResultsTest do
   describe "SCHEMA_CHANGE updates since native protocol v4" do
     @describetag :cassandra_specific
     @describetag :skip_for_native_protocol_v3
+    @describetag start_conn: false
 
     setup %{start_options: start_options} do
       start_options = Keyword.put(start_options, :protocol_version, :v4)
-      {:ok, conn} = Xandra.start_link(start_options)
+      conn = start_supervised!({Xandra, start_options})
       %{conn: conn}
     end
 

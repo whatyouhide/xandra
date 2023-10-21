@@ -9,7 +9,7 @@ defmodule Xandra.ClusterTest do
   alias Xandra.Cluster.Pool
 
   @protocol_version XandraTest.IntegrationCase.protocol_version()
-  @port String.to_integer(System.get_env("CASSANDRA_PORT", "9052"))
+  @port XandraTest.IntegrationCase.port()
 
   defmodule PoolMock do
     use Supervisor

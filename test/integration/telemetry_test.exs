@@ -3,25 +3,24 @@ defmodule TelemetryTest do
 
   alias Xandra.Prepared
 
-  @port String.to_integer(System.get_env("CASSANDRA_PORT", "9052"))
-
   setup_all %{setup_conn: conn, keyspace: keyspace} do
     Xandra.execute!(conn, "CREATE TABLE #{keyspace}.names (name text PRIMARY KEY)")
     :ok
   end
 
   describe "connection" do
+    @tag start_conn: false
     test "sends event on connection/disconnection", %{start_options: start_options} do
       ref = :telemetry_test.attach_event_handlers(self(), [[:xandra, :connected]])
 
-      start_supervised!({Xandra, [name: :telemetry_test_connection] ++ start_options})
+      conn = start_supervised!({Xandra, [name: :telemetry_test_connection] ++ start_options})
 
-      assert_receive {[:xandra, :connected], ^ref, measurements, metadata}
+      assert_receive {[:xandra, :connected], ^ref, measurements, %{connection: ^conn} = metadata}
 
       assert measurements == %{}
       assert metadata.connection_name == :telemetry_test_connection
       assert metadata.address == "127.0.0.1"
-      assert metadata.port == @port
+      assert metadata.port == XandraTest.IntegrationCase.port()
     end
   end
 
@@ -35,31 +34,31 @@ defmodule TelemetryTest do
     statement = "SELECT * FROM names"
     assert {:ok, prepared} = Xandra.prepare(conn, statement)
 
-    assert_receive {[:xandra, :prepared_cache, :miss], ^ref, %{}, metadata}
+    assert_receive {[:xandra, :prepared_cache, :miss], ^ref, %{}, %{connection: ^conn} = metadata}
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == "127.0.0.1"
-    assert metadata.port == @port
+    assert metadata.port == XandraTest.IntegrationCase.port()
 
     # Successive call to prepare uses cache.
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement)
 
-    assert_receive {[:xandra, :prepared_cache, :hit], ^ref, %{}, metadata}
+    assert_receive {[:xandra, :prepared_cache, :hit], ^ref, %{}, %{connection: ^conn} = metadata}
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == "127.0.0.1"
-    assert metadata.port == @port
+    assert metadata.port == XandraTest.IntegrationCase.port()
 
     assert {:ok, ^prepared} = Xandra.prepare(conn, statement, force: true)
 
-    assert_receive {[:xandra, :prepared_cache, :hit], ^ref, %{}, metadata}
+    assert_receive {[:xandra, :prepared_cache, :hit], ^ref, %{}, %{connection: ^conn} = metadata}
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == "127.0.0.1"
-    assert metadata.port == @port
+    assert metadata.port == XandraTest.IntegrationCase.port()
   end
 
   test "prepare query", %{conn: conn} do
@@ -70,24 +69,25 @@ defmodule TelemetryTest do
       ])
 
     statement = "SELECT name FROM names"
-    assert {:ok, %Prepared{}} = Xandra.prepare(conn, statement, telemetry_metadata: %{foo: :bar})
+    assert %Prepared{} = Xandra.prepare!(conn, statement, telemetry_metadata: %{foo: :bar})
 
     assert_receive {[:xandra, :prepare_query, :start], ^ref, %{system_time: system_time},
-                    metadata}
+                    %{connection: ^conn} = metadata}
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == "127.0.0.1"
-    assert metadata.port == @port
+    assert metadata.port == XandraTest.IntegrationCase.port()
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(system_time)
 
-    assert_receive {[:xandra, :prepare_query, :stop], ^ref, %{duration: duration}, metadata}
+    assert_receive {[:xandra, :prepare_query, :stop], ^ref, %{duration: duration},
+                    %{connection: ^conn} = metadata}
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == "127.0.0.1"
-    assert metadata.port == @port
+    assert metadata.port == XandraTest.IntegrationCase.port()
     assert metadata.extra_metadata == %{foo: :bar}
     assert metadata.reprepared == false
     assert is_integer(duration)
@@ -95,12 +95,13 @@ defmodule TelemetryTest do
     assert {:ok, %Prepared{}} =
              Xandra.prepare(conn, statement, telemetry_metadata: %{foo: :bar}, force: true)
 
-    assert_receive {[:xandra, :prepare_query, :stop], ^ref, %{duration: duration}, metadata}
+    assert_receive {[:xandra, :prepare_query, :stop], ^ref, %{duration: duration},
+                    %{connection: ^conn} = metadata}
 
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == "127.0.0.1"
-    assert metadata.port == @port
+    assert metadata.port == XandraTest.IntegrationCase.port()
     assert metadata.extra_metadata == %{foo: :bar}
     assert metadata.reprepared == true
     assert is_integer(duration)
@@ -124,7 +125,7 @@ defmodule TelemetryTest do
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == "127.0.0.1"
-    assert metadata.port == @port
+    assert metadata.port == XandraTest.IntegrationCase.port()
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(system_time)
 
@@ -133,7 +134,7 @@ defmodule TelemetryTest do
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == "127.0.0.1"
-    assert metadata.port == @port
+    assert metadata.port == XandraTest.IntegrationCase.port()
     assert metadata.extra_metadata == %{foo: :bar}
     assert is_integer(duration)
   end

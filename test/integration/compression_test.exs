@@ -17,6 +17,8 @@ defmodule CompressionTest do
   end
 
   describe "compression with the LZ4 algorithm" do
+    @describetag start_conn: false
+
     setup %{start_options: start_options} do
       %{start_options: start_options ++ [compressor: LZ4Compressor]}
     end

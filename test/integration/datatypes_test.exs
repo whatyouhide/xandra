@@ -28,6 +28,7 @@ defmodule DataTypesTest do
                                      :tuple
                                    ])
 
+  @tag start_conn: false
   test "all the datatypes are documented in the guides" do
     types_in_guides =
       Mix.Project.project_file()
@@ -515,9 +516,7 @@ defmodule DataTypesTest do
     Xandra.execute!(conn, prepared, [1, foo_profile])
     Xandra.execute!(conn, prepared, [2, bar_profile])
 
-    statement = "SELECT id, profile FROM users"
-    page = Xandra.execute!(conn, statement)
-    assert [foo, bar] = Enum.to_list(page)
+    assert [foo, bar] = conn |> Xandra.execute!("SELECT id, profile FROM users") |> Enum.to_list()
     assert Map.fetch!(foo, "id") == 1
     assert Map.fetch!(foo, "profile") == foo_profile
     assert Map.fetch!(bar, "id") == 2
@@ -527,17 +526,8 @@ defmodule DataTypesTest do
              "full_name" => %{"first_name" => nil, "last_name" => "Bar"}
            }
 
-    statement = """
-    ALTER TYPE profile ADD email text
-    """
-
-    Xandra.execute!(conn, statement)
-
-    statement = """
-    ALTER TYPE profile ADD age int
-    """
-
-    Xandra.execute!(conn, statement)
+    Xandra.execute!(conn, "ALTER TYPE profile ADD email text")
+    Xandra.execute!(conn, "ALTER TYPE profile ADD age int")
 
     statement = "INSERT INTO #{keyspace}.users (id, profile) VALUES (?, ?)"
 
@@ -550,9 +540,7 @@ defmodule DataTypesTest do
     prepared = Xandra.prepare!(conn, statement)
     Xandra.execute!(conn, prepared, [3, baz_profile])
 
-    statement = "SELECT id, profile FROM users"
-    page = Xandra.execute!(conn, statement)
-
+    page = Xandra.execute!(conn, "SELECT id, profile FROM users")
     assert [foo, bar, baz] = Enum.to_list(page)
     assert Map.fetch!(foo, "id") == 1
 
