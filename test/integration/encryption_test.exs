@@ -1,11 +1,11 @@
 defmodule EncryptionTest do
-  start_options = [
-    nodes: ["127.0.0.1:#{XandraTest.IntegrationCase.cassandra_port_with_ssl()}"],
-    encryption: true,
-    transport_options: [verify: :verify_none]
-  ]
-
-  use XandraTest.IntegrationCase, start_options: start_options, async: true
+  use XandraTest.IntegrationCase,
+    async: true,
+    start_options: [
+      nodes: ["127.0.0.1:#{XandraTest.IntegrationCase.cassandra_port_with_ssl()}"],
+      encryption: true,
+      transport_options: [verify: :verify_none]
+    ]
 
   @moduletag :encryption
   @moduletag :cassandra_specific

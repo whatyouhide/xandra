@@ -1,5 +1,5 @@
 defmodule ErrorsTest do
-  use XandraTest.IntegrationCase
+  use XandraTest.IntegrationCase, async: true
 
   alias Xandra.Error
 

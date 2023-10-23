@@ -1,5 +1,5 @@
 defmodule TracingTest do
-  use XandraTest.IntegrationCase
+  use XandraTest.IntegrationCase, async: true
 
   alias Xandra.Batch
 

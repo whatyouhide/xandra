@@ -1,4 +1,4 @@
-defmodule ScyllaSpecificTest do
+defmodule BypassCacheTest do
   use XandraTest.IntegrationCase, async: true
 
   @moduletag :scylla_specific
