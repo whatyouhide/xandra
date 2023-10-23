@@ -1,6 +1,14 @@
 defmodule Xandra.PageStream do
   @moduledoc false
 
+  @type t() :: %__MODULE__{
+          state: :new | :done | :run,
+          conn: Xandra.conn(),
+          params: Xandra.values(),
+          options: keyword(),
+          query: Xandra.statement() | Xandra.Prepared.t() | Xandra.Batch.t() | Xandra.Simple.t()
+        }
+
   defstruct [:conn, :query, :params, :options, state: :new]
 
   defimpl Enumerable do
@@ -25,15 +33,15 @@ defmodule Xandra.PageStream do
     end
 
     defp next(page_stream) do
-      %{conn: conn, query: query, params: params, options: options} = page_stream
+      %@for{conn: conn, query: query, params: params, options: options} = page_stream
 
       case Xandra.execute!(conn, query, params, options) do
         %Page{paging_state: nil} = page ->
-          {[page], %{page_stream | state: :done}}
+          {[page], %@for{page_stream | state: :done}}
 
         %Page{paging_state: paging_state} = page ->
           options = Keyword.put(options, :paging_state, paging_state)
-          {[page], %{page_stream | options: options}}
+          {[page], %@for{page_stream | options: options}}
       end
     end
 

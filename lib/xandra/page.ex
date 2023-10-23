@@ -51,6 +51,15 @@ defmodule Xandra.Page do
   """
   @type paging_state() :: binary()
 
+  @typedoc false
+  @typedoc since: "0.18.0"
+  @type column() :: {
+          keyspace :: String.t(),
+          table :: String.t(),
+          column_name :: String.t(),
+          type :: term()
+        }
+
   @typedoc """
   The type for the page struct.
 
@@ -58,15 +67,15 @@ defmodule Xandra.Page do
   See [`%Xandra.Page{}`](`__struct__/0`).
   """
   @type t :: %__MODULE__{
-          content: list(),
-          columns: list(),
+          content: [term()],
+          columns: [column()],
           paging_state: paging_state() | nil,
           tracing_id: binary() | nil,
           custom_payload: Xandra.custom_payload() | nil
         }
 
   defimpl Enumerable do
-    def reduce(%{content: content, columns: columns}, acc, fun) do
+    def reduce(%@for{content: content, columns: columns}, acc, fun) do
       reduce(content, columns, acc, fun)
     end
 

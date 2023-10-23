@@ -50,7 +50,7 @@ defmodule Xandra.Prepared do
           statement: Xandra.statement(),
           values: Xandra.values() | nil,
           id: binary | nil,
-          bound_columns: list | nil,
+          bound_columns: [Xandra.Page.column()] | nil,
           result_columns: list | nil,
           default_consistency: atom | nil,
           protocol_module: module | nil,
