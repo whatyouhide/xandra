@@ -6,13 +6,15 @@ defmodule XandraToxiproxyTest do
 
   @moduletag :toxiproxy
 
+  @toxiproxy_node "127.0.0.1:#{XandraTest.IntegrationCase.port_with_toxiproxy()}"
+
   @tag :cassandra_specific
   test "execute/3,4 supports a network that slices packets",
        %{start_options: opts, keyspace: keyspace} do
     ToxiproxyEx.get!(:xandra_test_cassandra)
     |> ToxiproxyEx.toxic(:slicer, average_size: 50, size_variation: 25, delay: _microsec = 50)
     |> ToxiproxyEx.apply!(fn ->
-      opts = Keyword.merge(opts, nodes: ["127.0.0.1:19052"], keyspace: keyspace)
+      opts = Keyword.merge(opts, nodes: [@toxiproxy_node], keyspace: keyspace)
       conn = start_supervised!({Xandra, opts})
       assert {:ok, prepared} = Xandra.prepare(conn, "SELECT * FROM system.local WHERE key = ?")
       assert {:ok, page} = Xandra.execute(conn, prepared, ["local"])
@@ -21,7 +23,7 @@ defmodule XandraToxiproxyTest do
   end
 
   test "prepare/3 when the connection is down", %{start_options: opts} do
-    opts = Keyword.merge(opts, nodes: ["127.0.0.1:19052"])
+    opts = Keyword.merge(opts, nodes: [@toxiproxy_node])
     conn = start_supervised!({Xandra, opts})
 
     ToxiproxyEx.get!(:xandra_test_cassandra)
@@ -32,11 +34,15 @@ defmodule XandraToxiproxyTest do
   end
 
   test "prepare/3 supports the :timeout option", %{start_options: opts} do
-    opts = Keyword.merge(opts, nodes: ["127.0.0.1:19052"])
+    telemetry_ref = :telemetry_test.attach_event_handlers(self(), [[:xandra, :connected]])
+    opts = Keyword.merge(opts, nodes: [@toxiproxy_node])
     conn = start_supervised!({Xandra, opts})
 
+    # Use Telemetry to assert that we already connected to the node.
+    assert_receive {[:xandra, :connected], ^telemetry_ref, %{}, %{connection: ^conn}}
+
     ToxiproxyEx.get!(:xandra_test_cassandra)
-    |> ToxiproxyEx.toxic(:timeout, timeout: 100)
+    |> ToxiproxyEx.toxic(:timeout, timeout: 500)
     |> ToxiproxyEx.apply!(fn ->
       assert {:error, %ConnectionError{} = error} =
                Xandra.prepare(conn, "SELECT * FROM system.local", timeout: 0)
@@ -50,7 +56,7 @@ defmodule XandraToxiproxyTest do
       Keyword.merge(opts,
         connect_timeout: 0,
         backoff_type: :stop,
-        nodes: ["127.0.0.1:19052"]
+        nodes: [@toxiproxy_node]
       )
 
     ToxiproxyEx.get!(:xandra_test_cassandra)

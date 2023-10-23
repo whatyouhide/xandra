@@ -9,6 +9,8 @@ defmodule XandraTest do
   doctest Xandra
 
   describe "start_link/1" do
+    @describetag start_conn: false
+
     test "validates the :nodes option" do
       assert_raise NimbleOptions.ValidationError, ~r{invalid node: "foo:bar"}, fn ->
         Xandra.start_link(nodes: ["foo:bar"])
@@ -53,7 +55,9 @@ defmodule XandraTest do
       telemetry_ref =
         :telemetry_test.attach_event_handlers(self(), [[:xandra, :failed_to_connect]])
 
-      options = Keyword.merge(default_start_options(), nodes: ["nonexistent-domain"])
+      # Use a random port on localhost, because when you use a non-existent domain but you're
+      # without an Internet connection then DSN causes issues.
+      options = Keyword.merge(default_start_options(), nodes: ["localhost:65000"])
 
       conn = start_supervised!({Xandra, options})
       assert_receive {[:xandra, :failed_to_connect], ^telemetry_ref, %{}, %{connection: ^conn}}

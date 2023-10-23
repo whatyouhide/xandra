@@ -115,6 +115,11 @@ defmodule XandraTest.IntegrationCase do
     |> String.to_integer()
   end
 
+  @spec port_with_toxiproxy() :: :inet.port_number()
+  def port_with_toxiproxy do
+    String.to_integer("1#{port()}")
+  end
+
   @spec cassandra_port_with_ssl() :: :inet.port_number()
   def cassandra_port_with_ssl, do: 9152
 end
