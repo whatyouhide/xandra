@@ -74,14 +74,14 @@ defmodule Xandra.Connection.Utils do
     end
   end
 
-  @spec startup_connection(Transport.t(), map, module, nil | module) ::
+  @spec startup_connection(Transport.t(), map(), module(), nil | module(), keyword()) ::
           :ok | {:error, ConnectionError.t()}
   def startup_connection(
         %Transport{} = transport,
         requested_options,
         protocol_module,
-        compressor \\ nil,
-        options \\ []
+        compressor,
+        options
       )
       when is_map(requested_options) and is_atom(protocol_module) and is_atom(compressor) do
     # We have to encode the STARTUP frame without compression as in this frame
