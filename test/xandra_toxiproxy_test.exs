@@ -7,11 +7,12 @@ defmodule XandraToxiproxyTest do
   @moduletag :toxiproxy
 
   @toxiproxy_node "127.0.0.1:#{XandraTest.IntegrationCase.port_with_toxiproxy()}"
+  @toxiproxy_name XandraTest.IntegrationCase.toxiproxy_proxy()
 
   @tag :cassandra_specific
   test "execute/3,4 supports a network that slices packets",
        %{start_options: opts, keyspace: keyspace} do
-    ToxiproxyEx.get!(:xandra_test_cassandra)
+    ToxiproxyEx.get!(@toxiproxy_name)
     |> ToxiproxyEx.toxic(:slicer, average_size: 50, size_variation: 25, delay: _microsec = 50)
     |> ToxiproxyEx.apply!(fn ->
       opts = Keyword.merge(opts, nodes: [@toxiproxy_node], keyspace: keyspace)
@@ -26,7 +27,7 @@ defmodule XandraToxiproxyTest do
     opts = Keyword.merge(opts, nodes: [@toxiproxy_node])
     conn = start_supervised!({Xandra, opts})
 
-    ToxiproxyEx.get!(:xandra_test_cassandra)
+    ToxiproxyEx.get!(@toxiproxy_name)
     |> ToxiproxyEx.down!(fn ->
       assert {:error, %ConnectionError{reason: :not_connected}} =
                Xandra.prepare(conn, "SELECT * FROM system.local")
@@ -41,7 +42,7 @@ defmodule XandraToxiproxyTest do
     # Use Telemetry to assert that we already connected to the node.
     assert_receive {[:xandra, :connected], ^telemetry_ref, %{}, %{connection: ^conn}}
 
-    ToxiproxyEx.get!(:xandra_test_cassandra)
+    ToxiproxyEx.get!(@toxiproxy_name)
     |> ToxiproxyEx.toxic(:timeout, timeout: 500)
     |> ToxiproxyEx.apply!(fn ->
       assert {:error, %ConnectionError{} = error} =
@@ -59,7 +60,7 @@ defmodule XandraToxiproxyTest do
         nodes: [@toxiproxy_node]
       )
 
-    ToxiproxyEx.get!(:xandra_test_cassandra)
+    ToxiproxyEx.get!(@toxiproxy_name)
     |> ToxiproxyEx.toxic(:timeout, timeout: 0)
     |> ToxiproxyEx.apply!(fn ->
       assert {:ok, conn} = start_supervised({Xandra, opts})

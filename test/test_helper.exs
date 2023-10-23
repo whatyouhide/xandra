@@ -11,6 +11,12 @@ ToxiproxyEx.populate!([
     listen: "[::]:9042",
     upstream: "cassandra:9042",
     enabled: true
+  },
+  %{
+    name: "xandra_test_scylla",
+    listen: "[::]:9043",
+    upstream: "scylladb:9042",
+    enabled: true
   }
 ])
 

@@ -75,7 +75,10 @@ defmodule Xandra.Mixfile do
   end
 
   defp run_cassandra_tests(args, extra_env \\ []) do
-    print_header("Running Cassandra tests")
+    case List.keyfind(extra_env, "CASSANDRA_NATIVE_PROTOCOL", 0) do
+      {_, protocol} -> print_header("Running Cassandra tests (native protocol #{protocol})")
+      _other -> print_header("Running Cassandra tests")
+    end
 
     mix_cmd_with_status_check(
       ["test", "--exclude", "scylla_specific", ansi_option() | args],
@@ -87,7 +90,10 @@ defmodule Xandra.Mixfile do
   end
 
   defp run_scylladb_tests(args, extra_env \\ []) do
-    print_header("Running ScyllaDB tests")
+    case List.keyfind(extra_env, "CASSANDRA_NATIVE_PROTOCOL", 0) do
+      {_, protocol} -> print_header("Running ScyllaDB tests (native protocol #{protocol})")
+      _other -> print_header("Running ScyllaDB tests")
+    end
 
     mix_cmd_with_status_check(
       [

@@ -94,5 +94,6 @@ services:
     volumes:
       - ./test/toxiproxy_config.json:/config/toxiproxy.json
     ports:
-      - "8474:8474"
-      - "19052:9042"
+      - "8474:8474"  # Toxiproxy HTTP API
+      - "19052:9042" # Cassandra
+      - "19062:9043" # ScyllaDB

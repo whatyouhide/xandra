@@ -122,4 +122,12 @@ defmodule XandraTest.IntegrationCase do
 
   @spec cassandra_port_with_ssl() :: :inet.port_number()
   def cassandra_port_with_ssl, do: 9152
+
+  @spec toxiproxy_proxy() :: :xandra_test_cassandra | :xandra_test_scylla
+  def toxiproxy_proxy do
+    case port() do
+      9052 -> :xandra_test_cassandra
+      9062 -> :xandra_test_scylla
+    end
+  end
 end
