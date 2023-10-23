@@ -41,7 +41,7 @@ defmodule Xandra.Page do
       or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
 
   """
-  defstruct [:content, :columns, :paging_state, :tracing_id, :custom_payload]
+  defstruct [:paging_state, :tracing_id, :custom_payload, content: [], columns: []]
 
   @typedoc """
   The paging state of a page.
@@ -49,7 +49,7 @@ defmodule Xandra.Page do
   This is intended to be an "opaque" binary value that you can use for further
   pagination. See `Xandra.execute/4`.
   """
-  @type paging_state :: binary
+  @type paging_state() :: binary()
 
   @typedoc """
   The type for the page struct.
@@ -58,10 +58,10 @@ defmodule Xandra.Page do
   See [`%Xandra.Page{}`](`__struct__/0`).
   """
   @type t :: %__MODULE__{
-          content: list,
-          columns: nonempty_list,
-          paging_state: paging_state | nil,
-          tracing_id: binary | nil,
+          content: list(),
+          columns: list(),
+          paging_state: paging_state() | nil,
+          tracing_id: binary() | nil,
           custom_payload: Xandra.custom_payload() | nil
         }
 
