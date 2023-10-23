@@ -33,7 +33,8 @@ defmodule Xandra.OptionsValidators do
     case String.split(value, ":", parts: 2) do
       [address, port] ->
         case Integer.parse(port) do
-          {port, ""} -> {:ok, {address, port}}
+          {port, ""} when port in 0..65535 -> {:ok, {address, port}}
+          {port, ""} -> {:error, "invalid port (outside of the 0..65535 range): #{port}"}
           _ -> {:error, "invalid node: #{inspect(value)}"}
         end
 
