@@ -45,6 +45,22 @@ defmodule ResultsTest do
              ~s(#Xandra.Page<[rows: [%{"name" => "Jeff"}], tracing_id: nil, more_pages?: false]>)
   end
 
+  test "Enumerable functions on Xandra.Page", %{conn: conn} do
+    Xandra.execute!(conn, "CREATE TABLE streams (name text PRIMARY KEY)")
+    Xandra.execute!(conn, "INSERT INTO streams (name) VALUES ('stream1')")
+    Xandra.execute!(conn, "INSERT INTO streams (name) VALUES ('stream2')")
+    Xandra.execute!(conn, "INSERT INTO streams (name) VALUES ('stream3')")
+
+    %Xandra.Page{} = page = Xandra.execute!(conn, "SELECT * FROM streams")
+
+    assert Enum.member?(page, %{"name" => "stream1"})
+    refute Enum.member?(page, %{"name" => "streamX"})
+    refute Enum.member?(page, %{"other_name" => "stream1"})
+
+    assert Enum.slice(page, 0..1) == [%{"name" => "stream1"}, %{"name" => "stream2"}]
+    assert Enum.slice(page, 0..-2) == [%{"name" => "stream1"}, %{"name" => "stream2"}]
+  end
+
   # Regression test for https://github.com/lexhide/xandra/issues/187.
   # This is skipped because for now we shouldn't run it on all C* versions.
   @tag :cassandra_specific

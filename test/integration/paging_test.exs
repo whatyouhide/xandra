@@ -110,6 +110,11 @@ defmodule PagingTest do
              %{"letter" => "Cc"},
              %{"letter" => "Dd"}
            ]
+
+    # Also other functions in the Enumerable module:
+    refute Enum.member?(stream, make_ref())
+    assert Enum.count(stream) == 6
+    assert [_page1, _page2] = Enum.slice(stream, 0..1)
   end
 
   test "inspecting Xandra.PageStream structs", %{conn: conn} do

@@ -117,14 +117,14 @@ defmodule Xandra.Mixfile do
     for protocol <- ["", "v5", "v4", "v3"] do
       run_cassandra_tests(
         ["--cover", "--export-coverage", "cassandra-#{protocol}" | args],
-        [{"CASSANDRA_NATIVE_PROTOCOL", to_string(protocol)}]
+        [{"CASSANDRA_NATIVE_PROTOCOL", protocol}]
       )
     end
 
     for protocol <- ["", "v4", "v3"] do
       run_scylladb_tests(
         ["--cover", "--export-coverage", "scylladb-#{protocol}" | args],
-        [{"CASSANDRA_NATIVE_PROTOCOL", to_string(protocol)}]
+        [{"CASSANDRA_NATIVE_PROTOCOL", protocol}]
       )
     end
 

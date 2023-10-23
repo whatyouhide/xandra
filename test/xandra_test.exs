@@ -20,6 +20,11 @@ defmodule XandraTest do
         Xandra.start_link(nodes: [:not_even_a_string])
       end
 
+      # Invalid port
+      assert_raise NimbleOptions.ValidationError, ~r{invalid port}, fn ->
+        Xandra.start_link(nodes: ["127.0.0.1:65590"])
+      end
+
       assert_raise ArgumentError, ~r{cannot use multiple nodes in the :nodes option}, fn ->
         Xandra.start_link(nodes: ["foo", "bar"])
       end
