@@ -210,6 +210,7 @@ defmodule Xandra.ClusterTest do
       assert {:error, :sync_connect_timeout} = Cluster.start_link(opts)
     end
 
+    @tag :capture_log
     test "returns a normal error if the cluster crashes before :sync_connect",
          %{base_options: opts} do
       Process.flag(:trap_exit, true)
@@ -854,6 +855,7 @@ defmodule Xandra.ClusterTest do
                get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
     end
 
+    @tag :capture_log
     test "if the connection pool supervisor crashes, the pool crashes as well",
          %{base_options: opts} do
       # Don't *link* the cluster to the test process, to avoid having to trap exits.

@@ -430,4 +430,155 @@ defmodule Xandra.Protocol do
   @spec encode_paging_state(binary() | nil) :: iodata()
   def encode_paging_state(value) when is_binary(value), do: [<<byte_size(value)::32>>, value]
   def encode_paging_state(nil), do: []
+
+  @spec rewrite_type({atom(), list()} | atom(), keyword()) :: {atom(), list()}
+  def rewrite_type(type, options)
+
+  def rewrite_type({parent_type, types}, options) do
+    {parent_type, Enum.map(types, &rewrite_type(&1, options))}
+  end
+
+  def rewrite_type(:date, options) do
+    {:date, [Keyword.get(options, :date_format, :date)]}
+  end
+
+  def rewrite_type(:time, options) do
+    {:time, [Keyword.get(options, :time_format, :time)]}
+  end
+
+  def rewrite_type(:timestamp, options) do
+    {:timestamp, [Keyword.get(options, :timestamp_format, :datetime)]}
+  end
+
+  def rewrite_type(:decimal, options) do
+    {:decimal, [Keyword.get(options, :decimal_format, :tuple)]}
+  end
+
+  def rewrite_type(:uuid, options) do
+    {:uuid, [Keyword.get(options, :uuid_format, :string)]}
+  end
+
+  def rewrite_type(:timeuuid, options) do
+    {:timeuuid, [Keyword.get(options, :timeuuid_format, :string)]}
+  end
+
+  def rewrite_type(type, _options), do: type
+
+  @spec encode_batch_type(:logged | :unlogged | :counter) :: non_neg_integer()
+  def encode_batch_type(:logged), do: 0
+  def encode_batch_type(:unlogged), do: 1
+  def encode_batch_type(:counter), do: 2
+
+  error_codes = %{
+    0x0000 => :server_failure,
+    0x000A => :protocol_violation,
+    0x0100 => :invalid_credentials,
+    0x1000 => :unavailable,
+    0x1001 => :overloaded,
+    0x1002 => :bootstrapping,
+    0x1003 => :truncate_failure,
+    0x1100 => :write_timeout,
+    0x1200 => :read_timeout,
+    # Only present in native protocol v4+
+    0x1300 => :read_failure,
+    # Only present in native protocol v4+
+    0x1400 => :function_failure,
+    # Only present in native protocol v4+
+    0x1500 => :write_failure,
+    # Only present in native protocol v4+
+    0x1600 => :cdc_write_failure,
+    # Only present in native protocol v4+
+    0x1700 => :cas_write_unknown,
+    0x2000 => :invalid_syntax,
+    0x2100 => :unauthorized,
+    0x2200 => :invalid,
+    0x2300 => :invalid_config,
+    0x2400 => :already_exists,
+    0x2500 => :unprepared
+  }
+
+  @spec decode_error_reason(binary()) :: {atom(), binary()}
+  def decode_error_reason(binary)
+
+  for {code, reason} <- error_codes do
+    def decode_error_reason(<<unquote(code)::32-signed, buffer::bytes>>) do
+      {unquote(reason), buffer}
+    end
+  end
+
+  @spec decode_uuid(binary(), :binary | :string) :: binary()
+  def decode_uuid(value, format)
+
+  def decode_uuid(value, :binary), do: value
+
+  def decode_uuid(<<part1::32, part2::16, part3::16, part4::16, part5::48>>, :string) do
+    IO.iodata_to_binary([
+      Base.encode16(<<part1::32>>, case: :lower),
+      ?-,
+      Base.encode16(<<part2::16>>, case: :lower),
+      ?-,
+      Base.encode16(<<part3::16>>, case: :lower),
+      ?-,
+      Base.encode16(<<part4::16>>, case: :lower),
+      ?-,
+      Base.encode16(<<part5::48>>, case: :lower)
+    ])
+  end
+
+  @spec encode_uuid(binary()) :: binary()
+  def encode_uuid(value)
+
+  def encode_uuid(value) when byte_size(value) == 16, do: value
+
+  def encode_uuid(value) when byte_size(value) == 36 do
+    <<
+      part1::8-bytes,
+      ?-,
+      part2::4-bytes,
+      ?-,
+      part3::4-bytes,
+      ?-,
+      part4::4-bytes,
+      ?-,
+      part5::12-bytes
+    >> = value
+
+    <<
+      Base.decode16!(part1, case: :mixed)::4-bytes,
+      Base.decode16!(part2, case: :mixed)::2-bytes,
+      Base.decode16!(part3, case: :mixed)::2-bytes,
+      Base.decode16!(part4, case: :mixed)::2-bytes,
+      Base.decode16!(part5, case: :mixed)::6-bytes
+    >>
+  end
+
+  @spec varint_byte_size(integer()) :: pos_integer()
+  def varint_byte_size(value) when value > 127, do: 1 + varint_byte_size(value >>> 8)
+  def varint_byte_size(value) when value < -128, do: varint_byte_size(-value - 1)
+  def varint_byte_size(_value), do: 1
+
+  @spec decode_paging_state(bitstring(), Xandra.Page.t(), 0 | 1) :: {Xandra.Page.t(), bitstring()}
+  def decode_paging_state(buffer, page, has_more_pages)
+
+  def decode_paging_state(<<buffer::bits>>, page, _has_more_pages = 0) do
+    {page, buffer}
+  end
+
+  def decode_paging_state(<<buffer::bits>>, page, _has_more_pages = 1) do
+    <<size::32, paging_state::size(size)-bytes, buffer::bits>> = buffer
+    {%{page | paging_state: paging_state}, buffer}
+  end
+
+  # Only supported in native protocol v4+.
+  # pk = partition key
+  @spec decode_pk_index(bitstring(), non_neg_integer()) :: {indexes :: list(), bitstring()}
+  def decode_pk_index(buffer, pk_count, acc \\ [])
+
+  def decode_pk_index(buffer, 0, acc) do
+    {Enum.reverse(acc), buffer}
+  end
+
+  def decode_pk_index(<<index::16-unsigned, buffer::bits>>, pk_count, acc) do
+    decode_pk_index(buffer, pk_count - 1, [index | acc])
+  end
 end
