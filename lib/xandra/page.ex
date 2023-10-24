@@ -94,18 +94,17 @@ defmodule Xandra.Page do
     end
 
     defp reduce([values | rest], columns, {:cont, acc}, fun) do
-      row = zip(values, columns, []) |> :maps.from_list()
+      # With :fail, this fails if the lists are not the same length, which is what we want.
+      row =
+        fn val, {_, _, name, _} = _col -> {name, val} end
+        |> :lists.zipwith(values, columns, _how = :fail)
+        |> :maps.from_list()
+
       reduce(rest, columns, fun.(row, acc), fun)
     end
 
     defp reduce([], _columns, {:cont, acc}, _fun) do
       {:done, acc}
-    end
-
-    defp zip([], [], acc), do: acc
-
-    defp zip([value | values], [{_, _, name, _} | columns], acc) do
-      zip(values, columns, [{name, value} | acc])
     end
   end
 
