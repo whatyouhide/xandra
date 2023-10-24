@@ -156,9 +156,9 @@ defmodule Xandra.Mixfile do
       {:telemetry, "~> 0.4.3 or ~> 1.0"},
 
       # Dev and test dependencies
-      {:dialyxir, "~> 1.3", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.28", only: :dev},
-      {:excoveralls, "~> 0.17", only: :test},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.30", only: :dev},
+      {:excoveralls, "~> 0.18", only: :test},
       {:mox, "~> 1.0", only: :test},
       {:stream_data, "~> 0.6.0", only: [:dev, :test]},
       {:nimble_lz4, "~> 0.1.3", only: [:dev, :test]},
