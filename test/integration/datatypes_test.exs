@@ -541,7 +541,6 @@ defmodule DataTypesTest do
     Xandra.execute!(conn, prepared, [3, baz_profile])
 
     page = Xandra.execute!(conn, "SELECT id, profile FROM users")
-    dbg(page, structs: false)
     assert [foo, bar, baz] = Enum.to_list(page)
     assert Map.fetch!(foo, "id") == 1
 
