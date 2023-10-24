@@ -2,22 +2,26 @@
 
 ## v0.18.0
 
-This is a big release. The main deal here is that we removed the [`db_connection`](https://github.com/elixir-ecto/db_connection) underlying library, and completely **rewrote** Xandra's internal connection to be able to make *concurrent requests*. [This issue](https://github.com/lexhide/xandra/issues/333) has a little more context around this decision.
+This is a **big release**. 🚀
 
-This change is breaking, and affect Xandra pretty significantly. The user-facing changes are:
+The main deal here is that we removed the [`db_connection`](https://github.com/elixir-ecto/db_connection) underlying library, and completely **rewrote** Xandra's internal connection to be able to make *concurrent requests*. [This issue](https://github.com/lexhide/xandra/issues/333) has a little more context around this decision. To make these changes possible, we also had to require Elixir v1.15 or later.
+
+This change is breaking, and affects Xandra pretty significantly. The **user-facing changes** are:
 
   * `Xandra` doesn't start a pool of connections anymore, only a single connection. Pooling is on you. We recommend [registry-based pooling](https://andrealeopardi.com/posts/process-pools-with-elixirs-registry/) if you want to keep the single-node aspect of `Xandra`. Alternatively, use `Xandra.Cluster` with a single node (`Xandra.Cluster` supports pooling). We might eventually add built-in registry-based pooling, but we're evaluating it.
 
-  * `Xandra.start_link/1` doesn't support `DBConnection.start_link/2` options anymore. Make sure to refer to the updated documentation for `Xandra.start_link/1` to know the exact supported options.
+  * `Xandra.start_link/1` doesn't support *all* `DBConnection.start_link/2` options anymore. Make sure to refer to the updated documentation for `Xandra.start_link/1` to know the exact supported options.
 
-  * `Xandra.execute/2,3,4` and `Xandra.prepare/2,3` don't support `DBConnection` options anymore.
+  * `Xandra.execute/2,3,4` and `Xandra.prepare/2,3` don't support *all* `DBConnection` options anymore. Check their documentation for more information.
+
+Below is a detailed list of all the changes.
 
 ### Breaking Changes
 
   * The `Xandra` module doesn't support pooling anymore and is now only a single connection.
   * Removed the `Xandra.db_connection_start_option/0` type.
   * Removed the `Xandra.xandra_start_option/0` type.
-  * Removed `DBConnection.start_link/2` options in `Xandra.start_link/1`.
+  * Removed some `DBConnection.start_link/2` options in `Xandra.start_link/1`.
   * Removed the `:pool_size` option in `Xandra.start_link/1`.
   * Require Elixir 1.15+.
 
@@ -25,13 +29,14 @@ This change is breaking, and affect Xandra pretty significantly. The user-facing
 
   * Make retry strategies **cluster aware**, by adding the `{:retry, new_options, new_state, conn_pid}` return value to the `retry/3` callback. See the updated documentation for `Xandra.RetryStrategy`.
   * Support `GenServer.start_link/3` options in `Xandra.Cluster.start_link/1` (like `:spawn_opt` and friends).
-  * Add the `:queue_checkouts_before_connecting` option to `Xandra.Cluster.start_link/1` to queue checkout requests in the cluster until at least one connection to one node is established.
+  * Add the `:queue_checkouts_before_connecting` option to `Xandra.Cluster.start_link/1` to queue checkout requests in the cluster until at least one connection to one node is established. This is intended to mostly replace `:sync_connect`.
   * Fix a few bugs with rogue data in the native protocol parser.
   * Fix a small bug when negotiating the native protocol version.
   * Fix IPv6 support in `Xandra.Cluster`.
   * Add the `:connect_timeout` option to `Xandra.start_link/1` and `Xandra.Cluster.start_link/1`.
   * Add the `Xandra.native_protocol_version/0` type.
   * Add the `Xandra.consistency/0` type.
+  * Improve validation of start options.
 
 ## v0.17.0
 
