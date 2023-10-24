@@ -41,7 +41,7 @@ defmodule Xandra.Page do
       or `nil` if no tracing was enabled. See the "Tracing" section in `Xandra.execute/4`.
 
   """
-  defstruct [:paging_state, :tracing_id, :custom_payload, content: [], columns: []]
+  defstruct [:paging_state, :tracing_id, :custom_payload, :columns, content: []]
 
   @typedoc """
   The paging state of a page.
@@ -68,7 +68,7 @@ defmodule Xandra.Page do
   """
   @type t :: %__MODULE__{
           content: [term()],
-          columns: [column()],
+          columns: [column()] | nil,
           paging_state: paging_state() | nil,
           tracing_id: binary() | nil,
           custom_payload: Xandra.custom_payload() | nil
