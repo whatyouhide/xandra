@@ -14,14 +14,14 @@ defmodule Xandra.Batch do
   alias Xandra.{Frame, Prepared, Simple}
 
   @enforce_keys [:type]
-  defstruct @enforce_keys ++
-              [
-                queries: [],
-                default_consistency: nil,
-                protocol_module: nil,
-                compressor: nil,
-                custom_payload: nil
-              ]
+  defstruct [
+    :type,
+    queries: [],
+    default_consistency: nil,
+    protocol_module: nil,
+    compressor: nil,
+    custom_payload: nil
+  ]
 
   @type type :: :logged | :unlogged | :counter
 

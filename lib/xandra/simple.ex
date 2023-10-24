@@ -20,7 +20,7 @@ defmodule Xandra.Simple do
   The fields of this are not meant to be used, but are documented to avoid
   Dialyzer warnings.
   """
-  @type t :: %__MODULE__{
+  @type t() :: %__MODULE__{
           statement: Xandra.statement(),
           values: Xandra.values() | nil,
           default_consistency: atom() | nil,

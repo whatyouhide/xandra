@@ -194,8 +194,8 @@ defmodule Xandra.Mixfile do
       {^port, {:exit_status, status}} ->
         Mix.raise("Mix failed with exit status #{status}")
     after
-      10_000 ->
-        Mix.raise("Timed out waiting for Mix to send back any data (after 10s)")
+      60_000 ->
+        Mix.raise("Timed out waiting for Mix to send back any data (after 60s)")
     end
   end
 
