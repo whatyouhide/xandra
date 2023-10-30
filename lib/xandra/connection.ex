@@ -75,6 +75,7 @@ defmodule Xandra.Connection do
           # If the prepared query was in the cache, we emit a Telemetry event and we must
           # make sure to put the stream ID we checked out back into the pool.
           {:ok, prepared} ->
+            Process.demonitor(req_alias, [:flush])
             :telemetry.execute([:xandra, :prepared_cache, :hit], %{}, metadata)
             :gen_statem.cast(conn_pid, {:release_stream_id, stream_id})
             {:ok, prepared}
@@ -106,6 +107,7 @@ defmodule Xandra.Connection do
                 end
               else
                 {:error, reason} ->
+                  Process.demonitor(req_alias, [:flush])
                   reason = ConnectionError.new("prepare", reason)
                   {{:error, reason}, Map.put(metadata, :reason, reason)}
               end
@@ -113,6 +115,7 @@ defmodule Xandra.Connection do
         end
 
       {:error, error} ->
+        Process.demonitor(req_alias, [:flush])
         {:error, ConnectionError.new("check out connection", error)}
     end
   end
@@ -182,6 +185,7 @@ defmodule Xandra.Connection do
             end
           else
             {:error, reason} ->
+              Process.demonitor(req_alias, [:flush])
               {:error, ConnectionError.new("execute", reason)}
           end
         end
@@ -196,6 +200,7 @@ defmodule Xandra.Connection do
         end)
 
       {:error, error} ->
+        Process.demonitor(req_alias, [:flush])
         {:error, ConnectionError.new("check out connection", error)}
     end
   end
