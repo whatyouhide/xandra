@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.18.1
+
+### Bug Fixes
+
+  * Fix a memory leak that would happen especially when preparing queries. We recommend everyone to update if you're on 0.18.0, since this is a low-risk release with minimal changes.
+
 ## v0.18.0
 
 This is a **big release**. 🚀
