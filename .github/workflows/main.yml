@@ -26,8 +26,8 @@ jobs:
       - name: Install OTP and Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "25.3"
-          elixir-version: "1.15.4"
+          otp-version: "26.2"
+          elixir-version: "1.16"
 
       - name: Cache dependencies
         id: cache-deps
@@ -89,14 +89,23 @@ jobs:
         otp:
           - "25.3"
         elixir:
-          - "1.15.4"
+          - "1.16"
         server_versions:
           - cassandra: "3"
             scylla: "4.6.3"
+
         include:
+          - otp: "26.2"
+            elixir: "1.16"
+            coverage: true
+            server_versions:
+              cassandra: "4.1"
+              scylla: "5.2"
+
+          # Oldest-supported Elixir and Erlang versions.
           - otp: "25.3"
             elixir: "1.15.4"
-            coverage: true
+            coverage: false
             server_versions:
               cassandra: "4.1"
               scylla: "5.2"
