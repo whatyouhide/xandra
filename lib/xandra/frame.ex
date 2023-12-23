@@ -120,7 +120,6 @@ defmodule Xandra.Frame do
          response_version: response_vsn
        }} <- @supported_protocols do
     defp protocol_module_to_request_version(unquote(protocol_mod)), do: unquote(request_vsn)
-    defp protocol_module_to_response_version(unquote(protocol_mod)), do: unquote(response_vsn)
     defp byte_version_to_protocol_version(unquote(request_vsn)), do: unquote(vsn)
     defp byte_version_to_protocol_version(unquote(response_vsn)), do: unquote(vsn)
   end
