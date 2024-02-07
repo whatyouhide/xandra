@@ -87,7 +87,8 @@ defmodule Xandra.Connection do
 
             :telemetry.span([:xandra, :prepare_query], metadata, fn ->
               with :ok <- send_prepare_frame(state, prepared, options),
-                   {:ok, %Frame{} = frame} <- receive_response_frame(req_alias, state, timeout) do
+                   {:ok, %Frame{} = frame} <-
+                     receive_response_frame(conn_pid, req_alias, state, timeout) do
                 case protocol_module.decode_response(frame, prepared, options) do
                   {%Prepared{} = prepared, warnings} ->
                     Prepared.Cache.insert(prepared_cache, prepared)
@@ -100,11 +101,9 @@ defmodule Xandra.Connection do
                     )
 
                     reprepared = cache_status == :hit
-                    Process.demonitor(req_alias, [:flush])
                     {{:ok, prepared}, Map.put(metadata, :reprepared, reprepared)}
 
                   %Xandra.Error{} = error ->
-                    Process.demonitor(req_alias, [:flush])
                     {{:error, error}, Map.put(metadata, :reason, error)}
                 end
               else
@@ -162,10 +161,10 @@ defmodule Xandra.Connection do
         payload = query_mod.encode(query, params, options)
 
         # This is in an anonymous function so that we can use it in a Telemetry span.
-        fun = fn req_alias ->
+        fun = fn ->
           with :ok <- Transport.send(transport, payload),
                {:ok, %Frame{} = frame} <-
-                 receive_response_frame(req_alias, checked_out_state, timeout) do
+                 receive_response_frame(conn_pid, req_alias, checked_out_state, timeout) do
             case protocol_module.decode_response(frame, query, options) do
               {%_{} = response, warnings} ->
                 maybe_execute_telemetry_for_warnings(checked_out_state, conn_pid, query, warnings)
@@ -179,15 +178,15 @@ defmodule Xandra.Connection do
                   _other ->
                     :ok
                 end
-                Process.demonitor(req_alias, [:flush])
+
                 {:ok, response}
 
               %Xandra.Error{} = error ->
-                Process.demonitor(req_alias, [:flush])
                 {:error, error}
             end
           else
             {:error, reason} ->
+              Process.demonitor(req_alias, [:flush])
               {:error, ConnectionError.new("execute", reason)}
           end
         end
@@ -198,7 +197,7 @@ defmodule Xandra.Connection do
           |> Map.put(:extra_metadata, options[:telemetry_metadata])
 
         :telemetry.span([:xandra, :execute_query], telemetry_meta, fn ->
-          {fun.(req_alias), telemetry_meta}
+          {fun.(), telemetry_meta}
         end)
 
       {:error, error} ->
@@ -238,7 +237,12 @@ defmodule Xandra.Connection do
     }
   end
 
-  defp receive_response_frame(req_alias, checked_out_state(atom_keys?: atom_keys?), timeout) do
+  defp receive_response_frame(
+         conn_pid,
+         req_alias,
+         checked_out_state(atom_keys?: atom_keys?, stream_id: stream_id),
+         timeout
+       ) do
     receive do
       {^req_alias, {:ok, %Frame{} = frame}} ->
         frame = %Frame{frame | atom_keys?: atom_keys?}
@@ -251,7 +255,7 @@ defmodule Xandra.Connection do
         {:error, {:connection_crashed, reason}}
     after
       timeout ->
-        Process.demonitor(req_alias, [:flush])
+        :gen_statem.cast(conn_pid, {:release_stream_id, stream_id})
         {:error, :timeout}
     end
   end
@@ -677,6 +681,7 @@ defmodule Xandra.Connection do
         |> handle_frame(frame)
         |> handle_new_bytes()
 
+      # TODO: Is the stream id released here?
       {:error, :insufficient_data} ->
         {:keep_state, data}
 
