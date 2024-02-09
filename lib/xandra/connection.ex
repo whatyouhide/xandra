@@ -681,7 +681,6 @@ defmodule Xandra.Connection do
         |> handle_frame(frame)
         |> handle_new_bytes()
 
-      # TODO: Is the stream id released here?
       {:error, :insufficient_data} ->
         {:keep_state, data}
 
