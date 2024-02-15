@@ -624,9 +624,8 @@ defmodule Xandra.Connection do
   end
 
   def connected(:cast, {:timed_out_id, stream_id}, %__MODULE__{} = data) do
-    data =
-      update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
-      |> update_in(data.timed_out_ids, &MapSet.put(&1, stream_id))
+    data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
+    data = update_in(data.timed_out_ids, &MapSet.put(&1, stream_id))
 
     {:keep_state, data}
   end
