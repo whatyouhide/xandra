@@ -570,7 +570,7 @@ defmodule Xandra.Connection do
   def connected({:call, from}, {:checkout_state_for_next_request, req_alias}, data) do
     used_ids = MapSet.union(MapSet.new(Map.keys(data.in_flight_requests)), data.timed_out_ids)
 
-    [stream_id] =
+    stream_id =
       MapSet.difference(@possible_ids, used_ids)
       |> Enum.random()
 
