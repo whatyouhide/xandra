@@ -19,6 +19,9 @@ defmodule Xandra.Connection do
 
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
   @max_concurrent_requests 5000
+  @possible_ids MapSet.new(1..32768)
+
+  require Logger
 
   # This record is used internally when we check out a "view" of the state of
   # the connection. This holds all the necessary info to encode queries and more.
@@ -255,7 +258,7 @@ defmodule Xandra.Connection do
         {:error, {:connection_crashed, reason}}
     after
       timeout ->
-        :gen_statem.cast(conn_pid, {:release_stream_id, stream_id})
+        :gen_statem.cast(conn_pid, {:timed_out_id, stream_id})
         {:error, :timeout}
     end
   end
@@ -285,8 +288,8 @@ defmodule Xandra.Connection do
           current_keyspace: String.t() | nil,
           default_consistency: atom(),
           disconnection_reason: term(),
-          free_stream_ids: MapSet.t(stream_id()),
           in_flight_requests: %{optional(stream_id()) => term()},
+          timed_out_ids: MapSet.t(),
           options: keyword(),
           original_options: keyword(),
           peername: {:inet.ip_address(), :inet.port_number()},
@@ -316,8 +319,8 @@ defmodule Xandra.Connection do
     :protocol_module,
     :protocol_version,
     :transport,
-    free_stream_ids: MapSet.new(1..@max_concurrent_requests),
     in_flight_requests: %{},
+    timed_out_ids: MapSet.new(),
     current_keyspace: nil,
     buffer: <<>>
   ]
@@ -347,11 +350,9 @@ defmodule Xandra.Connection do
       send(data.cluster_pid, {:xandra, :disconnected, data.peername, self()})
     end
 
-    data =
-      Enum.reduce(data.in_flight_requests, data, fn {stream_id, req_alias}, data_acc ->
-        send_reply(req_alias, {:error, :disconnected})
-        update_in(data_acc.free_stream_ids, &MapSet.put(&1, stream_id))
-      end)
+    Enum.each(data.in_flight_requests, fn {_stream_id, req_alias} ->
+      send_reply(req_alias, {:error, :disconnected})
+    end)
 
     data = put_in(data.in_flight_requests, %{})
 
@@ -515,8 +516,15 @@ defmodule Xandra.Connection do
   end
 
   def disconnected(:cast, {:release_stream_id, stream_id}, %__MODULE__{} = data) do
-    data = update_in(data.free_stream_ids, &MapSet.put(&1, stream_id))
     data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
+    {:keep_state, data}
+  end
+
+  def disconnected(:cast, {:timed_out_id, stream_id}, %__MODULE__{} = data) do
+    data =
+      update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
+      |> update_in(data.timed_out_ids, &MapSet.put(&1, stream_id))
+
     {:keep_state, data}
   end
 
@@ -552,12 +560,19 @@ defmodule Xandra.Connection do
     end
   end
 
+  def connected({:call, from}, {:checkout_state_for_next_request, _}, %{
+        in_flight_requests: in_flight_requests
+      })
+      when map_size(in_flight_requests) == @max_concurrent_requests do
+    {:keep_state_and_data, {:reply, from, {:error, :too_many_concurrent_connections}}}
+  end
+
   def connected({:call, from}, {:checkout_state_for_next_request, req_alias}, data) do
-    {stream_id, data} =
-      get_and_update_in(data.free_stream_ids, fn ids ->
-        id = Enum.at(ids, 0)
-        {id, MapSet.delete(ids, id)}
-      end)
+    used_ids = MapSet.union(MapSet.new(Map.keys(data.in_flight_requests)), data.timed_out_ids)
+
+    [stream_id] =
+      MapSet.difference(@possible_ids, used_ids)
+      |> Enum.random()
 
     response =
       checked_out_state(
@@ -604,8 +619,15 @@ defmodule Xandra.Connection do
   end
 
   def connected(:cast, {:release_stream_id, stream_id}, %__MODULE__{} = data) do
-    data = update_in(data.free_stream_ids, &MapSet.put(&1, stream_id))
     data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
+    {:keep_state, data}
+  end
+
+  def connected(:cast, {:timed_out_id, stream_id}, %__MODULE__{} = data) do
+    data =
+      update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
+      |> update_in(data.timed_out_ids, &MapSet.put(&1, stream_id))
+
     {:keep_state, data}
   end
 
@@ -691,18 +713,23 @@ defmodule Xandra.Connection do
 
   defp handle_frame(%__MODULE__{} = data, %Frame{stream_id: stream_id} = frame) do
     case pop_in(data.in_flight_requests[stream_id]) do
-      {nil, _data} ->
-        raise """
-        internal error in Xandra connection, we received a frame from the server with \
-        stream ID #{stream_id}, but there was no in-flight request for this stream ID. \
-        The frame is:
+      {nil, data} ->
+        if MapSet.member?(data.timed_out_ids, stream_id) do
+          Logger.warning("Received message with stream id #{stream_id}, but it had timed out")
+          update_in(data.timed_out_ids, &MapSet.delete(&1, stream_id))
+        else
+          raise """
+          internal error in Xandra connection, we received a frame from the server with \
+          stream ID #{stream_id}, but there was no in-flight request for this stream ID. \
+          The frame is:
 
-          #{inspect(frame)}
-        """
+            #{inspect(frame)}
+          """
+        end
 
       {req_alias, data} ->
         send_reply(req_alias, {:ok, frame})
-        update_in(data.free_stream_ids, &MapSet.put(&1, stream_id))
+        data
     end
   end
 
