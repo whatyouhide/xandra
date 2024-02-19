@@ -321,6 +321,7 @@ defmodule Xandra.Connection do
     :transport,
     in_flight_requests: %{},
     timed_out_ids: MapSet.new(),
+    free_stream_ids: MapSet.new(1..32768),
     current_keyspace: nil,
     buffer: <<>>
   ]
@@ -350,9 +351,11 @@ defmodule Xandra.Connection do
       send(data.cluster_pid, {:xandra, :disconnected, data.peername, self()})
     end
 
-    Enum.each(data.in_flight_requests, fn {_stream_id, req_alias} ->
-      send_reply(req_alias, {:error, :disconnected})
-    end)
+    data =
+      Enum.reduce(data.in_flight_requests, data, fn {stream_id, req_alias}, data_acc ->
+        send_reply(req_alias, {:error, :disconnected})
+        update_in(data_acc.free_stream_ids, &MapSet.put(&1, stream_id))
+      end)
 
     data = put_in(data.in_flight_requests, %{})
 
@@ -521,9 +524,8 @@ defmodule Xandra.Connection do
   end
 
   def disconnected(:cast, {:timed_out_id, stream_id}, %__MODULE__{} = data) do
-    data =
-      update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
-      |> update_in(data.timed_out_ids, &MapSet.put(&1, stream_id))
+    data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
+    data = update_in(data.timed_out_ids, &MapSet.put(&1, stream_id))
 
     {:keep_state, data}
   end
@@ -568,11 +570,11 @@ defmodule Xandra.Connection do
   end
 
   def connected({:call, from}, {:checkout_state_for_next_request, req_alias}, data) do
-    used_ids = MapSet.union(MapSet.new(Map.keys(data.in_flight_requests)), data.timed_out_ids)
-
-    stream_id =
-      MapSet.difference(@possible_ids, used_ids)
-      |> Enum.random()
+    {stream_id, data} =
+      get_and_update_in(data.free_stream_ids, fn ids ->
+        id = Enum.random(ids)
+        {id, MapSet.delete(ids, id)}
+      end)
 
     response =
       checked_out_state(
@@ -620,6 +622,7 @@ defmodule Xandra.Connection do
 
   def connected(:cast, {:release_stream_id, stream_id}, %__MODULE__{} = data) do
     data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
+    data = update_in(data.free_stream_ids, &MapSet.put(&1, stream_id))
     {:keep_state, data}
   end
 
@@ -728,7 +731,7 @@ defmodule Xandra.Connection do
 
       {req_alias, data} ->
         send_reply(req_alias, {:ok, frame})
-        data
+        update_in(data.free_stream_ids, &MapSet.put(&1, stream_id))
     end
   end
 
