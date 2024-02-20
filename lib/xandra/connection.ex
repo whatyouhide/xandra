@@ -19,7 +19,7 @@ defmodule Xandra.Connection do
 
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
   @max_concurrent_requests 5000
-  @possible_ids MapSet.new(1..10000)
+  @possible_ids MapSet.new(1..6000)
 
   require Logger
 
