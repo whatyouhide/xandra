@@ -573,7 +573,7 @@ defmodule Xandra.Connection do
   def connected({:call, from}, {:checkout_state_for_next_request, req_alias}, data) do
     {stream_id, data} =
       get_and_update_in(data.free_stream_ids, fn ids ->
-        id = Enum.random(ids)
+        id = Enum.at(ids, 0)
         {id, MapSet.delete(ids, id)}
       end)
 
