@@ -19,7 +19,8 @@ defmodule Xandra.Connection do
 
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
   @max_concurrent_requests 5000
-  @max_cassandra_stream_id 32768
+  @max_cassandra_stream_id 32_768
+  @restore_timed_out_stream_id_timeout 30 * 60 * 60 * 1000
 
   require Logger
 
@@ -522,6 +523,21 @@ defmodule Xandra.Connection do
     data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
     data = update_in(data.timed_out_ids, &MapSet.put(&1, stream_id))
 
+    actions = [
+      {{:timeout, {:stream_id, stream_id}}, @restore_timed_out_stream_id_timeout,
+       :restore_timed_out_stream_id}
+    ]
+
+    {:keep_state, data, actions}
+  end
+
+  def disconnected(
+        {:timeout, {:stream_id, stream_id}},
+        :restore_timed_out_stream_id,
+        %__MODULE__{} = data
+      ) do
+    data = update_in(data.timed_out_ids, &MapSet.delete(&1, stream_id))
+
     {:keep_state, data}
   end
 
@@ -557,7 +573,7 @@ defmodule Xandra.Connection do
     end
   end
 
-  def connected({:call, from}, {:checkout_state_for_next_request, _}, %{
+  def connected({:call, from}, {:checkout_state_for_next_request, _}, %__MODULE__{
         in_flight_requests: in_flight_requests
       })
       when map_size(in_flight_requests) == @max_concurrent_requests do
@@ -619,6 +635,22 @@ defmodule Xandra.Connection do
   def connected(:cast, {:timed_out_id, stream_id}, %__MODULE__{} = data) do
     data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
     data = update_in(data.timed_out_ids, &MapSet.put(&1, stream_id))
+
+    actions = [
+      {{:timeout, {:stream_id, stream_id}}, @restore_timed_out_stream_id_timeout,
+       :restore_timed_out_stream_id}
+    ]
+
+    {:keep_state, data, actions}
+  end
+
+  def connected(
+        {:timeout, {:stream_id, stream_id}},
+        :restore_timed_out_stream_id,
+        %__MODULE__{} = data
+      ) do
+    data = update_in(data.timed_out_ids, &MapSet.delete(&1, stream_id))
+
     {:keep_state, data}
   end
 
