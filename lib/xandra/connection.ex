@@ -22,8 +22,6 @@ defmodule Xandra.Connection do
   @max_cassandra_stream_id 32_768
   @restore_timed_out_stream_id_timeout 30 * 60 * 60 * 1000
 
-  require Logger
-
   # This record is used internally when we check out a "view" of the state of
   # the connection. This holds all the necessary info to encode queries and more.
   # It's a record just so that we don't have to create yet another module for a struct.
@@ -738,7 +736,11 @@ defmodule Xandra.Connection do
     case pop_in(data.in_flight_requests[stream_id]) do
       {nil, data} ->
         if MapSet.member?(data.timed_out_ids, stream_id) do
-          Logger.warning("Received message with stream id #{stream_id}, but it had timed out")
+          :telemetry.execute(
+            [:xandra, :timed_out_response],
+            telemetry_meta(data, %{stream_id: stream_id})
+          )
+
           update_in(data.timed_out_ids, &MapSet.delete(&1, stream_id))
         else
           raise """

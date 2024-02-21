@@ -68,6 +68,7 @@ defmodule Xandra.Telemetry do
       [:xandra, :prepared_cache, :miss],
       [:xandra, :prepare_query, :stop],
       [:xandra, :execute_query, :stop],
+      [:xandra, :timed_out_response],
       [:xandra, :server_warnings],
       [:xandra, :cluster, :change_event],
       [:xandra, :cluster, :control_connection, :connected],
@@ -169,6 +170,12 @@ defmodule Xandra.Telemetry do
 
       [:server_warnings] ->
         Logger.warning("Received warnings: #{inspect(measurements.warnings)}", logger_meta)
+
+      [:timed_out_response] ->
+        Logger.warning(
+          "Received response for stream id #{metadata.stream_id}, but request had already timed out",
+          logger_meta
+        )
 
       [:prepared_cache, status] when status in [:hit, :miss] ->
         query = inspect(metadata.query)
