@@ -162,8 +162,7 @@ defmodule Xandra.Mixfile do
       {:mox, "~> 1.0", only: :test},
       {:stream_data, "~> 0.6.0", only: [:dev, :test]},
       {:nimble_lz4, "~> 0.1.3", only: [:dev, :test]},
-      {:toxiproxy_ex, github: "whatyouhide/toxiproxy_ex", only: :test},
-      { :uuid, "~> 1.1" }
+      {:toxiproxy_ex, github: "whatyouhide/toxiproxy_ex", only: :test}
     ]
   end
 
