@@ -575,7 +575,7 @@ defmodule Xandra.Connection do
         in_flight_requests: in_flight_requests
       })
       when map_size(in_flight_requests) == @max_concurrent_requests do
-    {:keep_state_and_data, {:reply, from, {:error, :too_many_concurrent_connections}}}
+    {:keep_state_and_data, {:reply, from, {:error, :too_many_concurrent_requests}}}
   end
 
   def connected({:call, from}, {:checkout_state_for_next_request, req_alias}, data) do
