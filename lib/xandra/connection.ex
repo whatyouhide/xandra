@@ -21,7 +21,7 @@ defmodule Xandra.Connection do
   @max_concurrent_requests 5000
   @max_cassandra_stream_id 32_768
   @timed_out_stream_id_timeout_minutes 5
-  @flush_timed_out_stream_id_interval 60 * 1000
+  @flush_timed_out_stream_id_interval 30 * 1000
 
   # This record is used internally when we check out a "view" of the state of
   # the connection. This holds all the necessary info to encode queries and more.
