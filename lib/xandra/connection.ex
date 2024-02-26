@@ -20,7 +20,7 @@ defmodule Xandra.Connection do
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
   @max_concurrent_requests 5000
   @max_cassandra_stream_id 32_768
-  @restore_timed_out_stream_id_timeout 30 * 60 * 1000
+  @restore_timed_out_stream_id_timeout 5 * 60 * 1000
 
   # This record is used internally when we check out a "view" of the state of
   # the connection. This holds all the necessary info to encode queries and more.
