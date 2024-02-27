@@ -68,6 +68,7 @@ defmodule Xandra.Telemetry do
       [:xandra, :prepared_cache, :miss],
       [:xandra, :prepare_query, :stop],
       [:xandra, :execute_query, :stop],
+      [:xandra, :client_timeout],
       [:xandra, :timed_out_response],
       [:xandra, :server_warnings],
       [:xandra, :cluster, :change_event],
@@ -170,6 +171,9 @@ defmodule Xandra.Telemetry do
 
       [:server_warnings] ->
         Logger.warning("Received warnings: #{inspect(measurements.warnings)}", logger_meta)
+
+      [:client_timeout] ->
+        Logger.error("Client timeout for query: #{inspect(metadata.query)}")
 
       [:timed_out_response] ->
         Logger.warning(

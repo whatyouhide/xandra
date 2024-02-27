@@ -91,7 +91,7 @@ defmodule Xandra.Connection do
             :telemetry.span([:xandra, :prepare_query], metadata, fn ->
               with :ok <- send_prepare_frame(state, prepared, options),
                    {:ok, %Frame{} = frame} <-
-                     receive_response_frame(conn_pid, req_alias, state, timeout) do
+                     receive_response_frame(conn_pid, req_alias, state, timeout, metadata) do
                 case protocol_module.decode_response(frame, prepared, options) do
                   {%Prepared{} = prepared, warnings} ->
                     Prepared.Cache.insert(prepared_cache, prepared)
@@ -163,11 +163,22 @@ defmodule Xandra.Connection do
         timeout = Keyword.fetch!(options, :timeout)
         payload = query_mod.encode(query, params, options)
 
+        telemetry_meta =
+          checked_out_state
+          |> telemetry_meta(conn_pid, %{query: query})
+          |> Map.put(:extra_metadata, options[:telemetry_metadata])
+
         # This is in an anonymous function so that we can use it in a Telemetry span.
         fun = fn ->
           with :ok <- Transport.send(transport, payload),
                {:ok, %Frame{} = frame} <-
-                 receive_response_frame(conn_pid, req_alias, checked_out_state, timeout) do
+                 receive_response_frame(
+                   conn_pid,
+                   req_alias,
+                   checked_out_state,
+                   timeout,
+                   telemetry_meta
+                 ) do
             case protocol_module.decode_response(frame, query, options) do
               {%_{} = response, warnings} ->
                 maybe_execute_telemetry_for_warnings(checked_out_state, conn_pid, query, warnings)
@@ -193,11 +204,6 @@ defmodule Xandra.Connection do
               {:error, ConnectionError.new("execute", reason)}
           end
         end
-
-        telemetry_meta =
-          checked_out_state
-          |> telemetry_meta(conn_pid, %{query: query})
-          |> Map.put(:extra_metadata, options[:telemetry_metadata])
 
         :telemetry.span([:xandra, :execute_query], telemetry_meta, fn ->
           {fun.(), telemetry_meta}
@@ -244,7 +250,8 @@ defmodule Xandra.Connection do
          conn_pid,
          req_alias,
          checked_out_state(atom_keys?: atom_keys?, stream_id: stream_id),
-         timeout
+         timeout,
+         telemetry_metadata
        ) do
     receive do
       {^req_alias, {:ok, %Frame{} = frame}} ->
@@ -258,6 +265,7 @@ defmodule Xandra.Connection do
         {:error, {:connection_crashed, reason}}
     after
       timeout ->
+        :telemetry.execute([:xandra, :client_timeout], %{}, telemetry_metadata)
         :gen_statem.cast(conn_pid, {:timed_out_id, stream_id})
         {:error, :timeout}
     end
