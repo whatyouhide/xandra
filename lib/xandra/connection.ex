@@ -297,7 +297,7 @@ defmodule Xandra.Connection do
           default_consistency: atom(),
           disconnection_reason: term(),
           in_flight_requests: %{optional(stream_id()) => term()},
-          timed_out_ids: MapSet.t(),
+          timed_out_ids: %{optional(stream_id()) => DateTime.t()},
           options: keyword(),
           original_options: keyword(),
           peername: {:inet.ip_address(), :inet.port_number()},
@@ -760,13 +760,13 @@ defmodule Xandra.Connection do
   defp handle_frame(%__MODULE__{} = data, %Frame{stream_id: stream_id} = frame) do
     case pop_in(data.in_flight_requests[stream_id]) do
       {nil, data} ->
-        if MapSet.member?(data.timed_out_ids, stream_id) do
+        if Map.has_key?(data.timed_out_ids, stream_id) do
           :telemetry.execute(
             [:xandra, :timed_out_response],
             telemetry_meta(data, %{stream_id: stream_id})
           )
 
-          update_in(data.timed_out_ids, &MapSet.delete(&1, stream_id))
+          update_in(data.timed_out_ids, &Map.delete(&1, stream_id))
         else
           raise """
           internal error in Xandra connection, we received a frame from the server with \
