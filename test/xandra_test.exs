@@ -202,6 +202,8 @@ defmodule XandraTest do
       assert error.reason == :timeout
     end
 
+    # It's an annoyance to set up support for UDFs in Scylla in CI.
+    @tag :cassandra_specific
     @tag start_conn: false
     test "returns an error if the max number of concurrent requests is reached",
          %{start_options: start_options, keyspace: keyspace} do
