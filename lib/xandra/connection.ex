@@ -270,8 +270,7 @@ defmodule Xandra.Connection do
         {:error, {:connection_crashed, reason}}
     after
       timeout ->
-        :telemetry.execute([:xandra, :client_timeout], %{}, telemetry_metadata)
-        :gen_statem.cast(conn_pid, {:timed_out_id, stream_id})
+        :gen_statem.cast(conn_pid, {:request_timed_out_at_caller, stream_id})
         {:error, :timeout}
     end
   end
@@ -553,10 +552,11 @@ defmodule Xandra.Connection do
     {:keep_state, data}
   end
 
-  def disconnected(:cast, {:timed_out_id, stream_id}, %__MODULE__{} = data) do
-    data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
-    data = put_in(data.timed_out_ids[stream_id], System.system_time(:millisecond))
-    {:keep_state, data}
+  # The caller notified the conn that, on its side, the request timed out. However,
+  # here we're disconnected so we really don't need to do anything as there are no
+  # in-flight requests or timed-out requests to clean up.
+  def disconnected(:cast, {:request_timed_out_at_caller, _stream_id}, %__MODULE__{}) do
+    :keep_state_and_data
   end
 
   ## "Connected" state
@@ -598,6 +598,11 @@ defmodule Xandra.Connection do
     {:keep_state_and_data, {:reply, from, {:error, :too_many_concurrent_requests}}}
   end
 
+  # When we check out the state to a caller so that that caller can perform a request,
+  # we don't need to *monitor* that caller. This is because the caller is identified
+  # by an alias (Process.alias/1). Even if the caller dies, and only *after* C*
+  # sends us the corresponding response, we can still route that C* response to the
+  # alias and it'll not go anywhere and not cause any issues.
   def connected({:call, from}, {:checkout_state_for_next_request, req_alias}, data) do
     stream_id = random_free_stream_id(data.in_flight_requests, data.timed_out_ids)
 
@@ -650,10 +655,16 @@ defmodule Xandra.Connection do
     {:keep_state, data}
   end
 
-  def connected(:cast, {:timed_out_id, stream_id}, %__MODULE__{} = data) do
+  # The caller is notifying the connection that the request (on stream_id) timed
+  # out on its side (that is, the caller reached its "after" in the receive block).
+  # We need to remove the stream ID from the in-flight requests but still keep
+  # track of it, because C* might still send us a response for that query (and when it
+  # does, we will throw it away and free the timed-out stream ID).
+  #
+  # C* does not support CANCELING queries, by the way, otherwise that's what we'd do here.
+  def connected(:cast, {:request_timed_out_at_caller, stream_id}, %__MODULE__{} = data) do
     data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
-    data = update_in(data.timed_out_ids, &Map.put(&1, stream_id, DateTime.utc_now()))
-
+    data = put_in(data.timed_out_ids[stream_id], System.system_time(:millisecond))
     {:keep_state, data}
   end
 
@@ -750,25 +761,30 @@ defmodule Xandra.Connection do
     end
   end
 
-  defp handle_frame(%__MODULE__{} = data, %Frame{stream_id: stream_id} = frame) do
+  defp handle_frame(
+         %__MODULE__{timed_out_ids: timed_out_ids} = data,
+         %Frame{stream_id: stream_id} = frame
+       ) do
     case pop_in(data.in_flight_requests[stream_id]) do
-      {nil, data} ->
-        if Map.has_key?(data.timed_out_ids, stream_id) do
-          :telemetry.execute(
-            [:xandra, :timed_out_response],
-            telemetry_meta(data, %{stream_id: stream_id})
-          )
+      # There is no in-flight req for this response frame, BUT there is a request
+      # for it that timed out on the caller's side. Let's just emit a
+      {nil, data} when is_map_key(timed_out_ids, stream_id) ->
+        :telemetry.execute(
+          [:xandra, :debug, :received_timed_out_response],
+          %{},
+          telemetry_meta(data, %{stream_id: stream_id})
+        )
 
-          update_in(data.timed_out_ids, &Map.delete(&1, stream_id))
-        else
-          raise """
-          internal error in Xandra connection, we received a frame from the server with \
-          stream ID #{stream_id}, but there was no in-flight request for this stream ID. \
-          The frame is:
+        %__MODULE__{data | timed_out_ids: Map.delete(timed_out_ids, stream_id)}
 
-            #{inspect(frame)}
-          """
-        end
+      {nil, _data} ->
+        raise """
+        internal error in Xandra connection, we received a frame from the server with \
+        stream ID #{stream_id}, but there was no in-flight request for this stream ID. \
+        The frame is:
+
+          #{inspect(frame)}
+        """
 
       {req_alias, data} ->
         send_reply(req_alias, {:ok, frame})

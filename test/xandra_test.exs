@@ -207,7 +207,7 @@ defmodule XandraTest do
          %{start_options: start_options, keyspace: keyspace} do
       modified_start_options =
         Keyword.merge(start_options,
-          max_concurrent_requests_per_connection: 2,
+          max_concurrent_requests_per_connection: 1,
           keyspace: keyspace
         )
 
@@ -226,7 +226,7 @@ defmodule XandraTest do
       """)
 
       results =
-        1..3
+        1..2
         |> Task.async_stream(fn index ->
           {index, Xandra.execute(conn, "SELECT #{keyspace}.sleep(200) FROM system.local")}
         end)
@@ -236,8 +236,7 @@ defmodule XandraTest do
       # the max concurrent conns.
       assert [
                {1, {:ok, %Xandra.Page{}}},
-               {2, {:ok, %Xandra.Page{}}},
-               {3, {:error, %ConnectionError{reason: :too_many_concurrent_requests} = error}}
+               {2, {:error, %ConnectionError{reason: :too_many_concurrent_requests} = error}}
              ] = results
 
       assert Exception.message(error) =~ "this connection has too many requests in flight"
