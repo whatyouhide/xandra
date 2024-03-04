@@ -96,7 +96,7 @@ defmodule Xandra.Connection do
             :telemetry.span([:xandra, :prepare_query], metadata, fn ->
               with :ok <- send_prepare_frame(state, prepared, options),
                    {:ok, %Frame{} = frame} <-
-                     receive_response_frame(conn_pid, req_alias, state, timeout, metadata) do
+                     receive_response_frame(conn_pid, req_alias, state, timeout) do
                 case protocol_module.decode_response(frame, prepared, options) do
                   {%Prepared{} = prepared, warnings} ->
                     Prepared.Cache.insert(prepared_cache, prepared)
@@ -177,13 +177,7 @@ defmodule Xandra.Connection do
         fun = fn ->
           with :ok <- Transport.send(transport, payload),
                {:ok, %Frame{} = frame} <-
-                 receive_response_frame(
-                   conn_pid,
-                   req_alias,
-                   checked_out_state,
-                   timeout,
-                   telemetry_meta
-                 ) do
+                 receive_response_frame(conn_pid, req_alias, checked_out_state, timeout) do
             case protocol_module.decode_response(frame, query, options) do
               {%_{} = response, warnings} ->
                 maybe_execute_telemetry_for_warnings(checked_out_state, conn_pid, query, warnings)
@@ -255,8 +249,7 @@ defmodule Xandra.Connection do
          conn_pid,
          req_alias,
          checked_out_state(atom_keys?: atom_keys?, stream_id: stream_id),
-         timeout,
-         telemetry_metadata
+         timeout
        ) do
     receive do
       {^req_alias, {:ok, %Frame{} = frame}} ->
