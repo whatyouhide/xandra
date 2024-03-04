@@ -58,7 +58,7 @@ defmodule ResultsTest do
     refute Enum.member?(page, %{"other_name" => "stream1"})
 
     assert Enum.slice(page, 0..1) == [%{"name" => "stream1"}, %{"name" => "stream2"}]
-    assert Enum.slice(page, 0..-2) == [%{"name" => "stream1"}, %{"name" => "stream2"}]
+    assert Enum.slice(page, 0..-2//1) == [%{"name" => "stream1"}, %{"name" => "stream2"}]
   end
 
   # Regression test for https://github.com/lexhide/xandra/issues/187.
