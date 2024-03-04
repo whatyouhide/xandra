@@ -18,10 +18,18 @@ defmodule Xandra.Connection do
   @behaviour :gen_statem
 
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
+
+  # We might want to make this configurable at some point, but for now it's the maximum
+  # number of in-flight requests for a single connection.
   @max_concurrent_requests 5000
-  @max_cassandra_stream_id 32_768
+
   @timed_out_stream_id_timeout_minutes 5
-  @flush_timed_out_stream_id_interval 30 * 1000
+
+  # How often to clean up timed-out requests.
+  @flush_timed_out_stream_id_interval_millisec :timer.seconds(30)
+
+  # This is the max stream ID value that we can use (a [short] in Cassandra).
+  @max_cassandra_stream_id 32_768
 
   # This record is used internally when we check out a "view" of the state of
   # the connection. This holds all the necessary info to encode queries and more.
@@ -297,7 +305,7 @@ defmodule Xandra.Connection do
           default_consistency: atom(),
           disconnection_reason: term(),
           in_flight_requests: %{optional(stream_id()) => term()},
-          timed_out_ids: %{optional(stream_id()) => DateTime.t()},
+          timed_out_ids: %{optional(stream_id()) => integer()},
           options: keyword(),
           original_options: keyword(),
           peername: {:inet.ip_address(), :inet.port_number()},
@@ -344,7 +352,7 @@ defmodule Xandra.Connection do
 
     actions = [
       {:next_event, :internal, :connect},
-      {{:timeout, :flush_timed_out_stream_id}, @flush_timed_out_stream_id_interval, :flush}
+      flush_timed_out_stream_ids_timeout_action()
     ]
 
     {:ok, :disconnected, data, actions}
@@ -368,11 +376,22 @@ defmodule Xandra.Connection do
       send_reply(req_alias, {:error, :disconnected})
     end)
 
-    data = put_in(data.in_flight_requests, %{})
+    # Reset in-flight requests and timed out stream IDs. We just disconnected, so all the
+    # in-flight requests (including the timed-out ones) are now invalid and the server should
+    # have killed them anyway.
+    data = %__MODULE__{data | in_flight_requests: %{}, timed_out_ids: %{}}
 
     if data.backoff do
       {backoff_time, data} = get_and_update_in(data.backoff, &Backoff.backoff/1)
-      {:keep_state, data, {{:timeout, :reconnect}, backoff_time, _content = nil}}
+
+      # Set a reconnection timer and cancel the timer that flushes timed out stream IDs,
+      # since we just emptied them.
+      actions = [
+        {{:timeout, :reconnect}, backoff_time, _content = nil},
+        {{:timeout, :flush_timed_out_stream_ids}, :infinity, nil}
+      ]
+
+      {:keep_state, data, actions}
     else
       {:stop, reason}
     end
@@ -536,28 +555,8 @@ defmodule Xandra.Connection do
 
   def disconnected(:cast, {:timed_out_id, stream_id}, %__MODULE__{} = data) do
     data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
-    data = update_in(data.timed_out_ids, &Map.put(&1, stream_id, DateTime.utc_now()))
-
+    data = put_in(data.timed_out_ids[stream_id], System.system_time(:millisecond))
     {:keep_state, data}
-  end
-
-  def disconnected({:timeout, :flush_timed_out_stream_id}, :flush, %__MODULE__{} = data) do
-    now = DateTime.utc_now()
-
-    data =
-      update_in(
-        data.timed_out_ids,
-        &Enum.reduce(&1, %{}, fn {stream_id, timestamp}, acc ->
-          if DateTime.diff(now, timestamp, :minute) > @timed_out_stream_id_timeout_minutes do
-            acc
-          else
-            Map.put(acc, stream_id, timestamp)
-          end
-        end)
-      )
-
-    {:keep_state, data,
-     {{:timeout, :flush_timed_out_stream_id}, @flush_timed_out_stream_id_interval, :flush}}
   end
 
   ## "Connected" state
@@ -592,10 +591,10 @@ defmodule Xandra.Connection do
     end
   end
 
-  def connected({:call, from}, {:checkout_state_for_next_request, _}, %__MODULE__{
-        in_flight_requests: in_flight_requests
-      })
-      when map_size(in_flight_requests) == @max_concurrent_requests do
+  # We reached the max number of in-flight requests, so we don't do anything and just
+  # return an error to the caller.
+  def connected({:call, from}, {:checkout_state_for_next_request, _}, %__MODULE__{} = data)
+      when map_size(data.in_flight_requests) == @max_concurrent_requests do
     {:keep_state_and_data, {:reply, from, {:error, :too_many_concurrent_requests}}}
   end
 
@@ -658,23 +657,17 @@ defmodule Xandra.Connection do
     {:keep_state, data}
   end
 
-  def connected({:timeout, :flush_timed_out_stream_id}, :flush, %__MODULE__{} = data) do
-    now = DateTime.utc_now()
+  def connected({:timeout, :flush_timed_out_stream_ids}, _content, %__MODULE__{} = data) do
+    now = System.system_time(:millisecond)
 
-    data =
-      update_in(
-        data.timed_out_ids,
-        &Enum.reduce(&1, %{}, fn {stream_id, timestamp}, acc ->
-          if DateTime.diff(now, timestamp, :minute) > @timed_out_stream_id_timeout_minutes do
-            acc
-          else
-            Map.put(acc, stream_id, timestamp)
-          end
-        end)
-      )
+    new_timed_out_ids =
+      for {id, ts} <- data.timed_out_ids,
+          now - ts > @timed_out_stream_id_timeout_minutes * 60_000,
+          do: {id, ts}
 
-    {:keep_state, data,
-     {{:timeout, :flush_timed_out_stream_id}, @flush_timed_out_stream_id_interval, :flush}}
+    data = %__MODULE__{data | timed_out_ids: new_timed_out_ids}
+
+    {:keep_state, data, flush_timed_out_stream_ids_timeout_action()}
   end
 
   ## Helpers
@@ -900,5 +893,9 @@ defmodule Xandra.Connection do
     else
       random_id
     end
+  end
+
+  defp flush_timed_out_stream_ids_timeout_action do
+    {{:timeout, :flush_timed_out_stream_ids}, @flush_timed_out_stream_id_interval_millisec, nil}
   end
 end
