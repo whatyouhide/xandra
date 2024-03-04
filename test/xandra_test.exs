@@ -56,6 +56,14 @@ defmodule XandraTest do
       end
     end
 
+    test "validates the :max_concurrent_requests_per_connection option" do
+      message = ~r{invalid value for :max_concurrent_requests_per_connection option}
+
+      assert_raise NimbleOptions.ValidationError, message, fn ->
+        Xandra.start_link(max_concurrent_requests_per_connection: 0)
+      end
+    end
+
     test "returns an error if the connection is not established" do
       telemetry_ref =
         :telemetry_test.attach_event_handlers(self(), [[:xandra, :failed_to_connect]])
@@ -192,6 +200,47 @@ defmodule XandraTest do
                Xandra.execute(conn, "SELECT * FROM system.local", [], timeout: 0)
 
       assert error.reason == :timeout
+    end
+
+    @tag start_conn: false
+    test "returns an error if the max number of concurrent requests is reached",
+         %{start_options: start_options, keyspace: keyspace} do
+      modified_start_options =
+        Keyword.merge(start_options,
+          max_concurrent_requests_per_connection: 2,
+          keyspace: keyspace
+        )
+
+      assert {:ok, conn} = start_supervised({Xandra, modified_start_options})
+
+      # Not ideal, but here it is.
+      # https://stackoverflow.com/questions/55497473/does-cassandra-have-a-sleep-cql-query
+      Xandra.execute!(conn, """
+      CREATE OR REPLACE FUNCTION #{keyspace}.sleep (time int)
+      CALLED ON NULL INPUT RETURNS int LANGUAGE java AS
+      '
+      long start = System.currentTimeMillis();
+      while (System.currentTimeMillis() < start + time);
+      return time;
+      ';
+      """)
+
+      results =
+        1..3
+        |> Task.async_stream(fn index ->
+          {index, Xandra.execute(conn, "SELECT #{keyspace}.sleep(200) FROM system.local")}
+        end)
+        |> Enum.map(fn {:ok, result} -> result end)
+
+      # The first and second calls succeeds, but the third call fails because it goes over
+      # the max concurrent conns.
+      assert [
+               {1, {:ok, %Xandra.Page{}}},
+               {2, {:ok, %Xandra.Page{}}},
+               {3, {:error, %ConnectionError{reason: :too_many_concurrent_requests} = error}}
+             ] = results
+
+      assert Exception.message(error) =~ "this connection has too many requests in flight"
     end
   end
 

@@ -19,11 +19,8 @@ defmodule Xandra.Connection do
 
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
 
-  # We might want to make this configurable at some point, but for now it's the maximum
-  # number of in-flight requests for a single connection.
-  @max_concurrent_requests 5000
-
-  @timed_out_stream_id_timeout_minutes 5
+  # How old a timed-out stream ID can be before we flush it.
+  @max_timed_out_stream_id_age_in_millisec :timer.minutes(5)
 
   # How often to clean up timed-out requests.
   @flush_timed_out_stream_id_interval_millisec :timer.seconds(30)
@@ -304,6 +301,7 @@ defmodule Xandra.Connection do
           current_keyspace: String.t() | nil,
           default_consistency: atom(),
           disconnection_reason: term(),
+          max_concurrent_requests: pos_integer(),
           in_flight_requests: %{optional(stream_id()) => term()},
           timed_out_ids: %{optional(stream_id()) => integer()},
           options: keyword(),
@@ -327,6 +325,7 @@ defmodule Xandra.Connection do
     :connection_name,
     :default_consistency,
     :disconnection_reason,
+    :max_concurrent_requests,
     :options,
     :original_options,
     :peername,
@@ -427,6 +426,7 @@ defmodule Xandra.Connection do
         address: address,
         port: port,
         connect_timeout: Keyword.fetch!(options, :connect_timeout),
+        max_concurrent_requests: Keyword.fetch!(options, :max_concurrent_requests_per_connection),
         connection_name: Keyword.get(options, :name),
         cluster_pid: Keyword.get(options, :cluster_pid),
         protocol_version: data.protocol_version || Keyword.get(options, :protocol_version),
@@ -594,7 +594,7 @@ defmodule Xandra.Connection do
   # We reached the max number of in-flight requests, so we don't do anything and just
   # return an error to the caller.
   def connected({:call, from}, {:checkout_state_for_next_request, _}, %__MODULE__{} = data)
-      when map_size(data.in_flight_requests) == @max_concurrent_requests do
+      when map_size(data.in_flight_requests) == data.max_concurrent_requests do
     {:keep_state_and_data, {:reply, from, {:error, :too_many_concurrent_requests}}}
   end
 
@@ -662,7 +662,7 @@ defmodule Xandra.Connection do
 
     new_timed_out_ids =
       for {id, ts} <- data.timed_out_ids,
-          now - ts > @timed_out_stream_id_timeout_minutes * 60_000,
+          now - ts > @max_timed_out_stream_id_age_in_millisec,
           do: {id, ts}
 
     data = %__MODULE__{data | timed_out_ids: new_timed_out_ids}

@@ -75,6 +75,19 @@ defmodule Xandra.ConnectionError do
     "request timeout"
   end
 
+  defp format_reason(:too_many_concurrent_requests) do
+    """
+    this connection has too many requests in flight; to fix this, consider:
+
+      1. increasing the size of the connection pool so that you'll have more
+         connections available and you'll be able to spread the request load
+         over more connections
+      2. increasing the maximum number of allowed in-flight requests per connection,
+         which can be configured through the :max_concurrent_requests_per_connection
+         option when starting connections (defaults to 100)
+    """
+  end
+
   defp format_reason({:cluster, :not_connected}) do
     "not connected to any of the nodes"
   end
