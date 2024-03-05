@@ -244,6 +244,8 @@ defmodule XandraTest do
       assert Exception.message(error) =~ "this connection has too many requests in flight"
     end
 
+    # It's an annoyance to set up support for UDFs in Scylla in CI.
+    @tag :cassandra_specific
     test "returns an error for requests that time out on the caller but only later on the server",
          %{conn: conn, keyspace: keyspace} do
       telemetry_ref =
