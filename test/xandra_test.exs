@@ -243,6 +243,64 @@ defmodule XandraTest do
 
       assert Exception.message(error) =~ "this connection has too many requests in flight"
     end
+
+    test "returns an error for requests that time out on the caller but only later on the server",
+         %{conn: conn, keyspace: keyspace} do
+      telemetry_ref =
+        :telemetry_test.attach_event_handlers(self(), [
+          [:xandra, :debug, :received_timed_out_response]
+        ])
+
+      Xandra.execute!(conn, """
+      CREATE OR REPLACE FUNCTION #{keyspace}.sleep (time int)
+      CALLED ON NULL INPUT RETURNS int LANGUAGE java AS
+      '
+      long start = System.currentTimeMillis();
+      while (System.currentTimeMillis() < start + time);
+      return time;
+      ';
+      """)
+
+      :erlang.trace(conn, true, [:receive])
+
+      server_timeout = 200
+
+      assert {:error, %ConnectionError{reason: :timeout}} =
+               Xandra.execute(
+                 conn,
+                 "SELECT #{keyspace}.sleep(#{server_timeout}) FROM system.local",
+                 [],
+                 timeout: div(server_timeout, 5)
+               )
+
+      assert_receive {:trace, ^conn, :receive,
+                      {:"$gen_cast", {:request_timed_out_at_caller, stream_id}}}
+
+      assert {:connected, data} = :sys.get_state(conn)
+      assert map_size(data.timed_out_ids) == 1
+      assert %{^stream_id => _ts} = data.timed_out_ids
+      assert data.in_flight_requests == %{}
+
+      # Now trigger a flush.
+      assert :ok = Xandra.Connection.trigger_flush_timed_out_stream_ids(conn)
+      assert {:connected, data_after_flush} = :sys.get_state(conn)
+      assert data_after_flush.timed_out_ids == data.timed_out_ids
+
+      # Now actually wait for the original request to finish.
+      assert_receive {[:xandra, :debug, :received_timed_out_response], ^telemetry_ref, %{},
+                      %{connection: ^conn, stream_id: ^stream_id}},
+                     1000
+
+      assert {:connected, data} = :sys.get_state(conn)
+      assert data.timed_out_ids == %{}
+    end
+  end
+
+  describe "prepare/3" do
+    test "works as expected", %{conn: conn} do
+      assert {:ok, prepared} = Xandra.prepare(conn, "SELECT * FROM system.local")
+      assert {:ok, %Xandra.Page{}} = Xandra.execute(conn, prepared, [])
+    end
   end
 
   describe "failure handling" do

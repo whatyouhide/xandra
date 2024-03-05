@@ -273,6 +273,11 @@ defmodule Xandra.Connection do
     :gen_statem.call(conn, :get_transport)
   end
 
+  # Made public for testing. Only meant to be used in tests.
+  def trigger_flush_timed_out_stream_ids(conn) do
+    :gen_statem.call(conn, :flush_timed_out_stream_ids)
+  end
+
   ## Data
 
   # [short] - a 2-byte integer, which clients can only use as a *positive* integer (so
@@ -619,8 +624,15 @@ defmodule Xandra.Connection do
     {:keep_state, data, {:reply, from, {:ok, response}}}
   end
 
+  # Only used in tests.
   def connected({:call, from}, :get_transport, %__MODULE__{transport: transport}) do
     {:keep_state_and_data, {:reply, from, {:ok, transport}}}
+  end
+
+  # Only used in tests.
+  def connected({:call, from}, :flush_timed_out_stream_ids, %__MODULE__{} = data) do
+    {:keep_state, data, actions} = connected({:timeout, :flush_timed_out_stream_ids}, nil, data)
+    {:keep_state, data, List.wrap(actions) ++ [{:reply, from, :ok}]}
   end
 
   def connected(:info, message, data) when is_data_message(data.transport, message) do
@@ -666,7 +678,8 @@ defmodule Xandra.Connection do
 
     new_timed_out_ids =
       for {id, ts} <- data.timed_out_ids,
-          now - ts > @max_timed_out_stream_id_age_in_millisec,
+          now - ts < @max_timed_out_stream_id_age_in_millisec,
+          into: %{},
           do: {id, ts}
 
     data = %__MODULE__{data | timed_out_ids: new_timed_out_ids}
