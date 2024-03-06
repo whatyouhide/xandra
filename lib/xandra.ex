@@ -392,6 +392,20 @@ defmodule Xandra do
       *Available since v0.18.0*.
       """
     ],
+    max_concurrent_requests_per_connection: [
+      type: :pos_integer,
+      default: 100,
+      doc: """
+      The maximum number of requests that can be in flight at any given time on a single
+      connection. Xandra "multiplexes" requests on a single connection, since that is allowed
+      by the Cassandra protocol (via the use of stream IDs to identify in-flight requests on
+      a particular connection). Increasing this option means that a single connection will
+      handle more requests, so you can potentially lower the number of total connections in
+      your connection pool. However, the more requests are in flight on a single connection,
+      the more work that connection will have to do to decode and route requests and responses.
+      *Available since 0.19.0*.
+      """
+    ],
     name: [
       type: :any,
       doc: """
