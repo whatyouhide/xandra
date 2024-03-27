@@ -141,6 +141,12 @@ defmodule Xandra.ClusterTest do
         Xandra.Cluster.start_link(nodes: ["example.com:9042"], name: "something something")
       end
     end
+
+    test "raises with an option that is not valid for the cluster and for the conn" do
+      assert_raise NimbleOptions.ValidationError, ~r"unknown options \[:port\]", fn ->
+        Xandra.Cluster.start_link(port: 9042)
+      end
+    end
   end
 
   describe "start_link/1" do

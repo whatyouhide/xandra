@@ -234,12 +234,12 @@ defmodule XandraTest do
         end)
         |> Enum.map(fn {:ok, result} -> result end)
 
-      # The first and second calls succeeds, but the third call fails because it goes over
+      # The first call succeeds, but the second call fails because it goes over
       # the max concurrent conns.
       assert [
                {1, {:ok, %Xandra.Page{}}},
                {2, {:error, %ConnectionError{reason: :too_many_concurrent_requests} = error}}
-             ] = results
+             ] = Enum.sort_by(results, &elem(&1, 0))
 
       assert Exception.message(error) =~ "this connection has too many requests in flight"
     end
