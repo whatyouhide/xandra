@@ -329,6 +329,7 @@ defmodule Xandra.Cluster do
   def start_link(options) when is_list(options) do
     {cluster_opts, connection_opts} = Keyword.split(options, @start_link_opts_schema_keys)
     cluster_opts = NimbleOptions.validate!(cluster_opts, @start_link_opts_schema)
+    connection_opts = NimbleOptions.validate!(connection_opts, Xandra.start_link_opts_schema())
     Pool.start_link(cluster_opts, connection_opts)
   end
 
