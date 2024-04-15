@@ -19,6 +19,10 @@ defmodule Xandra.Connection do
 
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
 
+  # The default size of the user-level buffer used by the driver
+  # We will receive at most this many bytes from the active mode socket
+  @default_transport_buffer_size 1_000_000
+
   # How old a timed-out stream ID can be before we flush it.
   @max_timed_out_stream_id_age_in_millisec :timer.minutes(5)
 
@@ -410,6 +414,7 @@ defmodule Xandra.Connection do
       options:
         options
         |> Keyword.get(:transport_options, [])
+        |> Keyword.put_new(:buffer, @default_transport_buffer_size)
         |> Keyword.merge(@forced_transport_options)
     }
 
