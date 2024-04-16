@@ -448,7 +448,9 @@ defmodule Xandra do
       doc: """
       Options to forward to the socket transport. If the `:encryption` option is `true`,
       then the transport is SSL (see the Erlang `:ssl` module) otherwise it's
-      TCP (see the `:gen_tcp` Erlang module).
+      TCP (see the `:gen_tcp` Erlang module). The `:buffer` option (`t:pos_integer/0`), 
+      which controls the size of the user level buffer in use by the active mode
+      socket, defaults to `1_000_000` bytes.
       """
     ],
 
