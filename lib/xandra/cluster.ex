@@ -433,7 +433,14 @@ defmodule Xandra.Cluster do
     with_conn_and_retrying(
       cluster,
       options,
-      &Xandra.execute(&1, batch, options_without_retry_strategy)
+      fn conn ->
+        try do
+          Xandra.execute(conn, batch, options_without_retry_strategy)
+        catch
+          :exit, {:noproc, _} ->
+            {:error, ConnectionError.new("execute", {:cluster, :pool_closed})}
+        end
+      end
     )
   end
 
@@ -455,7 +462,14 @@ defmodule Xandra.Cluster do
     with_conn_and_retrying(
       cluster,
       options,
-      &Xandra.execute(&1, query, params, options_without_retry_strategy)
+      fn conn ->
+        try do
+          Xandra.execute(conn, query, params, options_without_retry_strategy)
+        catch
+          :exit, {:noproc, _} ->
+            {:error, ConnectionError.new("execute", {:cluster, :pool_closed})}
+        end
+      end
     )
   end
 
