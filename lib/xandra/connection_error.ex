@@ -94,7 +94,7 @@ defmodule Xandra.ConnectionError do
 
   defp format_reason({:cluster, :pool_closed}) do
     """
-    the Xandra pool is closed, probably because the Cassandra connection dropped right after
+    the Xandra pool is closed, probably because the network connection dropped right after
     Xandra.Cluster.Pool.checkout/0
     """
   end
