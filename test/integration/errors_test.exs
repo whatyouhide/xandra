@@ -77,6 +77,7 @@ defmodule ErrorsTest do
         receive do
           {:DOWN, ^ref, _, _, _} -> :ok
         end
+
         {:ok, :waiting, [{random_pid, %Host{}}]}
       end
 
