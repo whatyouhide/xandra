@@ -438,7 +438,7 @@ defmodule Xandra.Cluster do
           Xandra.execute(conn, batch, options_without_retry_strategy)
         catch
           :exit, {:noproc, _} ->
-            {:error, :connection_dead}
+            {:error, ConnectionError.new("execute", {:cluster, :pool_closed})}
         end
       end)
   end
@@ -466,7 +466,7 @@ defmodule Xandra.Cluster do
           Xandra.execute(conn, query, params, options_without_retry_strategy)
         catch
           :exit, {:noproc, _} ->
-            {:error, :connection_dead}
+            {:error, ConnectionError.new("execute", {:cluster, :pool_closed})}
         end
       end)
   end

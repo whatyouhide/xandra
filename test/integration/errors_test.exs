@@ -2,6 +2,9 @@ defmodule ErrorsTest do
   use XandraTest.IntegrationCase, async: true
 
   alias Xandra.Error
+  alias Xandra.Cluster
+  alias Xandra.Cluster.Host
+  alias Xandra.ConnectionError
 
   test "each possible error", %{conn: conn} do
     assert {:error, reason} = Xandra.execute(conn, "")
@@ -44,5 +47,51 @@ defmodule ErrorsTest do
   test "errors are raised from bang! functions", %{conn: conn} do
     assert_raise Error, fn -> Xandra.prepare!(conn, "") end
     assert_raise Error, fn -> Xandra.execute!(conn, "USE unknown") end
+  end
+
+  describe "on Xandra.Cluster level" do
+    defmodule Xandra.Cluster.PoolMock do
+      @behaviour :gen_statem
+
+      def child_spec(opts) do
+        %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, [opts]},
+          type: :worker,
+          restart: :permanent
+        }
+      end
+
+      def start_link([]) do
+        :gen_statem.start_link(__MODULE__, :no_args, [])
+      end
+
+      def checkout(pid) do
+        :gen_statem.call(pid, :checkout)
+      end
+
+      @impl true
+      def init(:no_args) do
+        {:ok, random_pid} = Task.start(fn -> nil end)
+        {:ok, :waiting, [{random_pid, %Host{}}]}
+      end
+
+      @impl true
+      def callback_mode do
+        :state_functions
+      end
+
+      def waiting({:call, from}, :checkout, data) do
+        {:keep_state_and_data, {:reply, from, {:ok, data}}}
+      end
+    end
+
+    test "noproc errors are caught" do
+      {:ok, cluster} = start_supervised(Xandra.Cluster.PoolMock)
+
+      assert {:error,
+              %ConnectionError{action: "execute", reason: {:cluster, :pool_closed}}} =
+              Cluster.execute(cluster, "select * from system.peers")
+    end
   end
 end

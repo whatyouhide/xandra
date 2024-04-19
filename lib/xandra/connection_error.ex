@@ -92,6 +92,13 @@ defmodule Xandra.ConnectionError do
     "not connected to any of the nodes"
   end
 
+  defp format_reason({:cluster, :pool_closed}) do
+    """
+    the Xandra pool is closed, probably because the Cassandra connection dropped right after
+    Xandra.Cluster.Pool.checkout/0
+    """
+  end
+
   defp format_reason(reason) do
     case :inet.format_error(reason) do
       ~c"unknown POSIX error" -> inspect(reason)
