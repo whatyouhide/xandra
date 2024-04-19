@@ -78,7 +78,7 @@ defmodule ErrorsTest do
           {:DOWN, ^ref, _, _, _} -> :ok
         end
 
-        {:ok, :waiting, [{random_pid, %Host{}}]}
+        {:ok, :waiting, [{dead_pid, %Host{}}]}
       end
 
       @impl true
