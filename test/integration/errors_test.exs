@@ -72,7 +72,11 @@ defmodule ErrorsTest do
 
       @impl true
       def init(:no_args) do
-        {:ok, random_pid} = Task.start(fn -> nil end)
+        {dead_pid, ref} = spawn_monitor(fn -> :ok end)
+
+        receive do
+          {:DOWN, ^ref, _, _, _} -> :ok
+        end
         {:ok, :waiting, [{random_pid, %Host{}}]}
       end
 
