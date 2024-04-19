@@ -440,7 +440,8 @@ defmodule Xandra.Cluster do
           :exit, {:noproc, _} ->
             {:error, ConnectionError.new("execute", {:cluster, :pool_closed})}
         end
-      end)
+      end
+    )
   end
 
   @doc """
@@ -468,7 +469,8 @@ defmodule Xandra.Cluster do
           :exit, {:noproc, _} ->
             {:error, ConnectionError.new("execute", {:cluster, :pool_closed})}
         end
-      end)
+      end
+    )
   end
 
   @doc """
