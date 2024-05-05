@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.19.0
+
+### Features
+
+  * Add `:max_concurrent_requests_per_connection` option when starting single and cluster connections.
+
+### Bug Fixes
+
+  * Fix a memory leak in `Xandra.Connection`.
+  * Raise on unknown options when starting `Xandra.Cluster`.
+  * Increase the default TCP/SSL buffer to ~1Mb and make it configurable. This should reduce the number of possible request timeouts across connections.
+  * Fix an error that would happen when checking out connections from a cluster and those connections going *down* right after being checked out.
+
 ## v0.18.1
 
 ### Bug Fixes
