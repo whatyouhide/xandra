@@ -107,7 +107,7 @@ defmodule TelemetryTest do
     assert is_integer(duration)
   end
 
-  test "execute_query", %{conn: conn} do
+  test "execute query", %{conn: conn} do
     ref =
       :telemetry_test.attach_event_handlers(self(), [
         [:xandra, :execute_query, :start],
@@ -131,6 +131,39 @@ defmodule TelemetryTest do
 
     assert_receive {[:xandra, :execute_query, :stop], ^ref, %{duration: duration}, metadata}
 
+    assert metadata.query.statement == statement
+    assert metadata.connection_name == nil
+    assert metadata.address == "127.0.0.1"
+    assert metadata.port == XandraTest.IntegrationCase.port()
+    assert metadata.extra_metadata == %{foo: :bar}
+    assert is_integer(duration)
+  end
+
+  test "execute query with error", %{conn: conn} do
+    ref =
+      :telemetry_test.attach_event_handlers(self(), [
+        [:xandra, :execute_query, :start],
+        [:xandra, :execute_query, :stop]
+      ])
+
+    statement = "invalid syntax"
+
+    assert {:error, %Xandra.Error{reason: :invalid_syntax}} =
+             Xandra.execute(conn, statement, [], telemetry_metadata: %{foo: :bar})
+
+    assert_receive {[:xandra, :execute_query, :start], ^ref, %{system_time: system_time},
+                    metadata}
+
+    assert metadata.query.statement == statement
+    assert metadata.connection_name == nil
+    assert metadata.address == "127.0.0.1"
+    assert metadata.port == XandraTest.IntegrationCase.port()
+    assert metadata.extra_metadata == %{foo: :bar}
+    assert is_integer(system_time)
+
+    assert_receive {[:xandra, :execute_query, :stop], ^ref, %{duration: duration}, metadata}
+
+    assert %Xandra.Error{reason: :invalid_syntax} = metadata.reason
     assert metadata.query.statement == statement
     assert metadata.connection_name == nil
     assert metadata.address == "127.0.0.1"

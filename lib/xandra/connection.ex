@@ -209,7 +209,10 @@ defmodule Xandra.Connection do
         end
 
         :telemetry.span([:xandra, :execute_query], telemetry_meta, fn ->
-          {fun.(), telemetry_meta}
+          case fun.() do
+            {:ok, response} -> {{:ok, response}, telemetry_meta}
+            {:error, error} -> {{:error, error}, Map.put(telemetry_meta, :reason, error)}
+          end
         end)
 
       {:error, error} ->
