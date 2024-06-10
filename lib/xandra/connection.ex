@@ -15,6 +15,8 @@ defmodule Xandra.Connection do
   alias Xandra.Simple
   alias Xandra.Transport
 
+  require Logger
+
   @behaviour :gen_statem
 
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
@@ -664,6 +666,7 @@ defmodule Xandra.Connection do
   end
 
   def connected(:cast, {:release_stream_id, stream_id}, %__MODULE__{} = data) do
+    Logger.debug("Releasing stream ID #{stream_id}")
     data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
     {:keep_state, data}
   end
@@ -768,6 +771,7 @@ defmodule Xandra.Connection do
         |> handle_new_bytes()
 
       {:error, :insufficient_data} ->
+        Logger.debug("Received a packet that did not contain a full frame")
         {:keep_state, data}
 
       {:error, reason} ->
@@ -779,6 +783,10 @@ defmodule Xandra.Connection do
          %__MODULE__{timed_out_ids: timed_out_ids} = data,
          %Frame{stream_id: stream_id} = frame
        ) do
+    Logger.debug(
+      "Received frame with stream ID #{stream_id}, in_flight_req is: #{inspect(data.in_flight_requests[stream_id])}"
+    )
+
     case pop_in(data.in_flight_requests[stream_id]) do
       # There is no in-flight req for this response frame, BUT there is a request
       # for it that timed out on the caller's side. Let's just emit a
