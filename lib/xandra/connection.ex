@@ -182,6 +182,7 @@ defmodule Xandra.Connection do
         # This is in an anonymous function so that we can use it in a Telemetry span.
         fun = fn ->
           with :ok <- Transport.send(transport, payload),
+               Logger.debug("Sent query on stream ID #{stream_id}, will wait for an answer"),
                {:ok, %Frame{} = frame} <-
                  receive_response_frame(conn_pid, req_alias, checked_out_state, timeout) do
             case protocol_module.decode_response(frame, query, options) do
