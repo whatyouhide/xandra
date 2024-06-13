@@ -9,6 +9,8 @@ on:
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   MIX_ENV: test
+  LATEST_ELIXIR: "1.17"
+  LATEST_OTP: "27.0"
 
 jobs:
   lint:
@@ -26,12 +28,12 @@ jobs:
       - name: Install OTP and Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "26.2"
-          elixir-version: "1.16"
+          otp-version: "${{ env.LATEST_OTP }}"
+          elixir-version: "${{ env.LATEST_ELIXIR }}"
 
       - name: Cache dependencies
         id: cache-deps
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             deps
@@ -43,7 +45,7 @@ jobs:
 
       - name: Install and compile dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
-        run: mix do deps.get + deps.compile
+        run: mix deps.get --check-locked
 
       - name: Check formatting
         run: mix format --check-formatted
@@ -56,7 +58,7 @@ jobs:
         run: mix compile --warnings-as-errors --force
 
       - name: Cache Dialyzer's PLT
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: cache-plt
         with:
           path: priv/plts
@@ -80,12 +82,14 @@ jobs:
       C* ${{ matrix.server_versions.cassandra }},
       Scylla ${{ matrix.server_versions.scylla }} (coverage: ${{ matrix.coverage }})
 
-    runs-on: ubuntu-20.04
+    runs-on: "${{ matrix.os }}"
 
     strategy:
       fail-fast: false
 
       matrix:
+        os:
+          - ubuntu-latest
         otp:
           - "25.3"
         elixir:
@@ -95,8 +99,8 @@ jobs:
             scylla: "4.6.3"
 
         include:
-          - otp: "26.2"
-            elixir: "1.16"
+          - otp: "${{ github.env.LATEST_OTP }}"
+            elixir: "${{ github.env.LATEST_ELIXIR }}"
             coverage: true
             server_versions:
               cassandra: "4.1"
@@ -133,7 +137,7 @@ jobs:
 
       - name: Cache dependencies
         id: cache-deps
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             deps
@@ -145,7 +149,7 @@ jobs:
 
       - name: Install and compile dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
-        run: mix do deps.get --only test + deps.compile
+        run: mix do deps.get --only test
 
       # TODO: eventually figure out why we can't run encryption tests on CI.
       - name: Run tests for Cassandra and Scylla (with coverage)

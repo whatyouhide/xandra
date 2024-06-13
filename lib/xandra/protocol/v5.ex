@@ -286,7 +286,7 @@ defmodule Xandra.Protocol.V5 do
     <<value + @unix_epoch_days::32>>
   end
 
-  defp encode_value(:date, value) when value in -@unix_epoch_days..(@unix_epoch_days - 1) do
+  defp encode_value(:date, value) when value in -@unix_epoch_days..(@unix_epoch_days - 1)//1 do
     <<value + @unix_epoch_days::32>>
   end
 
