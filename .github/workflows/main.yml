@@ -99,15 +99,17 @@ jobs:
             scylla: "4.6.3"
 
         include:
-          - otp: "27.0"
-            elixir: "1.17"
+          - os: ubuntu-latest
+            otp: "${{ github.env.LATEST_OTP }}"
+            elixir: "${{ github.env.LATEST_ELIXIR }}"
             coverage: true
             server_versions:
               cassandra: "4.1"
               scylla: "5.2"
 
           # Oldest-supported Elixir and Erlang versions.
-          - otp: "25.3"
+          - os: ubuntu-latest
+            otp: "25.3"
             elixir: "1.15.4"
             coverage: false
             server_versions:
