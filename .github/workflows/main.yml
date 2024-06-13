@@ -99,8 +99,8 @@ jobs:
             scylla: "4.6.3"
 
         include:
-          - otp: "${{ github.env.LATEST_OTP }}"
-            elixir: "${{ github.env.LATEST_ELIXIR }}"
+          - otp: "27.0"
+            elixir: "1.17"
             coverage: true
             server_versions:
               cassandra: "4.1"
@@ -113,7 +113,6 @@ jobs:
             server_versions:
               cassandra: "4.1"
               scylla: "5.2"
-
 
     env:
       CASSANDRA_VERSION: ${{ matrix.server_versions.cassandra }}
