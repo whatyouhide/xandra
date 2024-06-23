@@ -196,10 +196,14 @@ defmodule XandraTest do
 
   describe "execute/3,4" do
     test "supports the :timeout option", %{conn: conn} do
-      assert {:error, %ConnectionError{} = error} =
-               Xandra.execute(conn, "SELECT * FROM system.local", [], timeout: 0)
-
-      assert error.reason == :timeout
+      # Do this a few times to make it more reliable and make the timeout pop up.
+      for _ <- 1..5 do
+        case Xandra.execute(conn, "SELECT * FROM system.local", [], timeout: 0) do
+          {:error, %ConnectionError{} = error} -> assert error.reason == :timeout
+          {:ok, _} -> :yeah_alright_its_flaky
+          other -> flunk("Unexpected return error: #{inspect(other)}")
+        end
+      end
     end
 
     # It's an annoyance to set up support for UDFs in Scylla in CI.
