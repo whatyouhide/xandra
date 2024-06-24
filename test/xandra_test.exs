@@ -346,6 +346,34 @@ defmodule XandraTest do
     end
   end
 
+  @tag start_conn: false
+  @tag :regression
+  test "concurrent requests on a single connection", %{start_options: start_options} do
+    conn = start_supervised!({Xandra, start_options})
+    max_requests = 5
+
+    Xandra.Telemetry.attach_default_handler()
+    Xandra.Telemetry.attach_debug_handler()
+    Logger.configure(level: :debug)
+
+    results =
+      1..max_requests
+      |> Task.async_stream(
+        fn _i ->
+          Xandra.execute(conn, "SELECT cluster_name FROM system.local", [], timeout: 1000)
+        end,
+        timeout: 15_000
+      )
+      |> Enum.map(fn {:ok, result} -> result end)
+
+    for result <- results do
+      assert {:ok, %Xandra.Page{}} = result
+    end
+  after
+    :telemetry.detach("xandra-default-telemetry-handler")
+    :telemetry.detach("xandra-debug-telemetry-handler")
+  end
+
   def configure_fun(options, original_start_options, pid, ref) do
     send(pid, {ref, options})
     Keyword.replace!(options, :nodes, original_start_options[:nodes])
