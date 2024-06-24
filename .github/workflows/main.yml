@@ -14,7 +14,7 @@ jobs:
   lint:
     name: Lint
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     strategy:
       fail-fast: true
@@ -26,12 +26,12 @@ jobs:
       - name: Install OTP and Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "26.2"
-          elixir-version: "1.16"
+          otp-version: "27.0"
+          elixir-version: "1.17.1"
 
       - name: Cache dependencies
         id: cache-deps
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             deps
@@ -43,7 +43,7 @@ jobs:
 
       - name: Install and compile dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
-        run: mix do deps.get + deps.compile
+        run: mix deps.get --check-locked
 
       - name: Check formatting
         run: mix format --check-formatted
@@ -56,7 +56,7 @@ jobs:
         run: mix compile --warnings-as-errors --force
 
       - name: Cache Dialyzer's PLT
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: cache-plt
         with:
           path: priv/plts
@@ -75,41 +75,30 @@ jobs:
 
   test:
     name: >-
-      Test (Elixir ${{ matrix.elixir }},
-      OTP ${{ matrix.otp }},
+      Test (Elixir ${{ matrix.runtime.elixir }},
+      OTP ${{ matrix.runtime.otp }} —
       C* ${{ matrix.server_versions.cassandra }},
-      Scylla ${{ matrix.server_versions.scylla }} (coverage: ${{ matrix.coverage }})
+      Scylla ${{ matrix.server_versions.scylla }})
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
 
       matrix:
-        otp:
-          - "25.3"
-        elixir:
-          - "1.16"
+        runtime:
+          # Oldest supported versions.
+          - otp: "25.3"
+            elixir: "1.15.4"
+          # Latest supported versions.
+          - otp: "27.0"
+            elixir: "1.17.1"
+
         server_versions:
           - cassandra: "3"
             scylla: "4.6.3"
-
-        include:
-          - otp: "26.2"
-            elixir: "1.16"
-            coverage: true
-            server_versions:
-              cassandra: "4.1"
-              scylla: "5.2"
-
-          # Oldest-supported Elixir and Erlang versions.
-          - otp: "25.3"
-            elixir: "1.15.4"
-            coverage: false
-            server_versions:
-              cassandra: "4.1"
-              scylla: "5.2"
-
+          - cassandra: "4.1"
+            scylla: "5.2"
 
     env:
       CASSANDRA_VERSION: ${{ matrix.server_versions.cassandra }}
@@ -128,32 +117,27 @@ jobs:
       - name: Install OTP and Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ matrix.otp }}
-          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.runtime.otp }}
+          elixir-version: ${{ matrix.runtime.elixir }}
 
       - name: Cache dependencies
         id: cache-deps
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             deps
             _build
           key: |
-            ${{ runner.os }}-mix-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
+            ${{ runner.os }}-mix-otp${{ matrix.runtime.otp }}-elixir${{ matrix.runtime.elixir }}-${{ hashFiles('**/mix.lock') }}
           restore-keys:
-            ${{ runner.os }}-mix-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-
+            ${{ runner.os }}-mix-otp${{ matrix.runtime.otp }}-elixir${{ matrix.runtime.elixir }}-
 
       - name: Install and compile dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
-        run: mix do deps.get --only test + deps.compile
+        run: mix deps.get --only test
 
       # TODO: eventually figure out why we can't run encryption tests on CI.
-      - name: Run tests for Cassandra and Scylla (with coverage)
-        if: ${{ matrix.coverage }}
-        run: mix test.ci_with_coverage --exclude encryption --exclude toxiproxy
-
       - name: Run tests for Cassandra and Scylla (without coverage)
-        if: ${{ !matrix.coverage }}
         run: mix test.all --exclude encryption --exclude toxiproxy
 
       - name: Dump Docker logs on failure
