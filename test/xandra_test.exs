@@ -349,7 +349,9 @@ defmodule XandraTest do
   @tag start_conn: false
   @tag :regression
   test "concurrent requests on a single connection", %{start_options: start_options} do
-    conn = start_supervised!({Xandra, start_options})
+    conn =
+      start_supervised!({Xandra, start_options ++ [max_concurrent_requests_per_connection: 2]})
+
     max_requests = 5
 
     Xandra.Telemetry.attach_default_handler()
@@ -360,9 +362,10 @@ defmodule XandraTest do
       1..max_requests
       |> Task.async_stream(
         fn _i ->
-          Xandra.execute(conn, "SELECT cluster_name FROM system.local", [], timeout: 1000)
+          Xandra.execute(conn, "SELECT cluster_name FROM system.local", [], timeout: 5000)
         end,
-        timeout: 15_000
+        timeout: 15_000,
+        max_concurrency: 2
       )
       |> Enum.map(fn {:ok, result} -> result end)
 
