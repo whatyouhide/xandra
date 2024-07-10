@@ -293,7 +293,7 @@ defmodule Xandra.Frame do
           (fetch_state, pos_integer() -> {:ok, binary(), fetch_state} | {:error, reason}),
           fetch_state,
           module() | nil
-        ) :: {:ok, t(), binary()} | {:error, reason}
+        ) :: {:ok, [t(), ...], binary()} | {:error, reason}
         when fetch_state: term(), reason: term()
   def decode(
         protocol_module,
@@ -313,7 +313,7 @@ defmodule Xandra.Frame do
           fetch_state,
           module() | nil,
           (fetch_state -> binary())
-        ) :: {:ok, t(), binary()} | {:error, reason}
+        ) :: {:ok, [t(), ...], binary()} | {:error, reason}
         when fetch_state: term(), reason: term()
   def decode_v4(fetch_bytes_fun, fetch_state, compressor, rest_fun \\ fn _ -> "" end)
       when is_function(fetch_bytes_fun, 2) and is_atom(compressor) do
@@ -322,11 +322,11 @@ defmodule Xandra.Frame do
     with {:ok, header, fetch_state} <- fetch_bytes_fun.(fetch_state, length) do
       case body_length(header) do
         0 ->
-          {:ok, decode(header), rest_fun.(fetch_state)}
+          {:ok, [decode(header)], rest_fun.(fetch_state)}
 
         body_length ->
           with {:ok, body, bytes_state} <- fetch_bytes_fun.(fetch_state, body_length),
-               do: {:ok, decode(header, body, compressor), rest_fun.(bytes_state)}
+               do: {:ok, [decode(header, body, compressor)], rest_fun.(bytes_state)}
       end
     end
   end
@@ -336,15 +336,24 @@ defmodule Xandra.Frame do
           fetch_state,
           module() | nil,
           (fetch_state -> binary())
-        ) :: {:ok, t(), rest :: binary()} | {:error, reason}
+        ) :: {:ok, [t(), ...], rest :: binary()} | {:error, reason}
         when fetch_state: term(), reason: term()
   def decode_v5(fetch_bytes_fun, fetch_state, compressor, rest_fun \\ fn _ -> "" end)
       when is_function(fetch_bytes_fun, 2) and is_atom(compressor) do
     with {:ok, envelope, rest} <-
            decode_v5_wrapper(fetch_bytes_fun, fetch_state, compressor, rest_fun) do
-      {frame, _ignored_rest} = decode_from_binary(envelope, compressor)
-      {:ok, frame, rest}
+      frames = decode_all_v5_frames_in_envelope(envelope, compressor, _acc = [])
+      {:ok, frames, rest}
     end
+  end
+
+  defp decode_all_v5_frames_in_envelope("", _compressor, acc) do
+    Enum.reverse(acc)
+  end
+
+  defp decode_all_v5_frames_in_envelope(envelope, compressor, acc) do
+    {frame, rest} = decode_from_binary(envelope, compressor)
+    decode_all_v5_frames_in_envelope(rest, compressor, [frame | acc])
   end
 
   # Made public for testing.

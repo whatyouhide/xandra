@@ -15,8 +15,6 @@ defmodule Xandra.Connection do
   alias Xandra.Simple
   alias Xandra.Transport
 
-  require Logger
-
   @behaviour :gen_statem
 
   @forced_transport_options [packet: :raw, mode: :binary, active: false]
@@ -182,7 +180,6 @@ defmodule Xandra.Connection do
         # This is in an anonymous function so that we can use it in a Telemetry span.
         fun = fn ->
           with :ok <- Transport.send(transport, payload),
-               Logger.debug("Sent query on stream ID #{stream_id}, will wait for an answer"),
                {:ok, %Frame{} = frame} <-
                  receive_response_frame(conn_pid, req_alias, checked_out_state, timeout) do
             case protocol_module.decode_response(frame, query, options) do
@@ -344,8 +341,7 @@ defmodule Xandra.Connection do
     in_flight_requests: %{},
     timed_out_ids: %{},
     current_keyspace: nil,
-    buffer: <<>>,
-    free_stream_ids: Enum.to_list(1..@max_cassandra_stream_id)
+    buffer: <<>>
   ]
 
   ## Callbacks
@@ -559,7 +555,6 @@ defmodule Xandra.Connection do
 
   def disconnected(:cast, {:release_stream_id, stream_id}, %__MODULE__{} = data) do
     data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
-    data = update_in(data.free_stream_ids, &[stream_id | &1])
     {:keep_state, data}
   end
 
@@ -595,7 +590,7 @@ defmodule Xandra.Connection do
         {:error, reason} -> disconnect(data, reason)
       end
     else
-      case Transport.setopts(data.transport, active: true) do
+      case Transport.setopts(data.transport, active: :once) do
         :ok -> {:keep_state_and_data, {{:timeout, :reconnect}, :infinity, nil}}
         {:error, reason} -> disconnect(data, reason)
       end
@@ -615,8 +610,7 @@ defmodule Xandra.Connection do
   # sends us the corresponding response, we can still route that C* response to the
   # alias and it'll not go anywhere and not cause any issues.
   def connected({:call, from}, {:checkout_state_for_next_request, req_alias}, data) do
-    # stream_id = random_free_stream_id(data.in_flight_requests, data.timed_out_ids)
-    {stream_id, data} = next_stream_id(data)
+    stream_id = random_free_stream_id(data.in_flight_requests, data.timed_out_ids)
 
     response =
       checked_out_state(
@@ -650,12 +644,8 @@ defmodule Xandra.Connection do
   end
 
   def connected(:info, message, data) when is_data_message(data.transport, message) do
-    :ok = Transport.setopts(data.transport, active: true)
+    :ok = Transport.setopts(data.transport, active: :once)
     {_mod, _socket, bytes} = message
-
-    Logger.debug(
-      "Received data:\n#{inspect(bytes, limit: :infinity, iexprintable_limit: :infinity)}"
-    )
 
     data = update_in(data.buffer, &(&1 <> bytes))
     handle_new_bytes(data)
@@ -675,9 +665,7 @@ defmodule Xandra.Connection do
   end
 
   def connected(:cast, {:release_stream_id, stream_id}, %__MODULE__{} = data) do
-    Logger.debug("Releasing stream ID #{stream_id}")
     data = update_in(data.in_flight_requests, &Map.delete(&1, stream_id))
-    data = update_in(data.free_stream_ids, &[stream_id | &1])
     {:keep_state, data}
   end
 
@@ -775,19 +763,16 @@ defmodule Xandra.Connection do
            data.compressor,
            _rest_fun = & &1
          ) do
-      {:ok, frame, rest} ->
-        Logger.debug("Received full frame")
-        data = handle_frame(%__MODULE__{data | buffer: rest}, frame)
+      {:ok, frames, rest} ->
+        data = Enum.reduce(frames, %__MODULE__{data | buffer: rest}, &handle_frame/2)
 
         if rest != "" do
           handle_new_bytes(data)
         else
-          Logger.debug("No more frames to decode")
           {:keep_state, data}
         end
 
       {:error, :insufficient_data} ->
-        Logger.debug("Received a packet that did not contain a full frame")
         {:keep_state, data}
 
       {:error, reason} ->
@@ -796,13 +781,9 @@ defmodule Xandra.Connection do
   end
 
   defp handle_frame(
-         %__MODULE__{timed_out_ids: timed_out_ids} = data,
-         %Frame{stream_id: stream_id} = frame
+         %Frame{stream_id: stream_id} = frame,
+         %__MODULE__{timed_out_ids: timed_out_ids} = data
        ) do
-    Logger.debug(
-      "Received frame with stream ID #{stream_id}, in_flight_req is: #{inspect(data.in_flight_requests[stream_id])}"
-    )
-
     case pop_in(data.in_flight_requests[stream_id]) do
       # There is no in-flight req for this response frame, BUT there is a request
       # for it that timed out on the caller's side. Let's just emit a
@@ -937,12 +918,6 @@ defmodule Xandra.Connection do
       metadata = telemetry_meta(resp, conn_pid, %{query: query})
       :telemetry.execute([:xandra, :server_warnings], %{warnings: warnings}, metadata)
     end
-  end
-
-  defp next_stream_id(data) do
-    [next_id | rest] = data.free_stream_ids
-    data = %__MODULE__{data | free_stream_ids: rest}
-    {next_id, data}
   end
 
   defp random_free_stream_id(in_flight_requests, timed_out_ids) do

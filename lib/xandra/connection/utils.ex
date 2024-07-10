@@ -13,9 +13,15 @@ defmodule Xandra.Connection.Utils do
            do: {:ok, binary, fetch_state}
     end
 
-    case protocol_format do
-      :v4_or_less -> Frame.decode_v4(fetch_bytes_fun, :no_fetch_state, compressor)
-      :v5_or_more -> Frame.decode_v5(fetch_bytes_fun, :no_fetch_state, compressor)
+    decode_fun =
+      case protocol_format do
+        :v4_or_less -> &Frame.decode_v4/3
+        :v5_or_more -> &Frame.decode_v5/3
+      end
+
+    case decode_fun.(fetch_bytes_fun, :no_fetch_state, compressor) do
+      {:ok, [frame], rest} -> {:ok, frame, rest}
+      {:error, reason} -> {:error, reason}
     end
   end
 

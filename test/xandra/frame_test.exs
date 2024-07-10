@@ -146,7 +146,7 @@ defmodule Xandra.FrameTest do
           |> Frame.encode(protocol_module)
           |> IO.iodata_to_binary()
 
-        assert {:ok, redecoded_frame, _rest = ""} =
+        assert {:ok, [redecoded_frame], _rest = ""} =
                  Frame.decode_v5(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
 
         assert redecoded_frame == frame
@@ -237,6 +237,30 @@ defmodule Xandra.FrameTest do
 
       assert Frame.decode_v5_wrapper(faulty_fetch_bytes_fun, _payload = "", _compressor = nil) ==
                {:error, :some_error}
+    end
+  end
+
+  describe "decode/5" do
+    # Regression for: https://issues.apache.org/jira/browse/CASSANDRA-19753
+    @tag :regression
+    test "can decode multiple envelopes in a single frame" do
+      payload =
+        <<144, 0, 2, 138, 218, 155, 133, 0, 0, 2, 8, 0, 0, 0, 63, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0,
+          1, 0, 6, 115, 121, 115, 116, 101, 109, 0, 5, 108, 111, 99, 97, 108, 0, 12, 99, 108, 117,
+          115, 116, 101, 114, 95, 110, 97, 109, 101, 0, 13, 0, 0, 0, 1, 0, 0, 0, 12, 116, 101,
+          115, 116, 95, 99, 108, 117, 115, 116, 101, 114, 133, 0, 0, 1, 8, 0, 0, 0, 63, 0, 0, 0,
+          2, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 115, 121, 115, 116, 101, 109, 0, 5, 108, 111, 99, 97,
+          108, 0, 12, 99, 108, 117, 115, 116, 101, 114, 95, 110, 97, 109, 101, 0, 13, 0, 0, 0, 1,
+          0, 0, 0, 12, 116, 101, 115, 116, 95, 99, 108, 117, 115, 116, 101, 114, 40, 65, 100, 21>>
+
+      assert {:ok, [%Frame{stream_id: 2}, %Frame{stream_id: 1}], _rest = ""} =
+               Frame.decode(
+                 Xandra.Protocol.V5,
+                 &fetch_bytes_from_binary/2,
+                 payload,
+                 _compressor = nil,
+                 _rest_fun = & &1
+               )
     end
   end
 

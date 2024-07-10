@@ -305,24 +305,21 @@ defmodule Xandra.Cluster.ControlConnection do
       end
     end
 
-    rest_fun = & &1
-
-    function =
+    decode_fun =
       case state.protocol_module do
-        Xandra.Protocol.V5 -> :decode_v5
-        Xandra.Protocol.V4 -> :decode_v4
-        Xandra.Protocol.V3 -> :decode_v4
+        Xandra.Protocol.V5 -> &Xandra.Frame.decode_v5/4
+        Xandra.Protocol.V4 -> &Xandra.Frame.decode_v4/4
+        Xandra.Protocol.V3 -> &Xandra.Frame.decode_v4/4
       end
 
-    case apply(Xandra.Frame, function, [
-           fetch_bytes_fun,
-           state.buffer,
-           _compressor = nil,
-           rest_fun
-         ]) do
-      {:ok, frame, rest} ->
-        change_event = state.protocol_module.decode_response(frame)
-        state = handle_change_event(state, change_event)
+    case decode_fun.(fetch_bytes_fun, state.buffer, _compressor = nil, _rest_fun = & &1) do
+      {:ok, frames, rest} ->
+        state =
+          Enum.reduce(frames, state, fn frame, acc ->
+            change_event = state.protocol_module.decode_response(frame)
+            handle_change_event(acc, change_event)
+          end)
+
         consume_new_data(%__MODULE__{state | buffer: rest})
 
       {:error, _reason} ->
