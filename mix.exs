@@ -162,7 +162,10 @@ defmodule Xandra.Mixfile do
       {:mox, "~> 1.0", only: :test},
       {:stream_data, "~> 1.0", only: [:dev, :test]},
       {:nimble_lz4, "~> 0.1.3", only: [:dev, :test]},
-      {:toxiproxy_ex, github: "whatyouhide/toxiproxy_ex", only: :test}
+      # This is a fix to avoid warnings on Elixir 1.17+, it overrides the toxiproxy_ex
+      # requirement.
+      {:tesla, ">= 1.11.2", only: :test, override: true},
+      {:toxiproxy_ex, "~> 2.0", only: :test}
     ]
   end
 
