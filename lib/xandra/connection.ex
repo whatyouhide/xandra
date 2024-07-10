@@ -748,16 +748,9 @@ defmodule Xandra.Connection do
   end
 
   defp handle_new_bytes(%__MODULE__{} = data) do
-    fetch_bytes_fun = fn buffer, byte_count ->
-      case buffer do
-        <<frame_bytes::binary-size(byte_count), rest::binary>> -> {:ok, frame_bytes, rest}
-        _other -> {:error, :insufficient_data}
-      end
-    end
-
     case Frame.decode(
            data.protocol_module,
-           fetch_bytes_fun,
+           &Frame.fetch_bytes_from_binary/2,
            data.buffer,
            data.compressor,
            _rest_fun = & &1

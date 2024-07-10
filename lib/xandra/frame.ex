@@ -518,6 +518,17 @@ defmodule Xandra.Frame do
     }
   end
 
+  # We have this so that users of this module can pass this function as the "fetch_bytes_fun"
+  # that most decoding functions accept.
+  @spec fetch_bytes_from_binary(binary(), non_neg_integer()) ::
+          {:ok, binary(), binary()} | {:error, :insufficient_data}
+  def fetch_bytes_from_binary(binary, byte_count) do
+    case binary do
+      <<frame_bytes::binary-size(byte_count), rest::binary>> -> {:ok, frame_bytes, rest}
+      _other -> {:error, :insufficient_data}
+    end
+  end
+
   defp encode_flags(flags) do
     Enum.reduce(flags, 0x00, fn name, acc -> acc ||| flag_mask(name) end)
   end

@@ -298,21 +298,19 @@ defmodule Xandra.Cluster.ControlConnection do
   end
 
   defp consume_new_data(%__MODULE__{} = state) do
-    fetch_bytes_fun = fn binary, byte_count ->
-      case binary do
-        <<part::binary-size(byte_count), rest::binary>> -> {:ok, part, rest}
-        _other -> {:error, :not_enough_data}
-      end
-    end
-
     decode_fun =
       case state.protocol_module do
-        Xandra.Protocol.V5 -> &Xandra.Frame.decode_v5/4
-        Xandra.Protocol.V4 -> &Xandra.Frame.decode_v4/4
-        Xandra.Protocol.V3 -> &Xandra.Frame.decode_v4/4
+        Xandra.Protocol.V5 -> &Frame.decode_v5/4
+        Xandra.Protocol.V4 -> &Frame.decode_v4/4
+        Xandra.Protocol.V3 -> &Frame.decode_v4/4
       end
 
-    case decode_fun.(fetch_bytes_fun, state.buffer, _compressor = nil, _rest_fun = & &1) do
+    case decode_fun.(
+           &Frame.fetch_bytes_from_binary/2,
+           state.buffer,
+           _compressor = nil,
+           _rest_fun = & &1
+         ) do
       {:ok, frames, rest} ->
         state =
           Enum.reduce(frames, state, fn frame, acc ->

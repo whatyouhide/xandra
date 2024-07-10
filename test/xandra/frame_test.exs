@@ -62,7 +62,11 @@ defmodule Xandra.FrameTest do
           inner_payload |> Frame.encode_v5_wrappers(_compressor = nil) |> IO.iodata_to_binary()
 
         assert {:ok, redecoded, _rest = ""} =
-                 Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
+                 Frame.decode_v5_wrapper(
+                   &Frame.fetch_bytes_from_binary/2,
+                   encoded,
+                   _compressor = nil
+                 )
 
         assert IO.iodata_to_binary(inner_payload) == IO.iodata_to_binary(redecoded)
       end
@@ -80,7 +84,7 @@ defmodule Xandra.FrameTest do
 
         assert {:ok, redecoded, _rest = ""} =
                  Frame.decode_v5_wrapper(
-                   &fetch_bytes_from_binary/2,
+                   &Frame.fetch_bytes_from_binary/2,
                    encoded,
                    _compressor = LZ4Compressor
                  )
@@ -98,7 +102,7 @@ defmodule Xandra.FrameTest do
 
       assert {:ok, redecoded, _rest = ""} =
                Frame.decode_v5_wrapper(
-                 &fetch_bytes_from_binary/2,
+                 &Frame.fetch_bytes_from_binary/2,
                  encoded,
                  _compressor = LZ4Compressor
                )
@@ -119,7 +123,11 @@ defmodule Xandra.FrameTest do
           inner_frame |> Frame.encode_v5_wrappers(_compressor = nil) |> IO.iodata_to_binary()
 
         assert {:ok, redecoded, _rest = ""} =
-                 Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
+                 Frame.decode_v5_wrapper(
+                   &Frame.fetch_bytes_from_binary/2,
+                   encoded,
+                   _compressor = nil
+                 )
 
         assert inner_frame == IO.iodata_to_binary(redecoded)
       end
@@ -147,7 +155,7 @@ defmodule Xandra.FrameTest do
           |> IO.iodata_to_binary()
 
         assert {:ok, [redecoded_frame], _rest = ""} =
-                 Frame.decode_v5(&fetch_bytes_from_binary/2, encoded, _compressor = nil)
+                 Frame.decode_v5(&Frame.fetch_bytes_from_binary/2, encoded, _compressor = nil)
 
         assert redecoded_frame == frame
       end
@@ -165,7 +173,11 @@ defmodule Xandra.FrameTest do
       malformed_encoded = <<header_data::binary, malformed_crc::binary, rest::binary>>
 
       assert_raise RuntimeError, "mismatching CRC24 for header", fn ->
-        Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, malformed_encoded, _compressor = nil)
+        Frame.decode_v5_wrapper(
+          &Frame.fetch_bytes_from_binary/2,
+          malformed_encoded,
+          _compressor = nil
+        )
       end
     end
 
@@ -182,7 +194,11 @@ defmodule Xandra.FrameTest do
       malformed_encoded = <<header::binary, payload::binary, malformed_crc::binary>>
 
       assert_raise RuntimeError, "mismatching CRC32 for payload", fn ->
-        Frame.decode_v5_wrapper(&fetch_bytes_from_binary/2, malformed_encoded, _compressor = nil)
+        Frame.decode_v5_wrapper(
+          &Frame.fetch_bytes_from_binary/2,
+          malformed_encoded,
+          _compressor = nil
+        )
       end
     end
 
@@ -198,7 +214,7 @@ defmodule Xandra.FrameTest do
 
       assert_raise RuntimeError, "mismatching CRC24 for header", fn ->
         Frame.decode_v5_wrapper(
-          &fetch_bytes_from_binary/2,
+          &Frame.fetch_bytes_from_binary/2,
           malformed_encoded,
           _compressor = LZ4Compressor
         )
@@ -225,7 +241,7 @@ defmodule Xandra.FrameTest do
 
       assert_raise RuntimeError, "mismatching CRC32 for payload", fn ->
         Frame.decode_v5_wrapper(
-          &fetch_bytes_from_binary/2,
+          &Frame.fetch_bytes_from_binary/2,
           malformed_encoded,
           _compressor = LZ4Compressor
         )
@@ -256,7 +272,7 @@ defmodule Xandra.FrameTest do
       assert {:ok, [%Frame{stream_id: 2}, %Frame{stream_id: 1}], _rest = ""} =
                Frame.decode(
                  Xandra.Protocol.V5,
-                 &fetch_bytes_from_binary/2,
+                 &Frame.fetch_bytes_from_binary/2,
                  payload,
                  _compressor = nil,
                  _rest_fun = & &1
@@ -282,12 +298,5 @@ defmodule Xandra.FrameTest do
       :event,
       :auth_success
     ])
-  end
-
-  defp fetch_bytes_from_binary(binary, size) do
-    case binary do
-      <<chunk::size(size)-binary, rest::binary>> -> {:ok, chunk, rest}
-      _other -> {:error, :not_enough_bytes}
-    end
   end
 end
