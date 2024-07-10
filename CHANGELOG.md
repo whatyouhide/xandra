@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.19.1
+
+### Bug Fixes
+
+  * Add missing error `:reason` to `:execute_query` Telemetry events.
+  * Fix decoding multiple frames in a single envelope for native protocol v5. This resulted in frequent timeouts when using native protocol v5, which are extensively researched in [this issue](https://github.com/whatyouhide/xandra/issues/356). Well, that's fixed!
+
 ## v0.19.0
 
 ### Features
