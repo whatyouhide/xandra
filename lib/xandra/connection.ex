@@ -762,10 +762,14 @@ defmodule Xandra.Connection do
            data.compressor,
            _rest_fun = & &1
          ) do
-      {:ok, frame, rest} ->
-        %__MODULE__{data | buffer: rest}
-        |> handle_frame(frame)
-        |> handle_new_bytes()
+      {:ok, frames, rest} ->
+        data = Enum.reduce(frames, %__MODULE__{data | buffer: rest}, &handle_frame/2)
+
+        if rest != "" do
+          handle_new_bytes(data)
+        else
+          {:keep_state, data}
+        end
 
       {:error, :insufficient_data} ->
         {:keep_state, data}
@@ -776,8 +780,8 @@ defmodule Xandra.Connection do
   end
 
   defp handle_frame(
-         %__MODULE__{timed_out_ids: timed_out_ids} = data,
-         %Frame{stream_id: stream_id} = frame
+         %Frame{stream_id: stream_id} = frame,
+         %__MODULE__{timed_out_ids: timed_out_ids} = data
        ) do
     case pop_in(data.in_flight_requests[stream_id]) do
       # There is no in-flight req for this response frame, BUT there is a request

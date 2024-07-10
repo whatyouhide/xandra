@@ -346,6 +346,19 @@ defmodule XandraTest do
     end
   end
 
+  # Regression for timeouts on native protocol v5:
+  # https://github.com/whatyouhide/xandra/issues/356
+  @tag :regression
+  test "concurrent requests on a single connection", %{conn: conn} do
+    1..5
+    |> Task.async_stream(fn _i ->
+      Xandra.execute(conn, "SELECT cluster_name FROM system.local", [], timeout: 5000)
+    end)
+    |> Enum.each(fn {:ok, result} ->
+      assert {:ok, %Xandra.Page{}} = result
+    end)
+  end
+
   def configure_fun(options, original_start_options, pid, ref) do
     send(pid, {ref, options})
     Keyword.replace!(options, :nodes, original_start_options[:nodes])
