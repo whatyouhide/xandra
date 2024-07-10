@@ -26,8 +26,8 @@ defmodule Xandra.Mixfile do
         flags: [:no_contracts, :no_improper_lists],
         list_unused_filters: true,
         plt_add_apps: [:ssl, :crypto, :mix, :ex_unit, :erts, :kernel, :stdlib],
-        plt_local_path: "priv/plts",
-        plt_core_path: "priv/plts"
+        plt_local_path: "plts",
+        plt_core_path: "plts"
       ],
 
       # Testing

@@ -2,7 +2,7 @@
 /cover
 /deps
 /doc
-/priv/plts
+/plts
 erl_crash.dump
 *.ez
 /pages/Telemetry events.md
