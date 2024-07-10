@@ -646,7 +646,6 @@ defmodule Xandra.Connection do
   def connected(:info, message, data) when is_data_message(data.transport, message) do
     :ok = Transport.setopts(data.transport, active: :once)
     {_mod, _socket, bytes} = message
-
     data = update_in(data.buffer, &(&1 <> bytes))
     handle_new_bytes(data)
   end
