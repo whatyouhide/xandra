@@ -121,6 +121,9 @@ defmodule Xandra.Cluster.ControlConnection do
 
         execute_telemetry(state, [:control_connection, :connected], %{}, %{})
 
+        # We know that the node we just connected to is up
+        send(state.cluster_pid, {:host_up, state.ip, state.port})
+
         # We set up a timer to periodically refresh the topology.
         schedule_refresh_topology(state.refresh_topology_interval)
 
