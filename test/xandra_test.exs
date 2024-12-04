@@ -33,6 +33,9 @@ defmodule XandraTest do
       assert_raise ArgumentError, ~r{the :nodes option can't be an empty list}, fn ->
         Xandra.start_link(nodes: [])
       end
+
+      # IPv6 Connection
+      assert {:ok, _conn} = Xandra.start_link(nodes: ["127.0.0.1"], transport_options: [:inet6])
     end
 
     test "validates the :authentication option" do
