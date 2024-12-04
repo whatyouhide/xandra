@@ -147,6 +147,19 @@ defmodule Xandra.ClusterTest do
         Xandra.Cluster.start_link(port: 9042)
       end
     end
+
+    test "with the :inet6 transport option" do
+      assert {:ok, _conn} = Xandra.Cluster.start_link(nodes: ["::1"], transport_options: [:inet6])
+
+      assert {:ok, _conn} =
+               Xandra.Cluster.start_link(nodes: ["::1:9042"], transport_options: [:inet6])
+
+      assert {:ok, _conn} =
+               Xandra.Cluster.start_link(nodes: ["[::1]"], transport_options: [:inet6])
+
+      assert {:ok, _conn} =
+               Xandra.Cluster.start_link(nodes: ["[::1]:9042"], transport_options: [:inet6])
+    end
   end
 
   describe "start_link/1" do
