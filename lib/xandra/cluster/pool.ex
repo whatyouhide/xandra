@@ -499,8 +499,6 @@ defmodule Xandra.Cluster.Pool do
         {host, %{peer | status: new_status}}
       end)
 
-    Logger.info("Setting #{new_status} for #{inspect(peername)}")
-
     case new_status do
       :up ->
         update_in(data.load_balancing_state, &data.load_balancing_module.host_up(&1, host))
