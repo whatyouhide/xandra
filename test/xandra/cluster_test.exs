@@ -839,7 +839,9 @@ defmodule Xandra.ClusterTest do
       opts = Keyword.merge(opts, sync_connect: 1000)
       cluster = start_link_supervised!({Cluster, opts})
 
-      assert %{pool_pid: pool_pid, status: :connected, host: host} = get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
+      assert %{pool_pid: pool_pid, status: :connected, host: host} =
+               get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
+
       assert get_load_balancing_state(get_state(cluster), host) == :connected
 
       assert {:ok, [{conn_pid, %Host{}}]} = Pool.checkout(cluster)
@@ -848,7 +850,9 @@ defmodule Xandra.ClusterTest do
       Process.exit(conn_pid, :kill)
       assert_receive {:DOWN, ^ref, _, _, _}
 
-      assert %{pool_pid: ^pool_pid, status: :connected, host: host} = get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
+      assert %{pool_pid: ^pool_pid, status: :connected, host: host} =
+               get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
+
       assert get_load_balancing_state(get_state(cluster), host) == :connected
     end
 
@@ -970,7 +974,11 @@ defmodule Xandra.ClusterTest do
   end
 
   defp get_load_balancing_state(%Pool{load_balancing_state: lbs}, %Host{} = host) do
-    {_host, state} = Enum.find(lbs, fn {lbs_host, _state} -> Host.to_peername(lbs_host) == Host.to_peername(host) end)
+    {_host, state} =
+      Enum.find(lbs, fn {lbs_host, _state} ->
+        Host.to_peername(lbs_host) == Host.to_peername(host)
+      end)
+
     state
   end
 
