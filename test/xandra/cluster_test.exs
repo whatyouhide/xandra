@@ -270,6 +270,16 @@ defmodule Xandra.ClusterTest do
       assert GenServer.whereis(name) == pid
       stop_supervised!(name)
     end
+
+    @tag telemetry_events: [[:xandra, :connected]]
+    test "successfully connect even with an invalid transport option",
+         %{base_options: opts, telemetry_ref: telemetry_ref} do
+      opts = Keyword.merge(opts, transport_options: [active: true])
+      _pid = start_link_supervised!({Cluster, opts})
+
+      # Assert that we already received events.
+      assert_received {[:xandra, :connected], ^telemetry_ref, %{}, %{}}
+    end
   end
 
   describe "starting up" do

@@ -195,6 +195,19 @@ defmodule XandraTest do
 
       assert_received {[:xandra, :failed_to_connect], ^telemetry_ref, %{}, %{connection: ^conn}}
     end
+
+    test "invalid transport option gets forcibly overwritten" do
+      telemetry_ref =
+        :telemetry_test.attach_event_handlers(self(), [[:xandra, :connected]])
+
+      # Set a transport option `active: true` that normally would cause the
+      # connection to fail. This connection should succeed because start_link
+      # forcibly overrides and sets some necessary options.
+      options = Keyword.merge(default_start_options(), transport_options: [active: true])
+
+      conn = start_supervised!({Xandra, options})
+      assert_receive {[:xandra, :connected], ^telemetry_ref, %{}, %{connection: ^conn}}
+    end
   end
 
   describe "execute/3,4" do
