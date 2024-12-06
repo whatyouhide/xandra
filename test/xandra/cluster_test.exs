@@ -424,7 +424,8 @@ defmodule Xandra.ClusterTest do
       }
 
       cluster_state = get_state(pid)
-      assert %{status: :down} = cluster_state.peers[{{127, 0, 0, 1}, 8092}]
+      assert %{status: :down, host: host} = cluster_state.peers[{{127, 0, 0, 1}, 8092}]
+      assert get_load_balancing_state(get_state(pid), host) == :down
     end
 
     @tag telemetry_events: [
@@ -759,6 +760,8 @@ defmodule Xandra.ClusterTest do
       assert %{status: :down, pool_pid: nil, host: %Host{address: {127, 0, 0, 1}, port: @port}} =
                get_state(pid).peers[Host.to_peername(host)]
 
+      assert get_load_balancing_state(get_state(pid), host) == :down
+
       # Send the UP event.
       send(pid, {:host_up, host.address, host.port})
 
@@ -770,6 +773,8 @@ defmodule Xandra.ClusterTest do
                pool_pid: pool_pid,
                host: %Host{address: {127, 0, 0, 1}, port: @port}
              } = get_state(pid).peers[Host.to_peername(host)]
+
+      assert get_load_balancing_state(get_state(pid), host) == :up
 
       assert is_pid(pool_pid)
     end
@@ -834,7 +839,8 @@ defmodule Xandra.ClusterTest do
       opts = Keyword.merge(opts, sync_connect: 1000)
       cluster = start_link_supervised!({Cluster, opts})
 
-      assert %{pool_pid: pool_pid} = get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
+      assert %{pool_pid: pool_pid, status: :connected, host: host} = get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
+      assert get_load_balancing_state(get_state(cluster), host) == :connected
 
       assert {:ok, [{conn_pid, %Host{}}]} = Pool.checkout(cluster)
       ref = Process.monitor(conn_pid)
@@ -842,7 +848,8 @@ defmodule Xandra.ClusterTest do
       Process.exit(conn_pid, :kill)
       assert_receive {:DOWN, ^ref, _, _, _}
 
-      assert %{pool_pid: ^pool_pid} = get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
+      assert %{pool_pid: ^pool_pid, status: :connected, host: host} = get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
+      assert get_load_balancing_state(get_state(cluster), host) == :connected
     end
 
     @tag :capture_log
@@ -857,8 +864,10 @@ defmodule Xandra.ClusterTest do
       Process.exit(pool_pid, :kill)
       assert_receive {:DOWN, ^ref, _, _, _}
 
-      assert %{status: :up, pool_pid: nil, pool_ref: nil} =
+      assert %{status: :up, pool_pid: nil, pool_ref: nil, host: host} =
                get_state(cluster).peers[{{127, 0, 0, 1}, @port}]
+
+      assert get_load_balancing_state(get_state(cluster), host) == :up
     end
 
     @tag :capture_log
@@ -958,6 +967,11 @@ defmodule Xandra.ClusterTest do
   defp get_state(cluster) do
     assert {_state, data} = :sys.get_state(cluster)
     data
+  end
+
+  defp get_load_balancing_state(%Pool{load_balancing_state: lbs}, %Host{} = host) do
+    {_host, state} = Enum.find(lbs, fn {lbs_host, _state} -> Host.to_peername(lbs_host) == Host.to_peername(host) end)
+    state
   end
 
   defp assert_control_connection_started(test_ref) do
