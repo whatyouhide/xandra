@@ -499,16 +499,14 @@ defmodule Xandra.Cluster.Pool do
         {host, %{peer | status: new_status}}
       end)
 
-    case new_status do
-      :up ->
-        update_in(data.load_balancing_state, &data.load_balancing_module.host_up(&1, host))
+    lb_callback =
+      case new_status do
+        :up -> :host_up
+        :down -> :host_down 
+        :connected -> :host_connected
+      end
 
-      :down ->
-        update_in(data.load_balancing_state, &data.load_balancing_module.host_down(&1, host))
-
-      :connected ->
-        update_in(data.load_balancing_state, &data.load_balancing_module.host_connected(&1, host))
-    end
+    update_in(data.load_balancing_state, &apply(data.load_balancing_module, lb_callback, [&1, host]))
   end
 
   defp stop_pool(data, %Host{} = host) do
