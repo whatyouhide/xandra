@@ -318,6 +318,8 @@ defmodule Xandra.Cluster.Pool do
       when is_peername(peername) do
     # Not connected anymore, but we're not really sure if the whole host is down.
     data = set_host_status(data, peername, :up)
+    data = stop_pool(data, data.peers[peername].host)
+    data = maybe_start_pools(data)
     {:keep_state, data}
   end
 
@@ -502,11 +504,14 @@ defmodule Xandra.Cluster.Pool do
     lb_callback =
       case new_status do
         :up -> :host_up
-        :down -> :host_down 
+        :down -> :host_down
         :connected -> :host_connected
       end
 
-    update_in(data.load_balancing_state, &apply(data.load_balancing_module, lb_callback, [&1, host]))
+    update_in(
+      data.load_balancing_state,
+      &apply(data.load_balancing_module, lb_callback, [&1, host])
+    )
   end
 
   defp stop_pool(data, %Host{} = host) do
