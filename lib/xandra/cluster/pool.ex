@@ -241,13 +241,11 @@ defmodule Xandra.Cluster.Pool do
 
   def handle_event(:info, {:host_up, address, port}, _state, %__MODULE__{} = data) do
     # Set the host's status as :up if its state had been previously marked as :down.
-    {%Host{} = host, data} =
-      get_and_update_in(data.peers[{address, port}], fn
-        %{status: :down, host: host} = peer -> {host, %{peer | status: :up}}
-        %{host: host} = peer -> {host, peer}
-      end)
-
-    data = update_in(data.load_balancing_state, &data.load_balancing_module.host_up(&1, host))
+    data =
+      case data.peers[{address, port}] do
+        %{status: :down} -> set_host_status(data, {address, port}, :up)
+        _ -> data
+      end
 
     data = maybe_start_pools(data)
     {:keep_state, data}
@@ -255,13 +253,9 @@ defmodule Xandra.Cluster.Pool do
 
   def handle_event(:info, {:host_down, address, port}, _state, %__MODULE__{} = data) do
     # Set the host's status as :down, regardless of its current state.
-    {%Host{} = host, data} =
-      get_and_update_in(data.peers[{address, port}], fn %{host: host} = peer ->
-        {host, %{peer | status: :down}}
-      end)
-
-    data = update_in(data.load_balancing_state, &data.load_balancing_module.host_down(&1, host))
-
+    peername = {address, port}
+    data = set_host_status(data, peername, :down)
+    host = data.peers[peername].host
     data = stop_pool(data, host)
     data = maybe_start_pools(data)
     {:keep_state, data}
@@ -305,11 +299,7 @@ defmodule Xandra.Cluster.Pool do
         %__MODULE__{} = data
       )
       when is_peername(peername) do
-    data = put_in(data.peers[peername].status, :connected)
-    host = data.peers[peername].host
-
-    data =
-      update_in(data.load_balancing_state, &data.load_balancing_module.host_connected(&1, host))
+    data = set_host_status(data, peername, :connected)
 
     if alias = data.sync_connect_alias do
       send(alias, {alias, :connected})
@@ -327,8 +317,10 @@ defmodule Xandra.Cluster.Pool do
       )
       when is_peername(peername) do
     # Not connected anymore, but we're not really sure if the whole host is down.
-    data = put_in(data.peers[peername].status, :up)
+    data = set_host_status(data, peername, :up)
     data = stop_pool(data, data.peers[peername].host)
+    # There might be more hosts that we could connect to instead of the stopped one
+    data = maybe_start_pools(data)
     {:keep_state, data}
   end
 
@@ -340,8 +332,11 @@ defmodule Xandra.Cluster.Pool do
         %__MODULE__{} = data
       ) do
     if data.peers[peername] do
-      data = put_in(data.peers[peername].status, :down)
-      data = stop_pool(data, data.peers[peername].host)
+      data = set_host_status(data, peername, :down)
+      host = data.peers[peername].host
+      data = stop_pool(data, host)
+      # There might be more hosts that we could connect to instead of the stopped one
+      data = maybe_start_pools(data)
       {:keep_state, data}
     else
       {:keep_state, data}
@@ -374,7 +369,7 @@ defmodule Xandra.Cluster.Pool do
     {peername, _info} = Enum.find(data.peers, fn {_peername, info} -> info.pool_ref == ref end)
     data = put_in(data.peers[peername].pool_pid, nil)
     data = put_in(data.peers[peername].pool_ref, nil)
-    data = put_in(data.peers[peername].status, :up)
+    data = set_host_status(data, peername, :up)
     data = maybe_start_pools(data)
     {:keep_state, data}
   end
@@ -500,6 +495,25 @@ defmodule Xandra.Cluster.Pool do
       {:error, {:already_started, _pool}} ->
         data
     end
+  end
+
+  defp set_host_status(data, peername, new_status) when new_status in [:up, :down, :connected] do
+    {%Host{} = host, data} =
+      get_and_update_in(data.peers[peername], fn %{host: host} = peer ->
+        {host, %{peer | status: new_status}}
+      end)
+
+    lb_callback =
+      case new_status do
+        :up -> :host_up
+        :down -> :host_down
+        :connected -> :host_connected
+      end
+
+    update_in(
+      data.load_balancing_state,
+      &apply(data.load_balancing_module, lb_callback, [&1, host])
+    )
   end
 
   defp stop_pool(data, %Host{} = host) do
