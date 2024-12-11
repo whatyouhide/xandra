@@ -319,6 +319,7 @@ defmodule Xandra.Cluster.Pool do
     # Not connected anymore, but we're not really sure if the whole host is down.
     data = set_host_status(data, peername, :up)
     data = stop_pool(data, data.peers[peername].host)
+    # There might be more hosts that we could connect to instead of the stopped one
     data = maybe_start_pools(data)
     {:keep_state, data}
   end
@@ -334,6 +335,7 @@ defmodule Xandra.Cluster.Pool do
       data = set_host_status(data, peername, :down)
       host = data.peers[peername].host
       data = stop_pool(data, host)
+      # There might be more hosts that we could connect to instead of the stopped one
       data = maybe_start_pools(data)
       {:keep_state, data}
     else
