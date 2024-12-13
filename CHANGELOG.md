@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.19.2
+
+  * Fix an issue where Xandra would not reconnect to any node if *all* nodes went offline.
+
 ## v0.19.1
 
 ### Bug Fixes
