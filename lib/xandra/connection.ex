@@ -170,7 +170,6 @@ defmodule Xandra.Connection do
         options = Keyword.put(options, :stream_id, stream_id)
         query = hydrate_query(query, checked_out_state, options)
         timeout = Keyword.fetch!(options, :timeout)
-        payload = query_mod.encode(query, params, options)
 
         telemetry_meta =
           checked_out_state
@@ -179,7 +178,8 @@ defmodule Xandra.Connection do
 
         # This is in an anonymous function so that we can use it in a Telemetry span.
         fun = fn ->
-          with :ok <- Transport.send(transport, payload),
+          with {:ok, payload} <- encode_query(query_mod, query, params, options),
+               :ok <- Transport.send(transport, payload),
                {:ok, %Frame{} = frame} <-
                  receive_response_frame(conn_pid, req_alias, checked_out_state, timeout) do
             case protocol_module.decode_response(frame, query, options) do
@@ -202,6 +202,11 @@ defmodule Xandra.Connection do
                 {:error, error}
             end
           else
+            {:error, {:encoding_failed, error, stacktrace}} ->
+              Process.demonitor(req_alias, [:flush])
+              :gen_statem.cast(conn_pid, {:release_stream_id, stream_id})
+              reraise error, stacktrace
+
             {:error, reason} ->
               Process.demonitor(req_alias, [:flush])
               {:error, ConnectionError.new("execute", reason)}
@@ -250,6 +255,14 @@ defmodule Xandra.Connection do
         compressor: get_right_compressor(response, options[:compressor]),
         request_custom_payload: options[:custom_payload]
     }
+  end
+
+  defp encode_query(query_mod, query, params, options) do
+    try do
+      {:ok, query_mod.encode(query, params, options)}
+    rescue
+      error -> {:error, {:encoding_failed, error, __STACKTRACE__}}
+    end
   end
 
   defp receive_response_frame(

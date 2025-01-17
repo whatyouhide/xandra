@@ -382,9 +382,8 @@ defmodule XandraTest do
       Xandra.execute(conn, insert_statement, [{"int", 2}, {"int", "2"}])
     end
 
-    # verify connection is in a bad state and rejects new requests
-    assert {:error, %Xandra.ConnectionError{reason: :too_many_concurrent_requests}} =
-             Xandra.execute(conn, insert_statement, [{"int", 2}, {"int", 2}])
+    # verify connection should still work after an encoding error
+    assert {:ok, _} = Xandra.execute(conn, insert_statement, [{"int", 3}, {"int", 3}])
   end
 
   def configure_fun(options, original_start_options, pid, ref) do
