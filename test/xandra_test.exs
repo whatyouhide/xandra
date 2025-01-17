@@ -359,6 +359,34 @@ defmodule XandraTest do
     end)
   end
 
+  # Regression for encoding errors leaking stream ids and thus bricking connections
+  # https://github.com/whatyouhide/xandra/issues/367
+  @tag :regression
+  @tag start_conn: false
+  test "connection handles encoding errors without leaking stream IDs",
+       %{keyspace: keyspace, start_options: start_options} do
+    # we restrict to one conncurrent stream id per connection to make leaking deterministic
+    start_options = Keyword.put(start_options, :max_concurrent_requests_per_connection, 1)
+    conn = start_supervised!({Xandra, start_options})
+
+    # setup test table
+    statement = "CREATE TABLE #{keyspace}.encoding_error_test (id int PRIMARY KEY, value int)"
+    Xandra.execute!(conn, statement)
+
+    # verify initial successful request
+    insert_statement = "INSERT INTO #{keyspace}.encoding_error_test (id, value) VALUES (?, ?)"
+    assert {:ok, _} = Xandra.execute(conn, insert_statement, [{"int", 1}, {"int", 1}])
+
+    # trigger encoding error with invalid value type
+    assert_raise FunctionClauseError, fn ->
+      Xandra.execute(conn, insert_statement, [{"int", 2}, {"int", "2"}])
+    end
+
+    # verify connection is in a bad state and rejects new requests
+    assert {:error, %Xandra.ConnectionError{reason: :too_many_concurrent_requests}} =
+             Xandra.execute(conn, insert_statement, [{"int", 2}, {"int", 2}])
+  end
+
   def configure_fun(options, original_start_options, pid, ref) do
     send(pid, {ref, options})
     Keyword.replace!(options, :nodes, original_start_options[:nodes])
