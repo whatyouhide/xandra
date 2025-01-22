@@ -243,8 +243,16 @@ defmodule Xandra.Cluster.Pool do
     # Set the host's status as :up if its state had been previously marked as :down.
     data =
       case data.peers[{address, port}] do
-        %{status: :down} -> set_host_status(data, {address, port}, :up)
-        _ -> data
+        %{status: :down} ->
+          set_host_status(data, {address, port}, :up)
+
+        # github.com/whatyouhide/xandra/issues/371 we want to refresh topology for hosts we don't know
+        nil ->
+          send(data.control_connection, :refresh_topology)
+          data
+
+        _ ->
+          data
       end
 
     data = maybe_start_pools(data)
