@@ -258,11 +258,9 @@ defmodule Xandra.Connection do
   end
 
   defp encode_query(query_mod, query, params, options) do
-    try do
-      {:ok, query_mod.encode(query, params, options)}
-    rescue
-      error -> {:error, {:encoding_failed, error, __STACKTRACE__}}
-    end
+    {:ok, query_mod.encode(query, params, options)}
+  rescue
+    error -> {:error, {:encoding_failed, error, __STACKTRACE__}}
   end
 
   defp receive_response_frame(
