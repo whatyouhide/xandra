@@ -275,6 +275,7 @@ defmodule Xandra do
           {module(), function_name :: atom(), [term()]} | (keyword() -> keyword())
 
   @valid_consistencies [
+    :any,
     :one,
     :two,
     :three,
