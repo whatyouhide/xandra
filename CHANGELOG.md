@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.3
+
+  * Add support for the `ANY` consistency level.
+  * Fix connection crash when a newly-added node would send a `UP` message.
+  * Fix leaking stream IDs on protocol encoding errors.
+
 ## v0.19.2
 
   * Fix an issue where Xandra would not reconnect to any node if *all* nodes went offline.
