@@ -94,7 +94,7 @@ defmodule ErrorsTest do
     test "noproc errors are caught" do
       {:ok, cluster} = start_supervised(Xandra.Cluster.PoolMock)
 
-      assert {:error, %ConnectionError{action: "execute", reason: {:cluster, :pool_closed}}} =
+      assert {:error, %ConnectionError{action: "check out connection", reason: :no_connection_process}} =
                Cluster.execute(cluster, "select * from system.peers")
     end
   end

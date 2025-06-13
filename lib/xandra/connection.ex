@@ -64,72 +64,77 @@ defmodule Xandra.Connection do
     req_alias = Process.monitor(conn_pid, alias: :reply_demonitor)
 
     telemetry_metadata = Keyword.fetch!(options, :telemetry_metadata)
+    try do
+      case :gen_statem.call(conn_pid, {:checkout_state_for_next_request, req_alias}) do
+        {:ok, checked_out_state() = state} ->
+          checked_out_state(
+            protocol_module: protocol_module,
+            stream_id: stream_id,
+            prepared_cache: prepared_cache
+          ) = state
 
-    case :gen_statem.call(conn_pid, {:checkout_state_for_next_request, req_alias}) do
-      {:ok, checked_out_state() = state} ->
-        checked_out_state(
-          protocol_module: protocol_module,
-          stream_id: stream_id,
-          prepared_cache: prepared_cache
-        ) = state
+          metadata =
+            telemetry_meta(state, conn_pid, %{
+              query: prepared,
+              extra_metadata: telemetry_metadata
+            })
 
-        metadata =
-          telemetry_meta(state, conn_pid, %{
-            query: prepared,
-            extra_metadata: telemetry_metadata
-          })
+          options = Keyword.put(options, :stream_id, stream_id)
+          prepared = hydrate_query(prepared, state, options)
+          timeout = Keyword.fetch!(options, :timeout)
 
-        options = Keyword.put(options, :stream_id, stream_id)
-        prepared = hydrate_query(prepared, state, options)
-        timeout = Keyword.fetch!(options, :timeout)
+          case prepared_cache_lookup(prepared_cache, prepared, Keyword.fetch!(options, :force)) do
+            # If the prepared query was in the cache, we emit a Telemetry event and we must
+            # make sure to put the stream ID we checked out back into the pool.
+            {:ok, prepared} ->
+              Process.demonitor(req_alias, [:flush])
+              :telemetry.execute([:xandra, :prepared_cache, :hit], %{}, metadata)
+              :gen_statem.cast(conn_pid, {:release_stream_id, stream_id})
+              {:ok, prepared}
 
-        case prepared_cache_lookup(prepared_cache, prepared, Keyword.fetch!(options, :force)) do
-          # If the prepared query was in the cache, we emit a Telemetry event and we must
-          # make sure to put the stream ID we checked out back into the pool.
-          {:ok, prepared} ->
-            Process.demonitor(req_alias, [:flush])
-            :telemetry.execute([:xandra, :prepared_cache, :hit], %{}, metadata)
-            :gen_statem.cast(conn_pid, {:release_stream_id, stream_id})
-            {:ok, prepared}
+            {:error, cache_status} ->
+              # If the prepared query is not in the cache, we need to prepare it and then
+              # cache it.
+              :telemetry.execute([:xandra, :prepared_cache, cache_status], %{}, metadata)
 
-          {:error, cache_status} ->
-            # If the prepared query is not in the cache, we need to prepare it and then
-            # cache it.
-            :telemetry.execute([:xandra, :prepared_cache, cache_status], %{}, metadata)
+              :telemetry.span([:xandra, :prepare_query], metadata, fn ->
+                with :ok <- send_prepare_frame(state, prepared, options),
+                    {:ok, %Frame{} = frame} <-
+                      receive_response_frame(conn_pid, req_alias, state, timeout) do
+                  case protocol_module.decode_response(frame, prepared, options) do
+                    {%Prepared{} = prepared, warnings} ->
+                      Prepared.Cache.insert(prepared_cache, prepared)
 
-            :telemetry.span([:xandra, :prepare_query], metadata, fn ->
-              with :ok <- send_prepare_frame(state, prepared, options),
-                   {:ok, %Frame{} = frame} <-
-                     receive_response_frame(conn_pid, req_alias, state, timeout) do
-                case protocol_module.decode_response(frame, prepared, options) do
-                  {%Prepared{} = prepared, warnings} ->
-                    Prepared.Cache.insert(prepared_cache, prepared)
+                      maybe_execute_telemetry_for_warnings(
+                        state,
+                        conn_pid,
+                        prepared,
+                        warnings
+                      )
 
-                    maybe_execute_telemetry_for_warnings(
-                      state,
-                      conn_pid,
-                      prepared,
-                      warnings
-                    )
+                      reprepared = cache_status == :hit
+                      {{:ok, prepared}, Map.put(metadata, :reprepared, reprepared)}
 
-                    reprepared = cache_status == :hit
-                    {{:ok, prepared}, Map.put(metadata, :reprepared, reprepared)}
-
-                  %Xandra.Error{} = error ->
-                    {{:error, error}, Map.put(metadata, :reason, error)}
+                    %Xandra.Error{} = error ->
+                      {{:error, error}, Map.put(metadata, :reason, error)}
+                  end
+                else
+                  {:error, reason} ->
+                    Process.demonitor(req_alias, [:flush])
+                    reason = ConnectionError.new("prepare", reason)
+                    {{:error, reason}, Map.put(metadata, :reason, reason)}
                 end
-              else
-                {:error, reason} ->
-                  Process.demonitor(req_alias, [:flush])
-                  reason = ConnectionError.new("prepare", reason)
-                  {{:error, reason}, Map.put(metadata, :reason, reason)}
-              end
-            end)
-        end
+              end)
+          end
 
-      {:error, error} ->
+        {:error, error} ->
+          Process.demonitor(req_alias, [:flush])
+          {:error, ConnectionError.new("check out connection", error)}
+      end
+    catch
+      :exit, {:noproc, _} ->
         Process.demonitor(req_alias, [:flush])
-        {:error, ConnectionError.new("check out connection", error)}
+        {:error, ConnectionError.new("check out connection", :no_connection_process)}
     end
   end
 
@@ -159,70 +164,81 @@ defmodule Xandra.Connection do
     conn_pid = GenServer.whereis(conn)
     req_alias = Process.monitor(conn_pid, alias: :reply_demonitor)
 
-    case :gen_statem.call(conn_pid, {:checkout_state_for_next_request, req_alias}) do
-      {:ok, checked_out_state() = checked_out_state} ->
-        checked_out_state(
-          transport: %Transport{} = transport,
-          protocol_module: protocol_module,
-          stream_id: stream_id
-        ) = checked_out_state
+    try do
+      case :gen_statem.call(conn_pid, {:checkout_state_for_next_request, req_alias}) do
+        {:ok, checked_out_state() = checked_out_state} ->
+          checked_out_state(
+            transport: %Transport{} = transport,
+            protocol_module: protocol_module,
+            stream_id: stream_id
+          ) = checked_out_state
 
-        options = Keyword.put(options, :stream_id, stream_id)
-        query = hydrate_query(query, checked_out_state, options)
-        timeout = Keyword.fetch!(options, :timeout)
+          options = Keyword.put(options, :stream_id, stream_id)
+          query = hydrate_query(query, checked_out_state, options)
+          timeout = Keyword.fetch!(options, :timeout)
 
-        telemetry_meta =
-          checked_out_state
-          |> telemetry_meta(conn_pid, %{query: query})
-          |> Map.put(:extra_metadata, options[:telemetry_metadata])
+          telemetry_meta =
+            checked_out_state
+            |> telemetry_meta(conn_pid, %{query: query})
+            |> Map.put(:extra_metadata, options[:telemetry_metadata])
 
-        # This is in an anonymous function so that we can use it in a Telemetry span.
-        fun = fn ->
-          with {:ok, payload} <- encode_query(query_mod, query, params, options),
-               :ok <- Transport.send(transport, payload),
-               {:ok, %Frame{} = frame} <-
-                 receive_response_frame(conn_pid, req_alias, checked_out_state, timeout) do
-            case protocol_module.decode_response(frame, query, options) do
-              {%_{} = response, warnings} ->
-                maybe_execute_telemetry_for_warnings(checked_out_state, conn_pid, query, warnings)
+          # This is in an anonymous function so that we can use it in a Telemetry span.
+          fun = fn ->
+            with {:ok, payload} <- encode_query(query_mod, query, params, options),
+                 :ok <- Transport.send(transport, payload),
+                 {:ok, %Frame{} = frame} <-
+                   receive_response_frame(conn_pid, req_alias, checked_out_state, timeout) do
+              case protocol_module.decode_response(frame, query, options) do
+                {%_{} = response, warnings} ->
+                  maybe_execute_telemetry_for_warnings(
+                    checked_out_state,
+                    conn_pid,
+                    query,
+                    warnings
+                  )
 
-                # If the query was a "USE keyspace" query, we need to update the current
-                # keyspace for the connection. This is race conditioney, but it's probably ok.
-                case response do
-                  %SetKeyspace{keyspace: keyspace} ->
-                    :gen_statem.cast(conn_pid, {:set_keyspace, keyspace})
+                  # If the query was a "USE keyspace" query, we need to update the current
+                  # keyspace for the connection. This is race conditioney, but it's probably ok.
+                  case response do
+                    %SetKeyspace{keyspace: keyspace} ->
+                      :gen_statem.cast(conn_pid, {:set_keyspace, keyspace})
 
-                  _other ->
-                    :ok
-                end
+                    _other ->
+                      :ok
+                  end
 
-                {:ok, response}
+                  {:ok, response}
 
-              %Xandra.Error{} = error ->
-                {:error, error}
+                %Xandra.Error{} = error ->
+                  {:error, error}
+              end
+            else
+              {:error, {:encoding_failed, error, stacktrace}} ->
+                Process.demonitor(req_alias, [:flush])
+                :gen_statem.cast(conn_pid, {:release_stream_id, stream_id})
+                reraise error, stacktrace
+
+              {:error, reason} ->
+                Process.demonitor(req_alias, [:flush])
+                {:error, ConnectionError.new("execute", reason)}
             end
-          else
-            {:error, {:encoding_failed, error, stacktrace}} ->
-              Process.demonitor(req_alias, [:flush])
-              :gen_statem.cast(conn_pid, {:release_stream_id, stream_id})
-              reraise error, stacktrace
-
-            {:error, reason} ->
-              Process.demonitor(req_alias, [:flush])
-              {:error, ConnectionError.new("execute", reason)}
           end
-        end
 
-        :telemetry.span([:xandra, :execute_query], telemetry_meta, fn ->
-          case fun.() do
-            {:ok, response} -> {{:ok, response}, telemetry_meta}
-            {:error, error} -> {{:error, error}, Map.put(telemetry_meta, :reason, error)}
-          end
-        end)
+          :telemetry.span([:xandra, :execute_query], telemetry_meta, fn ->
+            case fun.() do
+              {:ok, response} -> {{:ok, response}, telemetry_meta}
+              {:error, error} -> {{:error, error}, Map.put(telemetry_meta, :reason, error)}
+            end
+          end)
 
-      {:error, error} ->
+        {:error, error} ->
+          Process.demonitor(req_alias, [:flush])
+          {:error, ConnectionError.new("check out connection", error)}
+      end
+    catch
+      :exit, {:noproc, _details} ->
         Process.demonitor(req_alias, [:flush])
-        {:error, ConnectionError.new("check out connection", error)}
+        {:error, ConnectionError.new("check out connection", :no_connection_process)}
     end
   end
 
