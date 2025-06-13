@@ -64,6 +64,7 @@ defmodule Xandra.Connection do
     req_alias = Process.monitor(conn_pid, alias: :reply_demonitor)
 
     telemetry_metadata = Keyword.fetch!(options, :telemetry_metadata)
+
     try do
       case :gen_statem.call(conn_pid, {:checkout_state_for_next_request, req_alias}) do
         {:ok, checked_out_state() = state} ->
@@ -99,8 +100,8 @@ defmodule Xandra.Connection do
 
               :telemetry.span([:xandra, :prepare_query], metadata, fn ->
                 with :ok <- send_prepare_frame(state, prepared, options),
-                    {:ok, %Frame{} = frame} <-
-                      receive_response_frame(conn_pid, req_alias, state, timeout) do
+                     {:ok, %Frame{} = frame} <-
+                       receive_response_frame(conn_pid, req_alias, state, timeout) do
                   case protocol_module.decode_response(frame, prepared, options) do
                     {%Prepared{} = prepared, warnings} ->
                       Prepared.Cache.insert(prepared_cache, prepared)

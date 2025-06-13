@@ -311,12 +311,14 @@ defmodule XandraTest do
     test "returns an error when the Connection process doesn't exist" do
       dead_pid = dead_pid()
 
-      assert {:error, %ConnectionError{action: "check out connection", reason: :no_connection_process}} =
+      assert {:error,
+              %ConnectionError{action: "check out connection", reason: :no_connection_process}} =
                Xandra.prepare(dead_pid, "SELECT * FROM system.local")
 
       refute_receive({:DOWN, _ref, :process, _pid, :noproc}, 5)
 
-      assert {:error, %ConnectionError{action: "check out connection", reason: :no_connection_process}} =
+      assert {:error,
+              %ConnectionError{action: "check out connection", reason: :no_connection_process}} =
                Xandra.execute(dead_pid, "SELECT * FROM system.local")
 
       refute_receive({:DOWN, _ref, :process, _pid, :noproc}, 5)
