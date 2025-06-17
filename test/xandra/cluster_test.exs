@@ -833,7 +833,6 @@ defmodule Xandra.ClusterTest do
 
     @tag telemetry_events: [
            [:xandra, :cluster, :pool, :started],
-           [:xandra, :cluster, :pool, :stopped],
            [:xandra, :cluster, :change_event],
            [:xandra, :cluster, :discovered_peers]
          ]
@@ -842,7 +841,7 @@ defmodule Xandra.ClusterTest do
       telemetry_ref: telemetry_ref
     } do
       pid = start_supervised!({Cluster, opts})
-      bad_host = %Host{address: {127, 0, 0, 1}, port: 8092}
+      bad_host = %Host{address: {127, 0, 0, 1}, port: 9999}
       assert_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{}, %{}}
 
       assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
