@@ -850,12 +850,12 @@ defmodule Xandra.ClusterTest do
       send(pid, {:host_up, bad_host})
 
       assert_receive {[:xandra, :cluster, :discovered_peers], ^telemetry_ref,
-                      %{peers: [%Host{address: {127, 0, 0, 1}, port: 9052}]}, _cluster_info}
+                      %{peers: [%Host{address: {127, 0, 0, 1}, port: @port}]}, _cluster_info}
 
       send(pid, {:host_down, bad_host})
 
       assert_receive {[:xandra, :cluster, :discovered_peers], ^telemetry_ref,
-                      %{peers: [%Host{address: {127, 0, 0, 1}, port: 9052}]}, _cluster_info}
+                      %{peers: [%Host{address: {127, 0, 0, 1}, port: @port}]}, _cluster_info}
     end
   end
 
