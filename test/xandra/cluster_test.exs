@@ -830,6 +830,33 @@ defmodule Xandra.ClusterTest do
       send(pid, {:host_up, {127, 0, 0, 1}, @port})
       get_state(pid)
     end
+
+    @tag telemetry_events: [
+           [:xandra, :cluster, :pool, :started],
+           [:xandra, :cluster, :change_event],
+           [:xandra, :cluster, :discovered_peers]
+         ]
+    test "receiving change events of a yet unknown host triggers a :refresh_topology", %{
+      base_options: opts,
+      telemetry_ref: telemetry_ref
+    } do
+      pid = start_supervised!({Cluster, opts})
+      bad_host = %Host{address: {127, 0, 0, 1}, port: 9999}
+      assert_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{}, %{}}
+
+      assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
+                      %{event_type: :host_added}}
+
+      send(pid, {:host_up, bad_host})
+
+      assert_receive {[:xandra, :cluster, :discovered_peers], ^telemetry_ref,
+                      %{peers: [%Host{address: {127, 0, 0, 1}, port: @port}]}, _cluster_info}
+
+      send(pid, {:host_down, bad_host})
+
+      assert_receive {[:xandra, :cluster, :discovered_peers], ^telemetry_ref,
+                      %{peers: [%Host{address: {127, 0, 0, 1}, port: @port}]}, _cluster_info}
+    end
   end
 
   describe "resiliency" do

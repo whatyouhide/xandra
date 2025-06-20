@@ -505,6 +505,17 @@ defmodule Xandra.Cluster.Pool do
     end
   end
 
+  # We refresh the topology if we get an unknown host, see: https://github.com/whatyouhide/xandra/issues/384
+  defp set_host_status(
+         %__MODULE__{peers: peers, control_connection: conn} = data,
+         peername,
+         _new_status
+       )
+       when not is_map_key(peers, peername) do
+    send(conn, :refresh_topology)
+    data
+  end
+
   defp set_host_status(data, peername, new_status) when new_status in [:up, :down, :connected] do
     {%Host{} = host, data} =
       get_and_update_in(data.peers[peername], fn %{host: host} = peer ->
