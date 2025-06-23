@@ -184,12 +184,7 @@ defmodule Xandra.Connection do
                  receive_response_frame(conn_pid, req_alias, checked_out_state, timeout) do
             case protocol_module.decode_response(frame, query, options) do
               {%_{} = response, warnings} ->
-                maybe_execute_telemetry_for_warnings(
-                  checked_out_state,
-                  conn_pid,
-                  query,
-                  warnings
-                )
+                maybe_execute_telemetry_for_warnings(checked_out_state, conn_pid, query, warnings)
 
                 # If the query was a "USE keyspace" query, we need to update the current
                 # keyspace for the connection. This is race conditioney, but it's probably ok.
