@@ -315,13 +315,13 @@ defmodule XandraTest do
               %ConnectionError{action: "check out connection", reason: :no_connection_process}} =
                Xandra.prepare(dead_pid, "SELECT * FROM system.local")
 
-      refute_receive({:DOWN, _ref, :process, _pid, :noproc}, 5)
+      refute_receive {:DOWN, _ref, :process, _pid, :noproc}, 5
 
       assert {:error,
               %ConnectionError{action: "check out connection", reason: :no_connection_process}} =
                Xandra.execute(dead_pid, "SELECT * FROM system.local")
 
-      refute_receive({:DOWN, _ref, :process, _pid, :noproc}, 5)
+      refute_receive {:DOWN, _ref, :process, _pid, :noproc}, 5
     end
   end
 
@@ -407,13 +407,11 @@ defmodule XandraTest do
     Keyword.replace!(options, :nodes, original_start_options[:nodes])
   end
 
-  def dead_pid do
-    pid = spawn(fn -> :ok end)
-    ref = Process.monitor(pid)
+  defp dead_pid do
+    {pid, ref} = spawn_monitor(fn -> :ok end)
 
     receive do
-      {:DOWN, ^ref, :process, ^pid, _reason} ->
-        pid
+      {:DOWN, ^ref, _, _, _} -> pid
     end
   end
 end
