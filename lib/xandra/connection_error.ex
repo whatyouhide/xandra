@@ -67,6 +67,10 @@ defmodule Xandra.ConnectionError do
     "connection dropped in the middle of a request"
   end
 
+  defp format_reason(:no_connection_process) do
+    "the connection process doesn't exist"
+  end
+
   defp format_reason({:connection_process_crashed, reason}) do
     "connection process crashed before sending a response with reason: #{inspect(reason)}"
   end

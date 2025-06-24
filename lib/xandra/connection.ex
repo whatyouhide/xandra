@@ -65,7 +65,7 @@ defmodule Xandra.Connection do
 
     telemetry_metadata = Keyword.fetch!(options, :telemetry_metadata)
 
-    case :gen_statem.call(conn_pid, {:checkout_state_for_next_request, req_alias}) do
+    case gen_statem_call_trapping_noproc(conn_pid, {:checkout_state_for_next_request, req_alias}) do
       {:ok, checked_out_state() = state} ->
         checked_out_state(
           protocol_module: protocol_module,
@@ -159,7 +159,7 @@ defmodule Xandra.Connection do
     conn_pid = GenServer.whereis(conn)
     req_alias = Process.monitor(conn_pid, alias: :reply_demonitor)
 
-    case :gen_statem.call(conn_pid, {:checkout_state_for_next_request, req_alias}) do
+    case gen_statem_call_trapping_noproc(conn_pid, {:checkout_state_for_next_request, req_alias}) do
       {:ok, checked_out_state() = checked_out_state} ->
         checked_out_state(
           transport: %Transport{} = transport,
@@ -224,6 +224,12 @@ defmodule Xandra.Connection do
         Process.demonitor(req_alias, [:flush])
         {:error, ConnectionError.new("check out connection", error)}
     end
+  end
+
+  defp gen_statem_call_trapping_noproc(pid, call) do
+    :gen_statem.call(pid, call)
+  catch
+    :exit, {:noproc, _} -> {:error, :no_connection_process}
   end
 
   defp hydrate_query(%Simple{} = simple, checked_out_state() = response, options) do

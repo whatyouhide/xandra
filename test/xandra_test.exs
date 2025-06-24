@@ -307,6 +307,22 @@ defmodule XandraTest do
       assert {:ok, prepared} = Xandra.prepare(conn, "SELECT * FROM system.local")
       assert {:ok, %Xandra.Page{}} = Xandra.execute(conn, prepared, [])
     end
+
+    test "returns an error when the Connection process doesn't exist" do
+      dead_pid = dead_pid()
+
+      assert {:error,
+              %ConnectionError{action: "check out connection", reason: :no_connection_process}} =
+               Xandra.prepare(dead_pid, "SELECT * FROM system.local")
+
+      refute_receive {:DOWN, _ref, :process, _pid, :noproc}, 5
+
+      assert {:error,
+              %ConnectionError{action: "check out connection", reason: :no_connection_process}} =
+               Xandra.execute(dead_pid, "SELECT * FROM system.local")
+
+      refute_receive {:DOWN, _ref, :process, _pid, :noproc}, 5
+    end
   end
 
   describe "failure handling" do
@@ -389,5 +405,13 @@ defmodule XandraTest do
   def configure_fun(options, original_start_options, pid, ref) do
     send(pid, {ref, options})
     Keyword.replace!(options, :nodes, original_start_options[:nodes])
+  end
+
+  defp dead_pid do
+    {pid, ref} = spawn_monitor(fn -> :ok end)
+
+    receive do
+      {:DOWN, ^ref, _, _, _} -> pid
+    end
   end
 end
