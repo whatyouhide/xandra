@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.19.4
+
+  * Refresh topology when we get events for hosts we don't know about.
+  * Catch dead `Xandra.Connection` processes when performing calls.
+
 ## v0.19.3
 
   * Add support for the `ANY` consistency level.
