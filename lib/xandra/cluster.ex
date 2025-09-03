@@ -375,7 +375,9 @@ defmodule Xandra.Cluster do
 
     case pool do
       nil ->
-        action = "checkout from cluster #{inspect(cluster)}"
+        action =
+          "checkout from cluster #{inspect(cluster)}, pools #{inspect(pools)}, token #{inspect(token)}, pool size #{inspect(Keyword.get(options, :pool_size, "not found"))}"
+
         {:error, ConnectionError.new(action, {:cluster, :not_connected})}
 
       _ ->
