@@ -300,6 +300,31 @@ defmodule XandraTest do
       assert {:connected, data} = :sys.get_state(conn)
       assert data.timed_out_ids == %{}
     end
+
+    test "returns an error when the connection shuts down during checkout", %{conn: conn} do
+      # Force the checkout call to queue so we can kill the conn mid-checkout.
+      :ok = :sys.suspend(conn)
+
+      parent = self()
+      ref = make_ref()
+
+      spawn(fn ->
+        result = Xandra.execute(conn, "SELECT * FROM system.local", [])
+        send(parent, {ref, result})
+      end)
+
+      # Ensure the call is blocked before we terminate the connection.
+      wait_for_checkout_call(conn)
+      Process.exit(conn, :shutdown)
+
+      assert_receive {^ref,
+                      {:error,
+                       %ConnectionError{
+                         action: "check out connection",
+                         reason: :connection_shutdown
+                       }}},
+                     1_000
+    end
   end
 
   describe "prepare/3" do
@@ -322,6 +347,31 @@ defmodule XandraTest do
                Xandra.execute(dead_pid, "SELECT * FROM system.local")
 
       refute_receive {:DOWN, _ref, :process, _pid, :noproc}, 5
+    end
+
+    test "returns an error when the connection shuts down during checkout", %{conn: conn} do
+      # Force the checkout call to queue so we can kill the conn mid-checkout.
+      :ok = :sys.suspend(conn)
+
+      parent = self()
+      ref = make_ref()
+
+      spawn(fn ->
+        result = Xandra.prepare(conn, "SELECT * FROM system.local")
+        send(parent, {ref, result})
+      end)
+
+      # Ensure the call is blocked before we terminate the connection.
+      wait_for_checkout_call(conn)
+      Process.exit(conn, :shutdown)
+
+      assert_receive {^ref,
+                      {:error,
+                       %ConnectionError{
+                         action: "check out connection",
+                         reason: :connection_shutdown
+                       }}},
+                     1_000
     end
   end
 
@@ -412,6 +462,20 @@ defmodule XandraTest do
 
     receive do
       {:DOWN, ^ref, _, _, _} -> pid
+    end
+  end
+
+  defp wait_for_checkout_call(conn, attempts \\ 25)
+  defp wait_for_checkout_call(_conn, 0), do: flunk("checkout call not queued")
+
+  defp wait_for_checkout_call(conn, attempts) do
+    {:messages, messages} = :erlang.process_info(conn, :messages)
+
+    if Enum.any?(messages, &match?({:"$gen_call", _, {:checkout_state_for_next_request, _}}, &1)) do
+      :ok
+    else
+      Process.sleep(10)
+      wait_for_checkout_call(conn, attempts - 1)
     end
   end
 end
