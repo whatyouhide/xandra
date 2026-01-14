@@ -21,6 +21,9 @@ defmodule Xandra.ConnectionError do
     * `{:connection_process_crashed, reason}` - the connection process crashed before
       sending a response.
 
+    * `:connection_shutdown` - the connection process shut down while checking out a
+      request state. Only *since 0.19.5*.
+
     * `:timeout` - the connection timed out while waiting for a response from the
       server.
 
@@ -69,6 +72,10 @@ defmodule Xandra.ConnectionError do
 
   defp format_reason(:no_connection_process) do
     "the connection process doesn't exist"
+  end
+
+  defp format_reason(:connection_shutdown) do
+    "the connection process shut down during request checkout"
   end
 
   defp format_reason({:connection_process_crashed, reason}) do

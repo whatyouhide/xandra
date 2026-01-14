@@ -230,6 +230,9 @@ defmodule Xandra.Connection do
     :gen_statem.call(pid, call)
   catch
     :exit, {:noproc, _} -> {:error, :no_connection_process}
+    :exit, :shutdown -> {:error, :connection_shutdown}
+    :exit, {:shutdown, _} -> {:error, :connection_shutdown}
+    :exit, {:shutdown, _, _} -> {:error, :connection_shutdown}
   end
 
   defp hydrate_query(%Simple{} = simple, checked_out_state() = response, options) do
