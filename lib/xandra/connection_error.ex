@@ -22,7 +22,7 @@ defmodule Xandra.ConnectionError do
       sending a response.
 
     * `:connection_shutdown` - the connection process shut down while checking out a
-      request state.
+      request state. Only *since 0.19.5*.
 
     * `:timeout` - the connection timed out while waiting for a response from the
       server.
