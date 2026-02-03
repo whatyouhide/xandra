@@ -620,6 +620,13 @@ defmodule Xandra.Cluster.Pool do
     end
   end
 
+  # If the checkout queue is already nil, the timeout already flushed it.
+  # Just cancel the timeout (idempotent) and return.
+  defp flush_checkout_queue(%__MODULE__{checkout_queue: nil} = data) do
+    cancel_timeout_action = timeout_action(:flush_checkout_queue, :infinity)
+    {data, [cancel_timeout_action]}
+  end
+
   defp flush_checkout_queue(%__MODULE__{} = data) do
     {checkout_queue(queue: queue), data} = get_and_update_in(data.checkout_queue, &{&1, nil})
 
