@@ -5,6 +5,13 @@ on:
     tags:
       - v*
 
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-to-hex-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Publish to Hex
@@ -13,16 +20,40 @@ jobs:
 
     steps:
       - name: Checkout this repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Start Docker and wait for it to be up
+        run: |
+          docker compose up --detach --build
+          ./test/docker/health-check-services.sh
 
       - name: Install Erlang and Elixir
-        uses: erlef/setup-beam@v1
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           otp-version: "27.2"
           elixir-version: "1.18"
 
-      - name: Fetch and compile dependencies
-        run: mix do deps.get + deps.compile
+      - name: Cache dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: deps
+          key: |
+            ${{ runner.os }}-publish-otp27.2-elixir1.18-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-publish-otp27.2-elixir1.18-
+
+      - name: Fetch dependencies
+        run: mix deps.get --only test
+
+      - name: Run tests for Cassandra and Scylla (without coverage)
+        run: mix test.all --exclude encryption --exclude toxiproxy
+
+      - name: Build package
+        run: mix hex.build
+
+      - name: Dump Docker logs on failure
+        uses: jwalton/gh-docker-logs@54a2a89cd6a2c929525f26ca67a7a4857a5dc1d9 # v1.0.1
+        if: failure()
 
       - name: Publish to Hex
         run: mix hex.publish --yes
