@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - v*
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -144,3 +146,12 @@ jobs:
       - name: Dump Docker logs on failure
         uses: jwalton/gh-docker-logs@54a2a89cd6a2c929525f26ca67a7a4857a5dc1d9 # v1.0.1
         if: failure()
+
+  publish:
+    name: Publish to Hex
+    needs:
+      - lint
+      - test
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    uses: ./.github/workflows/publish-to-hex.yml
+    secrets: inherit
