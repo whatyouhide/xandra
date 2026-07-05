@@ -9,8 +9,6 @@ on:
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   MIX_ENV: test
-  LINT_OTP_VERSION: "27.2"
-  LINT_ELIXIR_VERSION: "1.18"
 
 jobs:
   lint:
@@ -26,10 +24,11 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install OTP and Elixir
+        id: setup_beam
         uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
-          otp-version: ${{ env.LINT_OTP_VERSION }}
-          elixir-version: ${{ env.LINT_ELIXIR_VERSION }}
+          otp-version: "27.2"
+          elixir-version: "1.18"
 
       - name: Cache dependencies
         id: cache-deps
@@ -39,9 +38,9 @@ jobs:
             deps
             _build
           key: |
-            ${{ runner.os }}-lint-otp${{ env.LINT_OTP_VERSION }}-elixir${{ env.LINT_ELIXIR_VERSION }}-${{ hashFiles('**/mix.lock') }}
+            ${{ runner.os }}-lint-otp${{ steps.setup_beam.outputs['otp-version'] }}-elixir${{ steps.setup_beam.outputs['elixir-version'] }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-lint-otp${{ env.LINT_OTP_VERSION }}-elixir${{ env.LINT_ELIXIR_VERSION }}-
+            ${{ runner.os }}-lint-otp${{ steps.setup_beam.outputs['otp-version'] }}-elixir${{ steps.setup_beam.outputs['elixir-version'] }}-
 
       - name: Install and compile dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
@@ -63,9 +62,9 @@ jobs:
         with:
           path: plts
           key: |
-            ${{ runner.os }}-plt-otp${{ env.LINT_OTP_VERSION }}-elixir${{ env.LINT_ELIXIR_VERSION }}-${{ hashFiles('**/mix.lock') }}
+            ${{ runner.os }}-plt-otp${{ steps.setup_beam.outputs['otp-version'] }}-elixir${{ steps.setup_beam.outputs['elixir-version'] }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-plt-otp${{ env.LINT_OTP_VERSION }}-elixir${{ env.LINT_ELIXIR_VERSION }}-
+            ${{ runner.os }}-plt-otp${{ steps.setup_beam.outputs['otp-version'] }}-elixir${{ steps.setup_beam.outputs['elixir-version'] }}-
 
       # Create PLTs if no cache was found
       - name: Create PLTs
