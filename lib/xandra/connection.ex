@@ -435,10 +435,8 @@ defmodule Xandra.Connection do
     transport = %Transport{
       module: if(options[:encryption], do: :ssl, else: :gen_tcp),
       options:
-        options
-        |> Keyword.get(:transport_options, [])
-        |> Keyword.put_new(:buffer, @default_transport_buffer_size)
-        |> Keyword.merge(@forced_transport_options)
+        [buffer: @default_transport_buffer_size] ++
+          Keyword.get(options, :transport_options, []) ++ @forced_transport_options
     }
 
     data = %__MODULE__{

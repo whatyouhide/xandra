@@ -104,7 +104,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
     transport = %Transport{
       module: module,
-      options: Keyword.merge(transport_opts, @forced_transport_options)
+      options: transport_opts ++ @forced_transport_options
     }
 
     {transport, connection_opts}
