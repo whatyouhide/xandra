@@ -9,7 +9,7 @@ defmodule Xandra.Cluster.Pool do
 
   @behaviour :gen_statem
 
-  alias Xandra.Cluster.{ConnectionPool, Host, LoadBalancingPolicy}
+  alias Xandra.Cluster.{ConnectionPool, Host, LoadBalancingPolicy, TokenRing}
   alias Xandra.GenStatemHelpers
 
   require Record
@@ -52,10 +52,12 @@ defmodule Xandra.Cluster.Pool do
     :gen_statem.stop(pid, reason, timeout)
   end
 
-  @spec checkout(:gen_statem.server_ref()) ::
+  # `token` is the partition token of the query being executed (if it could be
+  # computed), used for token-aware routing.
+  @spec checkout(:gen_statem.server_ref(), integer() | nil) ::
           {:ok, [{pid(), Host.t()}, ...]} | {:error, :empty}
-  def checkout(pid) do
-    :gen_statem.call(pid, :checkout)
+  def checkout(pid, token \\ nil) when is_integer(token) or is_nil(token) do
+    :gen_statem.call(pid, {:checkout, token})
   end
 
   @spec connected_hosts(:gen_statem.server_ref()) :: [Host.t()]
@@ -96,6 +98,16 @@ defmodule Xandra.Cluster.Pool do
 
     # The number of connections in each pool to a node.
     :pool_size,
+
+    # Whether to enable token-aware routing.
+    :token_aware_routing,
+
+    # The ring of tokens of the cluster ({token, peername} entries sorted in a
+    # tuple), or nil if token-aware routing is off or the ring is unknown.
+    :token_ring,
+
+    # The partitioner used by the cluster, as reported in system.local.
+    :partitioner,
 
     # Erlang alias to send back the ":connected" message to make :sync_connect work.
     # This is nil if :sync_connect was not used.
@@ -161,6 +173,7 @@ defmodule Xandra.Cluster.Pool do
       target_pools: Keyword.fetch!(cluster_opts, :target_pools),
       name: Keyword.get(cluster_opts, :name),
       pool_size: Keyword.fetch!(cluster_opts, :pool_size),
+      token_aware_routing: Keyword.fetch!(cluster_opts, :token_aware_routing),
       pool_supervisor: pool_sup,
       refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval),
       checkout_queue: checkout_queue(queue: :queue.new(), max_size: checkout_queue_max_size),
@@ -198,17 +211,25 @@ defmodule Xandra.Cluster.Pool do
 
   def handle_event({:timeout, :flush_checkout_queue}, nil, :never_connected, %__MODULE__{} = data) do
     {checkout_queue(queue: queue), data} = get_and_update_in(data.checkout_queue, &{&1, nil})
-    reply_actions = for from <- :queue.to_list(queue), do: {:reply, from, {:error, :empty}}
+
+    reply_actions =
+      for {from, _token} <- :queue.to_list(queue), do: {:reply, from, {:error, :empty}}
+
     {:keep_state, data, reply_actions}
   end
 
   # We have never connected, but we already flushed once, so we won't keep adding requests to
   # the queue.
-  def handle_event({:call, from}, :checkout, :never_connected, %__MODULE__{checkout_queue: nil}) do
+  def handle_event(
+        {:call, from},
+        {:checkout, _token},
+        :never_connected,
+        %__MODULE__{checkout_queue: nil}
+      ) do
     {:keep_state_and_data, {:reply, from, {:error, :empty}}}
   end
 
-  def handle_event({:call, from}, :checkout, :never_connected, %__MODULE__{} = data) do
+  def handle_event({:call, from}, {:checkout, token}, :never_connected, %__MODULE__{} = data) do
     checkout_queue(queue: queue, max_size: max_size) = data.checkout_queue
 
     if :queue.len(queue) == max_size do
@@ -217,15 +238,15 @@ defmodule Xandra.Cluster.Pool do
       data =
         put_in(
           data.checkout_queue,
-          checkout_queue(data.checkout_queue, queue: :queue.in(from, queue))
+          checkout_queue(data.checkout_queue, queue: :queue.in({from, token}, queue))
         )
 
       {:keep_state, data}
     end
   end
 
-  def handle_event({:call, from}, :checkout, :has_connected_once, %__MODULE__{} = data) do
-    {data, reply_action} = checkout_connection(data, from)
+  def handle_event({:call, from}, {:checkout, token}, :has_connected_once, %__MODULE__{} = data) do
+    {data, reply_action} = checkout_connection(data, from, token)
     {:keep_state, data, reply_action}
   end
 
@@ -292,6 +313,19 @@ defmodule Xandra.Cluster.Pool do
         handle_host_added(data_acc, Map.fetch!(new_peers_map, peername))
       end)
 
+    # For the peers that we already knew about, refresh their info (their
+    # tokens could change, for example), so that the token ring stays accurate.
+    data =
+      update_in(data.peers, fn peers ->
+        Map.new(peers, fn {peername, info} ->
+          case Map.fetch(new_peers_map, peername) do
+            {:ok, %Host{} = new_host} -> {peername, %{info | host: new_host}}
+            :error -> {peername, info}
+          end
+        end)
+      end)
+
+    data = update_token_ring(data)
     data = maybe_start_pools(data)
     {:keep_state, data}
   end
@@ -405,11 +439,18 @@ defmodule Xandra.Cluster.Pool do
 
   ## Helpers
 
-  defp checkout_connection(data, from) do
+  defp checkout_connection(data, from, token) do
+    # Only use the query's token when token-aware routing is enabled, so that
+    # (with the default configuration) nothing changes in how queries are
+    # distributed over nodes and connections.
+    token = if data.token_aware_routing, do: token
+
     {query_plan, data} =
       get_and_update_in(data.load_balancing_state, fn lb_state ->
         data.load_balancing_module.query_plan(lb_state)
       end)
+
+    query_plan = maybe_prioritize_token_owner(data, query_plan, token)
 
     # Find all connected hosts
     connected_hosts =
@@ -427,6 +468,44 @@ defmodule Xandra.Cluster.Pool do
       end
 
     {data, {:reply, from, reply}}
+  end
+
+  # With token-aware routing, move the host that is the primary replica for the
+  # query's token to the front of the query plan, so that (when we have a
+  # connection to it) the query is executed on a replica that owns the data.
+  defp maybe_prioritize_token_owner(%__MODULE__{token_ring: ring}, query_plan, token)
+       when is_nil(ring) or is_nil(token) do
+    query_plan
+  end
+
+  defp maybe_prioritize_token_owner(%__MODULE__{token_ring: ring}, query_plan, token) do
+    owner_peername = TokenRing.owner_peername(ring, token)
+
+    case Enum.split_with(query_plan, &(Host.to_peername(&1) == owner_peername)) do
+      {[], _query_plan} -> query_plan
+      {owners, rest} -> owners ++ rest
+    end
+  end
+
+  # Rebuilds the token ring from the current set of peers. We only support
+  # token-aware routing with the Murmur3 partitioner (the default in both
+  # Cassandra and ScyllaDB, and the only one ScyllaDB supports).
+  defp update_token_ring(%__MODULE__{token_aware_routing: false} = data), do: data
+
+  defp update_token_ring(%__MODULE__{} = data) do
+    hosts = for {_peername, %{host: %Host{} = host}} <- data.peers, do: host
+
+    partitioner =
+      Enum.find_value(hosts, data.partitioner, fn %Host{partitioner: partitioner} ->
+        partitioner
+      end)
+
+    token_ring =
+      if is_binary(partitioner) and String.ends_with?(partitioner, "Murmur3Partitioner") do
+        TokenRing.build(hosts)
+      end
+
+    %__MODULE__{data | partitioner: partitioner, token_ring: token_ring}
   end
 
   defp handle_host_added(%__MODULE__{} = data, %Host{} = host) do
@@ -633,8 +712,8 @@ defmodule Xandra.Cluster.Pool do
     {checkout_queue(queue: queue), data} = get_and_update_in(data.checkout_queue, &{&1, nil})
 
     {reply_actions, data} =
-      Enum.map_reduce(:queue.to_list(queue), data, fn from, data ->
-        {data, reply_action} = checkout_connection(data, from)
+      Enum.map_reduce(:queue.to_list(queue), data, fn {from, token}, data ->
+        {data, reply_action} = checkout_connection(data, from, token)
         {reply_action, data}
       end)
 

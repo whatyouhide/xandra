@@ -79,6 +79,16 @@ defmodule Xandra.Cluster do
     * `Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin` - it will execute the
       queries on the nodes in a round robin manner, prioritizing the current DC.
 
+  ## Token-aware Routing
+
+  On top of the load-balancing policy, `Xandra.Cluster` supports **token-aware
+  routing** (see the `:token_aware_routing` option in `start_link/1`). When enabled,
+  executing a *prepared* query whose partition key values are fully bound routes the
+  query to the node that is the primary replica for the query's partition (when Xandra
+  has a connection to it). This saves a network hop between the coordinator node and
+  the replica. Token-aware routing is best-effort and falls back to the load-balancing
+  policy whenever the token cannot be computed or the replica is not connected.
+
   ## Disconnections and Reconnections
 
   `Xandra.Cluster` also supports nodes disconnecting and reconnecting: if Xandra
@@ -98,7 +108,7 @@ defmodule Xandra.Cluster do
   """
 
   alias Xandra.{Batch, ConnectionError, Prepared, RetryStrategy}
-  alias Xandra.Cluster.{ControlConnection, Host, Pool}
+  alias Xandra.Cluster.{ControlConnection, Host, Pool, Token}
 
   @typedoc """
   A Xandra cluster.
@@ -245,6 +255,21 @@ defmodule Xandra.Cluster do
       default: 1,
       doc: """
       The number of connections to open to each node in the cluster. *Available since v0.18.0*.
+      """
+    ],
+    token_aware_routing: [
+      type: :boolean,
+      default: false,
+      doc: """
+      Whether to enable *token-aware routing*. When enabled, executing a prepared query
+      whose partition key values are fully bound routes the query to the node that is the
+      *primary replica* for the query's partition (when Xandra has a connection to it),
+      instead of a node picked by the load-balancing policy alone. This saves a network
+      hop between coordinator and replica for most queries. Token-aware routing is
+      best-effort: if the replica is not connected (or the token cannot be computed, for
+      example for simple queries, batches, or with native protocol v3), the query falls
+      back to the load-balancing policy. Only the Murmur3 partitioner (the default in both
+      Cassandra and ScyllaDB) is supported. *Available since v0.20.0*.
       """
     ],
     debug: [
@@ -433,6 +458,7 @@ defmodule Xandra.Cluster do
     with_conn_and_retrying(
       cluster,
       options,
+      _token = nil,
       fn conn ->
         Xandra.execute(conn, batch, options_without_retry_strategy)
       end
@@ -457,6 +483,7 @@ defmodule Xandra.Cluster do
     with_conn_and_retrying(
       cluster,
       options,
+      routing_token(query, params),
       fn conn ->
         Xandra.execute(conn, query, params, options_without_retry_strategy)
       end
@@ -534,8 +561,8 @@ defmodule Xandra.Cluster do
     Pool.connected_hosts(cluster)
   end
 
-  defp with_conn_and_retrying(cluster, options, fun) when is_function(fun, 1) do
-    case Pool.checkout(cluster) do
+  defp with_conn_and_retrying(cluster, options, token, fun) when is_function(fun, 1) do
+    case Pool.checkout(cluster, token) do
       {:error, :empty} ->
         action = "checkout from cluster #{inspect(cluster)}"
         {:error, ConnectionError.new(action, {:cluster, :not_connected})}
@@ -544,6 +571,20 @@ defmodule Xandra.Cluster do
         RetryStrategy.run_on_cluster(options, connected_hosts, fun)
     end
   end
+
+  # Computes the partition token of the query for token-aware routing. This is
+  # best-effort: for queries where we can't compute the token (simple queries
+  # and batches have no partition key metadata, and native protocol v3 doesn't
+  # return partition key indices), we return nil and routing falls back to the
+  # load-balancing policy.
+  defp routing_token(%Prepared{} = prepared, params) do
+    case Token.compute(prepared, params) do
+      {:ok, token} -> token
+      :error -> nil
+    end
+  end
+
+  defp routing_token(_query, _params), do: nil
 
   defp with_conn(cluster, fun) do
     case Pool.checkout(cluster) do
