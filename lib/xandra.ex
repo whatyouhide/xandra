@@ -229,6 +229,7 @@ defmodule Xandra do
     Page,
     PageStream,
     RetryStrategy,
+    SchemaChange,
     Simple
   }
 
@@ -450,7 +451,7 @@ defmodule Xandra do
       doc: """
       Options to forward to the socket transport. If the `:encryption` option is `true`,
       then the transport is SSL (see the Erlang `:ssl` module) otherwise it's
-      TCP (see the `:gen_tcp` Erlang module). The `:buffer` option (`t:pos_integer/0`), 
+      TCP (see the `:gen_tcp` Erlang module). The `:buffer` option (`t:pos_integer/0`),
       which controls the size of the user level buffer in use by the active mode
       socket, defaults to `1_000_000` bytes.
       """
@@ -978,10 +979,31 @@ defmodule Xandra do
       doc: """
       The timeout for this call, in milliseconds.
       """
+    ],
+    wait_for_schema_agreement: [
+      type: :timeout,
+      doc: """
+      The maximum time to wait (in milliseconds, or `:infinity`) for **schema agreement**
+      across the cluster after executing a query that results in a schema change
+      (see `Xandra.SchemaChange`). If the schema change is successful, Xandra polls
+      the cluster's schema versions (through the same connection that executed
+      the query) until all nodes agree on the same schema version or until this
+      timeout expires. If the timeout expires, this function returns `{:error, error}`
+      where `error` is a `Xandra.ConnectionError` struct with reason
+      `:schema_agreement_timeout`; keep in mind that the schema change itself was
+      still executed successfully. This option has no effect on queries whose result
+      is not a schema change. By default this option is not present, which means Xandra
+      **doesn't wait** for schema agreement. See the ["Waiting for schema
+      agreement" section](#execute/4-waiting-for-schema-agreement) below.
+      *Available since v0.20.0*.
+      """
     ]
   ]
 
   @execute_opts_keys Keyword.keys(@execute_opts_schema)
+
+  # How long to sleep between consecutive schema agreement checks.
+  @schema_agreement_polling_interval 200
 
   @doc """
   Executes the given simple query or prepared query with the given parameters.
@@ -1110,6 +1132,42 @@ defmodule Xandra do
   to use `stream_pages!/4`. Also note that if the `:paging_state` option is set to `nil`,
   meaning there are no more pages to fetch, an `ArgumentError` exception will be raised;
   be sure to check for this with `page.paging_state != nil`.
+
+  ## Waiting for Schema Agreement
+
+  When you execute queries that change the schema (such as `CREATE TABLE` or
+  `ALTER TABLE` queries), the nodes in a Cassandra cluster need to *agree* on the
+  new version of the schema. Until they do, subsequent queries might fail because
+  different nodes have different views of the schema. This matters, for example,
+  when running migrations.
+
+  If you pass the `:wait_for_schema_agreement` option and the result of the query
+  is a schema change, this function polls the schema versions reported by the
+  cluster (using the `system.local` and `system.peers` tables, through the same
+  connection that executed the query) until all nodes report the same schema
+  version, or until the given timeout expires. Nodes that report no schema version
+  are ignored.
+
+  For example, when running a migration:
+
+      statement = "ALTER TABLE users ADD email text"
+
+      case Xandra.execute(conn, statement, [], wait_for_schema_agreement: to_timeout(second: 10)) do
+        {:ok, %Xandra.SchemaChange{}} ->
+          # The cluster reached schema agreement, safe to move on.
+          :ok
+
+        {:error, %Xandra.ConnectionError{reason: :schema_agreement_timeout}} ->
+          # The schema change was executed, but the cluster didn't reach
+          # agreement within ten seconds.
+          :timeout
+
+        {:error, error} ->
+          {:error, error}
+      end
+
+  This option has no effect on queries that don't result in a schema change, so
+  it's safe to pass it to any query.
 
   ## Tracing
 
@@ -1256,10 +1314,88 @@ defmodule Xandra do
     {xandra_opts, other_opts} = Keyword.split(options, @execute_opts_keys)
     options = NimbleOptions.validate!(xandra_opts, @execute_opts_schema) ++ other_opts
 
-    RetryStrategy.run_on_single_conn(options, fn ->
-      execute_without_retrying(conn, query, params, options)
-    end)
+    result =
+      RetryStrategy.run_on_single_conn(options, fn ->
+        execute_without_retrying(conn, query, params, options)
+      end)
+
+    maybe_wait_for_schema_agreement(conn, result, options)
   end
+
+  defp maybe_wait_for_schema_agreement(conn, {:ok, %SchemaChange{}} = result, options) do
+    case Keyword.fetch(options, :wait_for_schema_agreement) do
+      {:ok, timeout} ->
+        deadline =
+          if timeout == :infinity do
+            :infinity
+          else
+            System.monotonic_time(:millisecond) + timeout
+          end
+
+        with :ok <- wait_for_schema_agreement(conn, deadline), do: result
+
+      :error ->
+        result
+    end
+  end
+
+  defp maybe_wait_for_schema_agreement(_conn, result, _options) do
+    result
+  end
+
+  defp wait_for_schema_agreement(conn, deadline) do
+    remaining = remaining_timeout(deadline)
+
+    if remaining != :infinity and remaining <= 0 do
+      {:error, ConnectionError.new("wait for schema agreement", :schema_agreement_timeout)}
+    else
+      case fetch_schema_versions(conn, remaining) do
+        {:ok, versions} ->
+          case Enum.uniq(versions) do
+            versions when length(versions) <= 1 ->
+              :ok
+
+            _multiple_versions ->
+              sleep_before_next_schema_agreement_check(deadline)
+              wait_for_schema_agreement(conn, deadline)
+          end
+
+        {:error, error} ->
+          {:error, error}
+      end
+    end
+  end
+
+  defp fetch_schema_versions(conn, timeout) do
+    options = [timeout: timeout]
+
+    with {:ok, %Page{} = local_page} <-
+           execute(conn, "SELECT schema_version FROM system.local", [], options),
+         {:ok, %Page{} = peers_page} <-
+           execute(conn, "SELECT schema_version FROM system.peers", [], options) do
+      {:ok, schema_versions_from_page(local_page) ++ schema_versions_from_page(peers_page)}
+    else
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  # The keys in each row are strings or atoms depending on the :atom_keys option
+  # that the connection was started with. Nodes with a null schema version are ignored.
+  defp schema_versions_from_page(%Page{} = page) do
+    for row <- page,
+        version = Map.get(row, "schema_version", Map.get(row, :schema_version)),
+        do: version
+  end
+
+  defp sleep_before_next_schema_agreement_check(deadline) do
+    case remaining_timeout(deadline) do
+      :infinity -> Process.sleep(@schema_agreement_polling_interval)
+      remaining -> Process.sleep(min(@schema_agreement_polling_interval, max(remaining, 0)))
+    end
+  end
+
+  defp remaining_timeout(:infinity), do: :infinity
+  defp remaining_timeout(deadline), do: deadline - System.monotonic_time(:millisecond)
 
   defp execute_without_retrying(conn, %Batch{} = batch, nil, options) do
     case Connection.execute(conn, batch, nil, options) do
