@@ -38,6 +38,11 @@ defmodule Xandra.Cluster.Host do
     * `:tokens` - the tokens held by the host, as found in the `system.local` or
       `system.peers` table.
 
+    * `:partitioner` - the partitioner used by the cluster, as found in the
+      `system.local` table. This is only present for the host that the control
+      connection is connected to (the `system.peers` table doesn't have this
+      information), and is `nil` for all other hosts.
+
   """
   @typedoc since: "0.15.0"
   @type t() :: %__MODULE__{
@@ -48,7 +53,8 @@ defmodule Xandra.Cluster.Host do
           rack: String.t(),
           release_version: String.t(),
           schema_version: String.t(),
-          tokens: MapSet.t(String.t())
+          tokens: MapSet.t(String.t()),
+          partitioner: String.t() | nil
         }
 
   @doc """
@@ -65,7 +71,8 @@ defmodule Xandra.Cluster.Host do
     :rack,
     :release_version,
     :schema_version,
-    :tokens
+    :tokens,
+    :partitioner
   ]
 
   @doc """
