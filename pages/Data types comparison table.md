@@ -16,6 +16,8 @@ This page contains a table that compares the data types used by Cassandra with t
 | `decimal`           | `{value, scale}` (if `decimal_format: :tuple`), where `value * 10^(-1 * scale)`  |
 | `decimal`           | `t:Decimal.t/0` (if `decimal_format: :decimal`)                                  |
 | `double`            | `t:float/0`                                                                      |
+| `duration`          | `t:Duration.t/0` (if `duration_format: :duration`)                              |
+| `duration`          | `{months, days, nanoseconds}` (if `duration_format: :tuple`)                     |
 | `float`             | `t:float/0`                                                                      |
 | `inet`              | `t::inet.ip_address/0`                                                           |
 | `int`               | `t:integer/0`                                                                    |

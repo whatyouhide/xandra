@@ -14,6 +14,7 @@ defmodule Xandra.TypeParser do
     :boolean,
     :decimal,
     :double,
+    :duration,
     :float,
     :inet,
     :timestamp,

@@ -10,6 +10,7 @@ defmodule DataTypesTest do
                                      :date,
                                      :decimal,
                                      :double,
+                                     :duration,
                                      :float,
                                      :inet,
                                      :int,
@@ -609,5 +610,47 @@ defmodule DataTypesTest do
     assert Map.fetch!(row, "id") == 1
     assert Map.fetch!(row, "addr") == addr
     assert Map.fetch!(row, "addrv6") == addrv6
+  end
+
+  # The "duration" type is only supported in native protocol v5.
+  @tag :skip_for_native_protocol_v4
+  @tag :skip_for_native_protocol_v3
+  test "duration type", %{conn: conn} do
+    Xandra.execute!(conn, "CREATE TABLE durations (id int PRIMARY KEY, value duration)")
+
+    insert = "INSERT INTO durations (id, value) VALUES (?, ?)"
+
+    # A NULL duration.
+    Xandra.execute!(conn, insert, [{"int", 1}, {"duration", nil}])
+    assert [row] = Enum.to_list(Xandra.execute!(conn, "SELECT * FROM durations WHERE id = 1"))
+    assert Map.fetch!(row, "value") == nil
+
+    # A duration can be inserted as a {months, days, nanoseconds} tuple, which preserves the
+    # full nanosecond precision. The :tuple format reads it back in the same shape.
+    tuple = {14, 3, 5_000_123_000}
+    Xandra.execute!(conn, insert, [{"int", 2}, {"duration", tuple}])
+
+    page =
+      Xandra.execute!(conn, "SELECT * FROM durations WHERE id = 2", [], duration_format: :tuple)
+
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "value") == tuple
+
+    # By default, durations are decoded as Duration structs.
+    page = Xandra.execute!(conn, "SELECT * FROM durations WHERE id = 2")
+    assert [row] = Enum.to_list(page)
+
+    assert Map.fetch!(row, "value") ==
+             Duration.new!(month: 14, day: 3, second: 5, microsecond: {123, 6})
+
+    # Durations can also be inserted as Duration structs.
+    duration = Duration.new!(month: 1, day: 2, hour: 1, minute: 30)
+    Xandra.execute!(conn, insert, [{"int", 3}, {"duration", duration}])
+
+    page =
+      Xandra.execute!(conn, "SELECT * FROM durations WHERE id = 3", [], duration_format: :tuple)
+
+    assert [row] = Enum.to_list(page)
+    assert Map.fetch!(row, "value") == {1, 2, 5_400_000_000_000}
   end
 end

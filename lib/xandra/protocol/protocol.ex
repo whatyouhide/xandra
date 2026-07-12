@@ -454,6 +454,10 @@ defmodule Xandra.Protocol do
     {:decimal, [Keyword.get(options, :decimal_format, :tuple)]}
   end
 
+  def rewrite_type(:duration, options) do
+    {:duration, [Keyword.get(options, :duration_format, :duration)]}
+  end
+
   def rewrite_type(:uuid, options) do
     {:uuid, [Keyword.get(options, :uuid_format, :string)]}
   end
@@ -556,6 +560,54 @@ defmodule Xandra.Protocol do
   def varint_byte_size(value) when value > 127, do: 1 + varint_byte_size(value >>> 8)
   def varint_byte_size(value) when value < -128, do: varint_byte_size(-value - 1)
   def varint_byte_size(_value), do: 1
+
+  # Encodes a signed integer as a protocol "[vint]", that is, a zig-zag encoded value
+  # serialized as an unsigned variable-length integer. Used by the "duration" type.
+  @spec encode_vint(integer()) :: binary()
+  def encode_vint(value) when is_integer(value) do
+    encode_unsigned_vint(bxor(value <<< 1, value >>> 63))
+  end
+
+  # Decodes a protocol "[vint]" (see encode_vint/1) from the start of a binary,
+  # returning the decoded signed integer and the rest of the buffer.
+  @spec decode_vint(binary()) :: {integer(), binary()}
+  def decode_vint(<<buffer::bits>>) do
+    {unsigned, rest} = decode_unsigned_vint(buffer)
+    {bxor(unsigned >>> 1, -(unsigned &&& 1)), rest}
+  end
+
+  defp encode_unsigned_vint(value) when value < 0x80 do
+    <<value::8>>
+  end
+
+  defp encode_unsigned_vint(value) do
+    extra_bytes = unsigned_vint_extra_bytes(value)
+    leading_ones = 0xFF <<< (8 - extra_bytes) &&& 0xFF
+    <<leading_ones ||| value >>> (8 * extra_bytes)::8, value::size(8 * extra_bytes)>>
+  end
+
+  # The number of bytes following the first one. Values up to 7 bits fit in a single
+  # byte, and each extra byte adds room for 7 more bits, up to 8 extra bytes (64 bits).
+  defp unsigned_vint_extra_bytes(value) do
+    Enum.find(0..7, 8, fn extra_bytes -> value < 1 <<< (7 * (extra_bytes + 1)) end)
+  end
+
+  defp decode_unsigned_vint(<<first_byte::8, rest::bits>>) do
+    extra_bytes = unsigned_vint_leading_ones(first_byte, 0)
+    <<low_bits::size(8 * extra_bytes), rest::bits>> = rest
+    high_bits = first_byte &&& 0xFF >>> extra_bytes
+    {high_bits <<< (8 * extra_bytes) ||| low_bits, rest}
+  end
+
+  defp unsigned_vint_leading_ones(_byte, 8), do: 8
+
+  defp unsigned_vint_leading_ones(byte, count) do
+    if (byte &&& 0x80 >>> count) != 0 do
+      unsigned_vint_leading_ones(byte, count + 1)
+    else
+      count
+    end
+  end
 
   @spec decode_paging_state(bitstring(), Xandra.Page.t(), 0 | 1) :: {Xandra.Page.t(), bitstring()}
   def decode_paging_state(buffer, page, has_more_pages)

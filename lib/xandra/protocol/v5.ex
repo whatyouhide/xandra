@@ -310,6 +310,30 @@ defmodule Xandra.Protocol.V5 do
     <<value::64-float>>
   end
 
+  defp encode_value(:duration, {months, days, nanoseconds})
+       when is_integer(months) and is_integer(days) and is_integer(nanoseconds) do
+    [Proto.encode_vint(months), Proto.encode_vint(days), Proto.encode_vint(nanoseconds)]
+  end
+
+  defp encode_value(:duration, %Duration{} = duration) do
+    %Duration{
+      year: year,
+      month: month,
+      week: week,
+      day: day,
+      hour: hour,
+      minute: minute,
+      second: second,
+      microsecond: {microsecond, _precision}
+    } = duration
+
+    months = year * 12 + month
+    days = week * 7 + day
+    nanoseconds = (((hour * 60 + minute) * 60 + second) * 1_000_000 + microsecond) * 1_000
+
+    encode_value(:duration, {months, days, nanoseconds})
+  end
+
   defp encode_value(:float, value) when is_float(value) do
     <<value::32-float>>
   end
@@ -727,6 +751,17 @@ defmodule Xandra.Protocol.V5 do
     end
   end
 
+  defp decode_value(<<_::8, _::bits>> = data, {:duration, [format]}) do
+    {months, rest} = Proto.decode_vint(data)
+    {days, rest} = Proto.decode_vint(rest)
+    {nanoseconds, <<>>} = Proto.decode_vint(rest)
+
+    case format do
+      :tuple -> {months, days, nanoseconds}
+      :duration -> duration_from_components(months, days, nanoseconds)
+    end
+  end
+
   defp decode_value(<<count::32-signed, data::bits>>, {:list, [type]}) do
     decode_value_list(data, count, type, [])
   end
@@ -762,6 +797,15 @@ defmodule Xandra.Protocol.V5 do
     size = bit_size(data)
     <<value::size(size)-signed>> = data
     value
+  end
+
+  defp duration_from_components(months, days, nanoseconds) do
+    %Duration{
+      month: months,
+      day: days,
+      second: div(nanoseconds, 1_000_000_000),
+      microsecond: {div(rem(nanoseconds, 1_000_000_000), 1_000), 6}
+    }
   end
 
   defp decode_value_udt(<<>>, fields, acc) do
@@ -912,6 +956,10 @@ defmodule Xandra.Protocol.V5 do
 
   defp decode_type(<<0x0014::16, buffer::bits>>) do
     {:tinyint, buffer}
+  end
+
+  defp decode_type(<<0x0015::16, buffer::bits>>) do
+    {:duration, buffer}
   end
 
   defp decode_type(<<0x0020::16, buffer::bits>>) do
