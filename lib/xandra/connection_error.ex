@@ -27,6 +27,10 @@ defmodule Xandra.ConnectionError do
     * `:timeout` - the connection timed out while waiting for a response from the
       server.
 
+    * `:schema_agreement_timeout` - the cluster didn't reach **schema agreement** within
+      the timeout specified through the `:wait_for_schema_agreement` option (see
+      `Xandra.execute/4`). Only *since v0.20.0*.
+
     * `{:cluster, :not_connected}` - this happens when a `Xandra.Cluster`-based
       connection is not connected to any node (for example, because all the
       specified nodes are currently down). See the documentation for
@@ -84,6 +88,10 @@ defmodule Xandra.ConnectionError do
 
   defp format_reason(:timeout) do
     "request timeout"
+  end
+
+  defp format_reason(:schema_agreement_timeout) do
+    "the cluster didn't reach schema agreement within the given timeout"
   end
 
   defp format_reason(:too_many_concurrent_requests) do
