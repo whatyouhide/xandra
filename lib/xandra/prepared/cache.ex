@@ -16,6 +16,7 @@ defmodule Xandra.Prepared.Cache do
       statement: statement,
       id: id,
       bound_columns: bound_columns,
+      pk_indices: pk_indices,
       result_columns: result_columns,
       result_metadata_id: result_metadata_id,
       keyspace: keyspace
@@ -23,7 +24,7 @@ defmodule Xandra.Prepared.Cache do
 
     key = {statement, keyspace}
 
-    :ets.insert(table, {key, id, bound_columns, result_columns, result_metadata_id})
+    :ets.insert(table, {key, id, bound_columns, pk_indices, result_columns, result_metadata_id})
     :ok
   end
 
@@ -32,11 +33,12 @@ defmodule Xandra.Prepared.Cache do
     key = {statement, keyspace}
 
     case :ets.lookup(table, key) do
-      [{^key, id, bound_columns, result_columns, result_metadata_id}] ->
+      [{^key, id, bound_columns, pk_indices, result_columns, result_metadata_id}] ->
         prepared = %Prepared{
           prepared
           | id: id,
             bound_columns: bound_columns,
+            pk_indices: pk_indices,
             result_columns: result_columns,
             result_metadata_id: result_metadata_id
         }

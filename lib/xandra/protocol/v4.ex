@@ -237,6 +237,14 @@ defmodule Xandra.Protocol.V4 do
     encode_bound_values(columns, values, acc)
   end
 
+  # Encodes a single value to its raw binary representation (without the length
+  # prefix). Used to compute routing keys for token-aware routing.
+  @doc false
+  @spec encode_value_for_partition_key(term(), term()) :: binary()
+  def encode_value_for_partition_key(type, value) do
+    IO.iodata_to_binary(encode_value(type, value))
+  end
+
   defp encode_query_value({type, value}) when is_binary(type) do
     encode_query_value(TypeParser.parse(type), value)
   end
@@ -522,13 +530,17 @@ defmodule Xandra.Protocol.V4 do
        ) do
     atom_keys? = Keyword.fetch!(options, :atom_keys?)
     decode_from_proto_type(id <- buffer, "[string]")
-    {%{columns: bound_columns}, buffer} = decode_metadata_prepared(buffer, %Page{}, atom_keys?)
+
+    {%{columns: bound_columns}, pk_indices, buffer} =
+      decode_metadata_prepared(buffer, %Page{}, atom_keys?)
+
     {%{columns: result_columns}, <<>>} = decode_metadata(buffer, %Page{}, atom_keys?)
 
     %Prepared{
       prepared
       | id: id,
         bound_columns: bound_columns,
+        pk_indices: pk_indices,
         result_columns: result_columns,
         tracing_id: tracing_id,
         response_custom_payload: custom_payload
@@ -590,8 +602,8 @@ defmodule Xandra.Protocol.V4 do
        ) do
     <<_::31, global_table_spec::1>> = flags
 
-    # partition key bind indices are ignored as we do not support token-aware routing
-    {_indices, buffer} = Proto.decode_pk_index(buffer, pk_count, [])
+    # Partition key bind indices, used for token-aware routing.
+    {pk_indices, buffer} = Proto.decode_pk_index(buffer, pk_count, [])
 
     cond do
       global_table_spec == 1 ->
@@ -601,11 +613,11 @@ defmodule Xandra.Protocol.V4 do
         {columns, buffer} =
           decode_columns(buffer, column_count, {keyspace, table}, atom_keys?, [])
 
-        {%{page | columns: columns}, buffer}
+        {%{page | columns: columns}, pk_indices, buffer}
 
       true ->
         {columns, buffer} = decode_columns(buffer, column_count, nil, atom_keys?, [])
-        {%{page | columns: columns}, buffer}
+        {%{page | columns: columns}, pk_indices, buffer}
     end
   end
 
