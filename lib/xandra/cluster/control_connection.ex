@@ -336,7 +336,7 @@ defmodule Xandra.Cluster.ControlConnection do
   """
 
   @select_local_query """
-  SELECT data_center, host_id, rack, release_version, schema_version, tokens
+  SELECT data_center, host_id, rack, release_version, schema_version, tokens, partitioner
   FROM system.local
   """
 
@@ -408,7 +408,8 @@ defmodule Xandra.Cluster.ControlConnection do
       rack: Map.fetch!(peer_attrs, "rack"),
       release_version: Map.fetch!(peer_attrs, "release_version"),
       schema_version: Map.fetch!(peer_attrs, "schema_version"),
-      tokens: Map.fetch!(peer_attrs, "tokens")
+      tokens: Map.fetch!(peer_attrs, "tokens"),
+      partitioner: Map.get(peer_attrs, "partitioner")
     }
   end
 
@@ -421,7 +422,8 @@ defmodule Xandra.Cluster.ControlConnection do
       rack: Map.fetch!(peer_attrs, "rack"),
       release_version: Map.fetch!(peer_attrs, "release_version"),
       schema_version: Map.fetch!(peer_attrs, "schema_version"),
-      tokens: Map.fetch!(peer_attrs, "tokens")
+      tokens: Map.fetch!(peer_attrs, "tokens"),
+      partitioner: Map.get(peer_attrs, "partitioner")
     }
   end
 
