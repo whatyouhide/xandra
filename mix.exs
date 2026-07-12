@@ -31,13 +31,6 @@ defmodule Xandra.Mixfile do
       ],
 
       # Testing
-      preferred_cli_env: [
-        "test.cassandra": :test,
-        "test.scylladb": :test,
-        "test.all": :test,
-        "test.all_with_html_coverage": :test,
-        "coveralls.html": :test
-      ],
       test_coverage: [tool: ExCoveralls],
 
       # Hex
@@ -61,6 +54,18 @@ defmodule Xandra.Mixfile do
 
   def application() do
     [extra_applications: [:logger]]
+  end
+
+  def cli() do
+    [
+      preferred_envs: [
+        "test.cassandra": :test,
+        "test.scylladb": :test,
+        "test.all": :test,
+        "test.all_with_html_coverage": :test,
+        "coveralls.html": :test
+      ]
+    ]
   end
 
   defp elixirc_paths(:test), do: ["test/support"] ++ elixirc_paths(:dev)

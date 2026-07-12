@@ -315,7 +315,8 @@ defmodule Xandra.Cluster.ControlConnection do
            _rest_fun = & &1
          ) do
       {:ok, frames, rest} ->
-        state =
+        %__MODULE__{} =
+          state =
           Enum.reduce(frames, state, fn frame, acc ->
             change_event = state.protocol_module.decode_response(frame)
             handle_change_event(acc, change_event)

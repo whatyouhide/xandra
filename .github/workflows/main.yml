@@ -29,8 +29,8 @@ jobs:
         id: setup_beam
         uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
-          otp-version: "27.2"
-          elixir-version: "1.18"
+          otp-version: "29.0.3"
+          elixir-version: "1.20"
 
       - name: Cache dependencies
         id: cache-deps
@@ -94,8 +94,8 @@ jobs:
           - otp: "25.3"
             elixir: "1.17.3"
           # Latest supported versions.
-          - otp: "27.2"
-            elixir: "1.18"
+          - otp: "29.0.3"
+            elixir: "1.20"
 
         server_versions:
           - cassandra: "3"

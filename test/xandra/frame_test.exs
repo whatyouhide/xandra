@@ -185,7 +185,7 @@ defmodule Xandra.FrameTest do
       payload = :crypto.strong_rand_bytes(Enum.random(0..10))
       payload_size = byte_size(payload)
 
-      <<header::6-bytes, ^payload::size(payload_size)-binary, _payload_crc::4-bytes>> =
+      <<header::6-bytes, ^payload::size(^payload_size)-binary, _payload_crc::4-bytes>> =
         payload
         |> Frame.encode_v5_wrappers(_compressor = nil)
         |> IO.iodata_to_binary()
@@ -230,7 +230,7 @@ defmodule Xandra.FrameTest do
 
       compressed_payload_size = byte_size(compressed_payload)
 
-      <<header::8-bytes, ^compressed_payload::size(compressed_payload_size)-bytes,
+      <<header::8-bytes, ^compressed_payload::size(^compressed_payload_size)-bytes,
         _payload_crc::4-bytes>> =
         payload
         |> Frame.encode_v5_wrappers(_compressor = LZ4Compressor)

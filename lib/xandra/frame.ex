@@ -365,7 +365,7 @@ defmodule Xandra.Frame do
 
       {:not_self_contained, payload, fetch_state} ->
         v4_header_length = header_length()
-        <<v4_header::size(v4_header_length)-bytes, v4_payload_start::binary>> = payload
+        <<v4_header::size(^v4_header_length)-bytes, v4_payload_start::binary>> = payload
 
         decode_v5_wrapper_not_self_contained(
           fetch_bytes_fun,
@@ -420,10 +420,10 @@ defmodule Xandra.Frame do
     {:ok, header, fetch_state} =
       fetch_bytes_fun!(fetch_bytes_fun, fetch_state, header_size_in_bytes)
 
-    <<header_contents::size(header_contents_size)-bytes,
+    <<header_contents::size(^header_contents_size)-bytes,
       crc24_of_header::@v5_header_crc_bytes-unit(8)-integer-little>> = header
 
-    <<header_data::size(header_contents_size)-unit(8)-integer-little>> = header_contents
+    <<header_data::size(^header_contents_size)-unit(8)-integer-little>> = header_contents
 
     if crc24_of_header != CRC.crc24(header_contents) do
       raise "mismatching CRC24 for header"
@@ -444,7 +444,7 @@ defmodule Xandra.Frame do
 
     self_contained? = (header_data &&& 1) == 1
 
-    {:ok, <<payload::size(payload_length)-bytes, crc32_of_payload::32-integer-little>>,
+    {:ok, <<payload::size(^payload_length)-bytes, crc32_of_payload::32-integer-little>>,
      fetch_state} = fetch_bytes_fun!(fetch_bytes_fun, fetch_state, payload_length + 4)
 
     if crc32_of_payload != CRC.crc32(payload) do
@@ -487,10 +487,10 @@ defmodule Xandra.Frame do
   def decode_from_binary(binary, compressor) when is_binary(binary) and is_atom(compressor) do
     header_length = header_length()
 
-    <<header::size(header_length)-binary, rest::binary>> = binary
+    <<header::size(^header_length)-binary, rest::binary>> = binary
 
     body_length = body_length(header)
-    <<body::size(body_length)-binary, rest::binary>> = rest
+    <<body::size(^body_length)-binary, rest::binary>> = rest
 
     {decode(header, body, compressor), rest}
   end
@@ -524,7 +524,7 @@ defmodule Xandra.Frame do
           {:ok, binary(), binary()} | {:error, :insufficient_data}
   def fetch_bytes_from_binary(binary, byte_count) do
     case binary do
-      <<frame_bytes::binary-size(byte_count), rest::binary>> -> {:ok, frame_bytes, rest}
+      <<frame_bytes::binary-size(^byte_count), rest::binary>> -> {:ok, frame_bytes, rest}
       _other -> {:error, :insufficient_data}
     end
   end
@@ -550,7 +550,7 @@ defmodule Xandra.Frame do
 
   defp chunk_binary(binary, chunk_size, acc) do
     case binary do
-      <<chunk::size(chunk_size)-binary, rest::binary>> ->
+      <<chunk::size(^chunk_size)-binary, rest::binary>> ->
         chunk_binary(rest, chunk_size, [chunk | acc])
 
       <<chunk::binary>> when byte_size(chunk) < chunk_size ->
