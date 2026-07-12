@@ -44,6 +44,7 @@ defmodule Xandra.Frame do
           | :supported
           | :result
           | :event
+          | :auth_challenge
           | :auth_success
 
   @type t(kind) :: %__MODULE__{kind: kind}
@@ -72,6 +73,7 @@ defmodule Xandra.Frame do
     supported: 0x06,
     result: 0x08,
     event: 0x0C,
+    auth_challenge: 0x0E,
     auth_success: 0x10
   ]
 

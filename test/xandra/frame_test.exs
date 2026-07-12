@@ -296,6 +296,7 @@ defmodule Xandra.FrameTest do
       :supported,
       :result,
       :event,
+      :auth_challenge,
       :auth_success
     ])
   end
