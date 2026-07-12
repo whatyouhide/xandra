@@ -112,6 +112,12 @@ jobs:
       - name: Clone the repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
+      # Each ScyllaDB shard reserves Async I/O request capacity, and with the
+      # multi-shard scylladb_shard_aware service the kernel's default limit is
+      # not enough for all the ScyllaDB containers to boot.
+      - name: Increase the Async I/O capacity for ScyllaDB
+        run: sudo sysctl -w fs.aio-max-nr=1048576
+
       - name: Start Docker and wait for it to be up
         run: |
           docker compose up --detach --build

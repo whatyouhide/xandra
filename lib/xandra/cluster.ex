@@ -79,7 +79,7 @@ defmodule Xandra.Cluster do
     * `Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin` - it will execute the
       queries on the nodes in a round robin manner, prioritizing the current DC.
 
-  ## Token-aware Routing
+  ## Token-aware Routing and ScyllaDB Shard Awareness
 
   On top of the load-balancing policy, `Xandra.Cluster` supports **token-aware
   routing** (see the `:token_aware_routing` option in `start_link/1`). When enabled,
@@ -88,6 +88,16 @@ defmodule Xandra.Cluster do
   has a connection to it). This saves a network hop between the coordinator node and
   the replica. Token-aware routing is best-effort and falls back to the load-balancing
   policy whenever the token cannot be computed or the replica is not connected.
+
+  When connected to [ScyllaDB](https://www.scylladb.com), Xandra additionally supports
+  **shard awareness** (see the `:shard_awareness` option in `start_link/1`). ScyllaDB
+  shards data *per CPU core* within each node. With shard awareness enabled, Xandra
+  maintains at least one connection per shard to each node, and (combined with
+  token-aware routing) executes each query on a connection to the exact CPU core
+  that owns the queried partition. For this to work, ScyllaDB's *shard-aware port*
+  (`19042` by default, `19142` for TLS) must be reachable, and the network path must
+  not rewrite TCP source ports (as NAT often does): Xandra detects both conditions
+  and falls back to regular connections when they're not met.
 
   ## Disconnections and Reconnections
 
@@ -270,6 +280,22 @@ defmodule Xandra.Cluster do
       example for simple queries, batches, or with native protocol v3), the query falls
       back to the load-balancing policy. Only the Murmur3 partitioner (the default in both
       Cassandra and ScyllaDB) is supported. *Available since v0.20.0*.
+      """
+    ],
+    shard_awareness: [
+      type: :boolean,
+      default: false,
+      doc: """
+      Whether to enable *shard awareness* for ScyllaDB clusters. ScyllaDB shards data
+      per CPU core within each node. When this option is enabled and Xandra detects that
+      it's connected to ScyllaDB, it maintains at least one connection *per shard* to each
+      node (by connecting through [ScyllaDB's shard-aware
+      port](https://docs.scylladb.com/manual/stable/kb/per-shard-concurrency.html), which
+      must be reachable, `19042` by default). Combined with `:token_aware_routing`, this
+      routes each query directly to the CPU core that owns the data, skipping cross-shard
+      hops. This option has no effect when connecting to Cassandra, and it's best-effort:
+      if the shard-aware port is not reachable or source ports get rewritten by NAT,
+      Xandra falls back to the regular pool behavior. *Available since v0.20.0*.
       """
     ],
     debug: [
