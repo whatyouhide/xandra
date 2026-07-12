@@ -143,20 +143,82 @@ defmodule Xandra.Connection.Utils do
       |> protocol_module.encode_request(requested_options, options)
       |> Frame.encode(protocol_module)
 
+    with :ok <- Transport.send(transport, payload) do
+      recv_auth_response(transport, protocol_module, compressor, options)
+    else
+      {:error, reason} ->
+        {:error, ConnectionError.new("authenticate connection", reason)}
+    end
+  end
+
+  defp recv_auth_response(transport, protocol_module, compressor, options) do
     protocol_format = Xandra.Protocol.frame_protocol_format(protocol_module)
 
-    with :ok <- Transport.send(transport, payload),
-         {:ok, frame, rest} <- recv_frame(transport, protocol_format, compressor) do
+    with {:ok, frame, rest} <- recv_frame(transport, protocol_format, compressor) do
       "" = rest
 
       case frame do
-        %Frame{kind: :auth_success} -> :ok
-        %Frame{kind: :error} -> {:error, protocol_module.decode_response(frame)}
-        _ -> raise "protocol violation, got unexpected frame: #{inspect(frame)}"
+        %Frame{kind: :auth_success} ->
+          :ok
+
+        %Frame{kind: :auth_challenge} = frame ->
+          respond_to_auth_challenge(frame, transport, protocol_module, compressor, options)
+
+        %Frame{kind: :error} ->
+          {:error, protocol_module.decode_response(frame)}
+
+        _ ->
+          raise "protocol violation, got unexpected frame: #{inspect(frame)}"
       end
     else
       {:error, reason} ->
         {:error, ConnectionError.new("authenticate connection", reason)}
     end
+  end
+
+  defp respond_to_auth_challenge(
+         %Frame{} = frame,
+         transport,
+         protocol_module,
+         compressor,
+         options
+       ) do
+    {authenticator, auth_options} = Keyword.fetch!(options, :authentication)
+
+    if not Code.ensure_loaded?(authenticator) or
+         not function_exported?(authenticator, :challenge_response_body, 2) do
+      raise "server sent an AUTH_CHALLENGE message but the authenticator " <>
+              "#{inspect(authenticator)} is not loaded or does not implement the optional " <>
+              "challenge_response_body/2 callback"
+    end
+
+    challenge = decode_auth_challenge_token(frame.body)
+    body = authenticator.challenge_response_body(challenge, auth_options)
+
+    payload =
+      %Frame{
+        Frame.new(:auth_response, _options = [])
+        | body: [<<IO.iodata_length(body)::32>>, body]
+      }
+      |> Frame.encode(protocol_module)
+
+    with :ok <- Transport.send(transport, payload) do
+      recv_auth_response(transport, protocol_module, compressor, options)
+    else
+      {:error, reason} ->
+        {:error, ConnectionError.new("authenticate connection", reason)}
+    end
+  end
+
+  # The body of an AUTH_CHALLENGE message is a single [bytes] value, that is, a
+  # 32-bit signed length followed by that many bytes. A negative length means a
+  # null token.
+  defp decode_auth_challenge_token(<<size::32-signed, token::binary-size(size)>>)
+       when size >= 0 do
+    token
+  end
+
+  defp decode_auth_challenge_token(<<_size::32-signed>>) do
+    nil
   end
 end
