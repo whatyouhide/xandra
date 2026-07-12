@@ -934,6 +934,18 @@ defmodule Xandra do
       you'll have to add the `:decimal` dependency to your application explicitly.
       """
     ],
+    duration_format: [
+      type: {:in, [:duration, :tuple]},
+      default: :duration,
+      doc: """
+      Controls the format in which durations are returned. When set to `:duration`, a
+      `Duration` struct is returned. When set to `:tuple`, a `{months, days, nanoseconds}`
+      tuple of integers is returned. The `:tuple` format is the only one that can represent
+      the full nanosecond precision of Cassandra durations, since `Duration` structs only go
+      down to microsecond precision. Only supported in native protocol v5.
+      *Available since v0.20.0*.
+      """
+    ],
     uuid_format: [
       type: {:in, [:binary, :string]},
       default: :string,

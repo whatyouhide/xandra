@@ -131,4 +131,29 @@ defmodule Xandra.ProtocolTest do
       end
     end
   end
+
+  describe "encode_vint/1 and decode_vint/1" do
+    test "encode small values on a single byte" do
+      assert IO.iodata_to_binary(encode_vint(0)) == <<0>>
+      # Zig-zag encoding sends small negative values as small unsigned ones.
+      assert IO.iodata_to_binary(encode_vint(-1)) == <<1>>
+      assert IO.iodata_to_binary(encode_vint(1)) == <<2>>
+      assert IO.iodata_to_binary(encode_vint(63)) == <<126>>
+    end
+
+    test "round-trip specific values" do
+      for value <- [0, 1, -1, 63, 64, -64, 127, 128, -128, 300, -300, 1_000_000_000_000] do
+        encoded = IO.iodata_to_binary(encode_vint(value))
+        assert decode_vint(<<encoded::binary, "rest">>) == {value, "rest"}
+      end
+    end
+
+    property "round-trip any 64-bit signed integer" do
+      check all value <- integer(-9_223_372_036_854_775_808..9_223_372_036_854_775_807) do
+        encoded = IO.iodata_to_binary(encode_vint(value))
+        assert byte_size(encoded) in 1..9
+        assert decode_vint(encoded) == {value, <<>>}
+      end
+    end
+  end
 end

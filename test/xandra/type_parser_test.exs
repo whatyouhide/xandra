@@ -6,6 +6,7 @@ defmodule Xandra.TypeParserTest do
   test "parse/1 with valid types" do
     assert parse("uuid") == :uuid
     assert parse("text") == :text
+    assert parse("duration") == :duration
     assert parse("list<int>") == {:list, [:int]}
     assert parse("map<int, text>") == {:map, [:int, :text]}
     assert parse("set<map<int, list<text>>>") == {:set, [{:map, [:int, {:list, [:text]}]}]}
