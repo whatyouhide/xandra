@@ -152,7 +152,10 @@ defmodule Xandra.ClusterTest do
       assert {:ok, _conn} = Xandra.Cluster.start_link(nodes: ["::1"], transport_options: [:inet6])
 
       assert {:ok, _conn} =
-               Xandra.Cluster.start_link(nodes: ["::1:9042"], transport_options: [:inet6])
+               Xandra.Cluster.start_link(
+                 nodes: ["2001:db8::1:9042"],
+                 transport_options: [:inet6]
+               )
 
       assert {:ok, _conn} =
                Xandra.Cluster.start_link(nodes: ["[::1]"], transport_options: [:inet6])

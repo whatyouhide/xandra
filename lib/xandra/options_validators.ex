@@ -30,40 +30,61 @@ defmodule Xandra.OptionsValidators do
 
   @spec validate_node(term()) :: {:ok, {String.t(), integer()}} | {:error, String.t()}
   def validate_node(value) when is_binary(value) do
-    # Remove surrounding square brackets from IPv6 values.
-    value = value |> String.replace("[", "") |> String.replace("]", "")
+    case Regex.run(~r/^\[([^\]]+)\](?::([^:]+))?$/, value) do
+      [_, address] ->
+        validate_ipv6_node(address, 9042, value)
 
-    {address, port} =
-      case String.split(value, ":") do
-        # FQDN or IPv4.
-        [address] ->
-          {address, "9042"}
+      [_, address, port] ->
+        with {:ok, port} <- validate_port(port, value) do
+          validate_ipv6_node(address, port, value)
+        end
 
-        # FQDN:PORT or IPv4:PORT. IPv6 addresses have to have at least 2 colons.
-        [address, port] ->
-          {address, port}
-
-        # IPv6.
-        splits ->
-          # Our IPv6 address can either parse as a valid address or have the
-          # additional port suffix.
-          with {:ok, {_, _, _, _, _, _, _, _}} <-
-                 :inet.parse_address(value |> String.to_charlist()) do
-            {value, "9042"}
-          else
-            _ -> {splits |> Enum.drop(-1) |> Enum.join(":"), List.last(splits)}
-          end
-      end
-
-    case Integer.parse(port) do
-      {port, ""} when port in 0..65535 -> {:ok, {address, port}}
-      {port, ""} -> {:error, "invalid port (outside of the 0..65535 range): #{port}"}
-      _ -> {:error, "invalid node: #{inspect(value)}"}
+      nil ->
+        validate_unbracketed_node(value)
     end
   end
 
   def validate_node(other) do
     {:error, "expected node to be a \"<host>:<port>\" string, got: #{inspect(other)}"}
+  end
+
+  defp validate_unbracketed_node(value) do
+    cond do
+      String.contains?(value, ["[", "]"]) ->
+        {:error, "invalid node: #{inspect(value)}"}
+
+      ipv6_address?(value) ->
+        {:ok, {value, 9042}}
+
+      true ->
+        case String.split(value, ":", parts: 2) do
+          [address, port] ->
+            with {:ok, port} <- validate_port(port, value), do: {:ok, {address, port}}
+
+          [address] ->
+            {:ok, {address, 9042}}
+        end
+    end
+  end
+
+  defp validate_ipv6_node(address, port, original_value) do
+    if ipv6_address?(address) do
+      {:ok, {address, port}}
+    else
+      {:error, "invalid node: #{inspect(original_value)}"}
+    end
+  end
+
+  defp ipv6_address?(address) do
+    match?({:ok, {_, _, _, _, _, _, _, _}}, :inet.parse_address(String.to_charlist(address)))
+  end
+
+  defp validate_port(port, original_value) do
+    case Integer.parse(port) do
+      {port, ""} when port in 0..65535 -> {:ok, port}
+      {port, ""} -> {:error, "invalid port (outside of the 0..65535 range): #{port}"}
+      _ -> {:error, "invalid node: #{inspect(original_value)}"}
+    end
   end
 
   @spec validate_contact_node(term()) :: {:ok, Host.t()} | {:error, String.t()}

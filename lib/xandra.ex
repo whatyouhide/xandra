@@ -420,8 +420,9 @@ defmodule Xandra do
       The Cassandra node to connect to. This option is a list for consistency with
       `Xandra.Cluster`, but if using `Xandra` directly, it can only contain a single node.
       Such node can have the form `"ADDRESS:PORT"`, or `"ADDRESS"` (port defaults to
-      `9042`). See the documentation for `Xandra.Cluster` for more information on
-      connecting to multiple nodes.
+      `9042`). IPv6 addresses with an explicit port must use bracket notation, such as
+      `"[::1]:9042"`. See the documentation for `Xandra.Cluster` for more information
+      on connecting to multiple nodes.
       """
     ],
     protocol_version: [
@@ -444,7 +445,7 @@ defmodule Xandra do
       """
     ],
     transport_options: [
-      type: {:or, [:keyword_list, {:list, :any}]},
+      type: {:list, :any},
       doc: """
       Options to forward to the socket transport. If the `:encryption` option is `true`,
       then the transport is SSL (see the Erlang `:ssl` module) otherwise it's
