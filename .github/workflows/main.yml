@@ -92,7 +92,7 @@ jobs:
         runtime:
           # Oldest supported versions.
           - otp: "25.3"
-            elixir: "1.15.4"
+            elixir: "1.17.3"
           # Latest supported versions.
           - otp: "27.2"
             elixir: "1.18"
