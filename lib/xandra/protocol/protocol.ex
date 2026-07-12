@@ -75,7 +75,7 @@ defmodule Xandra.Protocol do
 
     quote do
       unquote(decode_from_type(size, buffer, "[short]"))
-      <<unquote(value)::bytes-size(unquote(size)), unquote(buffer)::bits>> = unquote(buffer)
+      <<unquote(value)::bytes-size(^unquote(size)), unquote(buffer)::bits>> = unquote(buffer)
     end
   end
 
@@ -148,7 +148,7 @@ defmodule Xandra.Protocol do
 
     quote do
       unquote(decode_from_type(size, buffer, "[byte]"))
-      <<unquote(raw_ip)::bytes-size(unquote(size)), unquote(buffer)::bits>> = unquote(buffer)
+      <<unquote(raw_ip)::bytes-size(^unquote(size)), unquote(buffer)::bits>> = unquote(buffer)
       unquote(decode_from_type(port, buffer, "[int]"))
       unquote(value) = {unquote(__MODULE__).decode_raw_inet(unquote(raw_ip)), unquote(port)}
     end
@@ -163,7 +163,7 @@ defmodule Xandra.Protocol do
       unquote(decode_from_type(size, buffer, "[int]"))
 
       if unquote(size) >= 0 do
-        <<unquote(value)::size(unquote(size))-bytes, unquote(buffer)::bits>> = unquote(buffer)
+        <<unquote(value)::size(^unquote(size))-bytes, unquote(buffer)::bits>> = unquote(buffer)
         unquote(block)
       else
         unquote(value) = nil
@@ -187,7 +187,7 @@ defmodule Xandra.Protocol do
         unquote(value) = nil
         unquote(block)
       else
-        <<unquote(value)::bytes-size(unquote(int)), unquote(buffer)::bits>> = unquote(buffer)
+        <<unquote(value)::bytes-size(^unquote(int)), unquote(buffer)::bits>> = unquote(buffer)
         unquote(block)
       end
     end
@@ -594,7 +594,7 @@ defmodule Xandra.Protocol do
 
   defp decode_unsigned_vint(<<first_byte::8, rest::bits>>) do
     extra_bytes = unsigned_vint_leading_ones(first_byte, 0)
-    <<low_bits::size(8 * extra_bytes), rest::bits>> = rest
+    <<low_bits::size(8 * ^extra_bytes), rest::bits>> = rest
     high_bits = first_byte &&& 0xFF >>> extra_bytes
     {high_bits <<< (8 * extra_bytes) ||| low_bits, rest}
   end

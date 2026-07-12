@@ -1232,7 +1232,7 @@ defmodule Xandra do
 
   defp reprepare_query(conn, %Prepared{statement: statement, values: values}, prepare_options) do
     case prepare(conn, statement, prepare_options) do
-      {:ok, reprepared} -> %Prepared{reprepared | values: values}
+      {:ok, %Prepared{} = reprepared} -> %Prepared{reprepared | values: values}
       other -> throw({:reprepare_error, other})
     end
   end

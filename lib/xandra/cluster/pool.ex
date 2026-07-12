@@ -555,8 +555,10 @@ defmodule Xandra.Cluster.Pool do
     if Enum.count(data.peers, fn {_peername, %{pool_pid: pid}} -> is_pid(pid) end) == target do
       data
     else
+      load_balancing_module = data.load_balancing_module
+
       {hosts_plan, data} =
-        get_and_update_in(data.load_balancing_state, &data.load_balancing_module.hosts_plan/1)
+        get_and_update_in(data.load_balancing_state, &load_balancing_module.hosts_plan/1)
 
       Enum.reduce_while(hosts_plan, data, fn %Host{} = host, data_acc ->
         case Map.fetch!(data_acc.peers, Host.to_peername(host)) do
@@ -578,7 +580,7 @@ defmodule Xandra.Cluster.Pool do
   end
 
   defp start_control_connection(%__MODULE__{} = data) do
-    {lbp_hosts, data} =
+    {lbp_hosts, %__MODULE__{} = data} =
       get_and_update_in(data.load_balancing_state, fn lb_state ->
         data.load_balancing_module.query_plan(lb_state)
       end)

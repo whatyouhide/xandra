@@ -648,7 +648,7 @@ defmodule Xandra.Protocol.V3 do
 
   defp decode_value(<<data::bits>>, :varint) do
     size = bit_size(data)
-    <<value::size(size)-signed>> = data
+    <<value::size(^size)-signed>> = data
     value
   end
 

@@ -509,7 +509,7 @@ defmodule Xandra.Protocol.V5 do
          options
        ) do
     %Page{} = page = Proto.new_page(query)
-    {page, buffer} = decode_metadata(buffer, page, Keyword.fetch!(options, :atom_keys?))
+    {%Page{} = page, buffer} = decode_metadata(buffer, page, Keyword.fetch!(options, :atom_keys?))
     columns = rewrite_column_types(page.columns, options)
 
     %Page{
@@ -795,7 +795,7 @@ defmodule Xandra.Protocol.V5 do
 
   defp decode_value(<<data::bits>>, :varint) do
     size = bit_size(data)
-    <<value::size(size)-signed>> = data
+    <<value::size(^size)-signed>> = data
     value
   end
 

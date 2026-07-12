@@ -44,8 +44,7 @@ defmodule Xandra.Backoff do
   end
 
   def backoff(%__MODULE__{type: :exp, max: max, state: prev} = s) do
-    require Bitwise
-    next = min(Bitwise.<<<(prev, 1), max)
+    next = min(Bitwise.bsl(prev, 1), max)
     {next, %__MODULE__{s | state: next}}
   end
 
