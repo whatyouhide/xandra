@@ -247,21 +247,26 @@ defmodule XandraTest do
       ';
       """)
 
-      results =
-        1..2
-        |> Task.async_stream(fn index ->
-          {index, Xandra.execute(conn, "SELECT #{keyspace}.sleep(200) FROM system.local")}
+      # Start the first request in a task and wait for the connection to register
+      # it as in flight, so that the second request is guaranteed to overlap with it.
+      task =
+        Task.async(fn ->
+          Xandra.execute(conn, "SELECT #{keyspace}.sleep(1000) FROM system.local")
         end)
-        |> Enum.map(fn {:ok, result} -> result end)
 
-      # The first call succeeds, but the second call fails because it goes over
-      # the max concurrent conns.
-      assert [
-               {1, {:ok, %Xandra.Page{}}},
-               {2, {:error, %ConnectionError{reason: :too_many_concurrent_requests} = error}}
-             ] = Enum.sort_by(results, &elem(&1, 0))
+      Xandra.TestHelper.wait_for_passing(500, fn ->
+        assert {:connected, data} = :sys.get_state(conn)
+        assert map_size(data.in_flight_requests) == 1
+      end)
+
+      # The first request is still in flight, so this one goes over the max
+      # concurrent requests and fails.
+      assert {:error, %ConnectionError{reason: :too_many_concurrent_requests} = error} =
+               Xandra.execute(conn, "SELECT * FROM system.local")
 
       assert Exception.message(error) =~ "this connection has too many requests in flight"
+
+      assert {:ok, %Xandra.Page{}} = Task.await(task)
     end
 
     # It's an annoyance to set up support for UDFs in Scylla in CI.
