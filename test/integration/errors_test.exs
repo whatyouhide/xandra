@@ -86,7 +86,7 @@ defmodule ErrorsTest do
         :state_functions
       end
 
-      def waiting({:call, from}, :checkout, data) do
+      def waiting({:call, from}, {:checkout, _token}, data) do
         {:keep_state_and_data, {:reply, from, {:ok, data}}}
       end
     end
