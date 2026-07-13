@@ -458,7 +458,13 @@ defmodule Xandra do
     ],
 
     # Internal options, used by Xandra.Cluster.
-    cluster_pid: [doc: false, type: :pid]
+    cluster_pid: [doc: false, type: :pid],
+    # PID to send ScyllaDB sharding info (parsed from the SUPPORTED options) to
+    # after each successful connection.
+    sharding_info_pid: [doc: false, type: :pid],
+    # When set, connect to this ScyllaDB shard through the shard-aware port:
+    # %{shard: ..., nr_shards: ..., port: ...}.
+    shard_target: [doc: false, type: :map]
   ]
 
   @typedoc "Options for `start_link/1`."

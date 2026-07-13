@@ -80,6 +80,39 @@ defmodule Xandra.Connection.Utils do
     end
   end
 
+  # Parses ScyllaDB's sharding extension out of the options that the server
+  # returns in the SUPPORTED message (https://github.com/scylladb/scylladb/blob/master/docs/dev/protocol-extensions.md).
+  # Returns nil when not connected to ScyllaDB or when the sharding scheme is not
+  # one we support ("biased-token-round-robin" over the Murmur3 partitioner is
+  # the only scheme ScyllaDB defines). The shard-aware ports are optional since
+  # older ScyllaDB versions don't advertise them.
+  @spec parse_scylla_sharding_info(%{optional(String.t()) => [String.t()]}) :: map() | nil
+  def parse_scylla_sharding_info(supported_options) do
+    case supported_options do
+      %{
+        "SCYLLA_SHARD" => [shard],
+        "SCYLLA_NR_SHARDS" => [nr_shards],
+        "SCYLLA_SHARDING_IGNORE_MSB" => [sharding_ignore_msb],
+        "SCYLLA_SHARDING_ALGORITHM" => ["biased-token-round-robin"],
+        "SCYLLA_PARTITIONER" => ["org.apache.cassandra.dht.Murmur3Partitioner"]
+      } ->
+        %{
+          shard: String.to_integer(shard),
+          nr_shards: String.to_integer(nr_shards),
+          sharding_ignore_msb: String.to_integer(sharding_ignore_msb),
+          shard_aware_port: parse_optional_port(supported_options["SCYLLA_SHARD_AWARE_PORT"]),
+          shard_aware_port_ssl:
+            parse_optional_port(supported_options["SCYLLA_SHARD_AWARE_PORT_SSL"])
+        }
+
+      _other ->
+        nil
+    end
+  end
+
+  defp parse_optional_port([port]), do: String.to_integer(port)
+  defp parse_optional_port(_other), do: nil
+
   @spec startup_connection(Transport.t(), map(), module(), nil | module(), keyword()) ::
           :ok | {:error, ConnectionError.t()}
   def startup_connection(

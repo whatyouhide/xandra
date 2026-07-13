@@ -99,8 +99,9 @@ defmodule Xandra.Cluster.Pool do
     # The number of connections in each pool to a node.
     :pool_size,
 
-    # Whether to enable token-aware routing.
+    # Whether to enable token-aware routing and ScyllaDB shard awareness.
     :token_aware_routing,
+    :shard_awareness,
 
     # The ring of tokens of the cluster ({token, peername} entries sorted in a
     # tuple), or nil if token-aware routing is off or the ring is unknown.
@@ -174,6 +175,7 @@ defmodule Xandra.Cluster.Pool do
       name: Keyword.get(cluster_opts, :name),
       pool_size: Keyword.fetch!(cluster_opts, :pool_size),
       token_aware_routing: Keyword.fetch!(cluster_opts, :token_aware_routing),
+      shard_awareness: Keyword.fetch!(cluster_opts, :shard_awareness),
       pool_supervisor: pool_sup,
       refresh_topology_interval: Keyword.fetch!(cluster_opts, :refresh_topology_interval),
       checkout_queue: checkout_queue(queue: :queue.new(), max_size: checkout_queue_max_size),
@@ -458,7 +460,7 @@ defmodule Xandra.Cluster.Pool do
           %{pool_pid: pool_pid, host: host} = Map.get(data.peers, Host.to_peername(host)),
           not is_nil(host),
           is_pid(pool_pid) and Process.alive?(pool_pid),
-          pid = ConnectionPool.checkout(pool_pid),
+          pid = ConnectionPool.checkout(pool_pid, token),
           do: {pid, host}
 
     reply =
@@ -552,7 +554,10 @@ defmodule Xandra.Cluster.Pool do
 
     pool_spec =
       Supervisor.child_spec(
-        {data.xandra_mod, connection_options: conn_options, pool_size: data.pool_size},
+        {data.xandra_mod,
+         connection_options: conn_options,
+         pool_size: data.pool_size,
+         shard_awareness: data.shard_awareness},
         id: peername,
         restart: :transient
       )
