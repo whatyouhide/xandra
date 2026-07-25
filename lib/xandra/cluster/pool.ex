@@ -471,7 +471,7 @@ defmodule Xandra.Cluster.Pool do
   end
 
   # With token-aware routing, move the host that is the primary replica for the
-  # query's token to the front of the query plan, so that (when we have a
+  # query's token towards the front of the query plan, so that (when we have a
   # connection to it) the query is executed on a replica that owns the data.
   defp maybe_prioritize_token_owner(%__MODULE__{token_ring: ring}, query_plan, token)
        when is_nil(ring) or is_nil(token) do
@@ -479,11 +479,37 @@ defmodule Xandra.Cluster.Pool do
   end
 
   defp maybe_prioritize_token_owner(%__MODULE__{token_ring: ring}, query_plan, token) do
-    owner_peername = TokenRing.owner_peername(ring, token)
+    prioritize_token_owner(query_plan, TokenRing.owner_peername(ring, token))
+  end
 
-    case Enum.split_with(query_plan, &(Host.to_peername(&1) == owner_peername)) do
-      {[], _query_plan} -> query_plan
-      {owners, rest} -> owners ++ rest
+  # The owner is only promoted past hosts *in its own data center*, so that
+  # token-aware routing never overrides the load-balancing policy's data-center
+  # order (such as DCAwareRoundRobin putting the local DC first): without
+  # knowing the keyspace's replication, a remote-DC primary replica is not a
+  # better choice than local-DC replicas.
+  @doc false
+  @spec prioritize_token_owner(
+          Enumerable.t(Host.t()),
+          {:inet.ip_address() | String.t(), :inet.port_number()}
+        ) :: [Host.t()]
+  def prioritize_token_owner(query_plan, owner_peername) do
+    query_plan = Enum.to_list(query_plan)
+
+    case Enum.split_while(query_plan, &(Host.to_peername(&1) != owner_peername)) do
+      {_query_plan, []} ->
+        query_plan
+
+      {before_owner, [%Host{} = owner | after_owner]} ->
+        same_dc_before_owner =
+          before_owner
+          |> Enum.reverse()
+          |> Enum.take_while(&(&1.data_center == owner.data_center))
+          |> Enum.reverse()
+
+        other_dcs_before_owner =
+          Enum.take(before_owner, length(before_owner) - length(same_dc_before_owner))
+
+        other_dcs_before_owner ++ [owner] ++ same_dc_before_owner ++ after_owner
     end
   end
 
