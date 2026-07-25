@@ -64,6 +64,32 @@ services:
       options:
         max-size: 50m
 
+  # A multi-shard ScyllaDB instance to test shard awareness, with the
+  # shard-aware port (19042) exposed. The shard-aware port must be mapped to
+  # the same port on the host, because ScyllaDB advertises its own (internal)
+  # port number to clients.
+  scylladb_shard_aware:
+    build:
+      context: ./test/docker
+      dockerfile: scylladb.dockerfile
+      args:
+        SCYLLA_VERSION: ${SCYLLA_VERSION:-5.2}
+    ports:
+      - "9072:9042"
+      - "19042:19042"
+    command:
+      - "--smp"
+      - "2"
+    healthcheck:
+      test: [ "CMD-SHELL", "nodetool -h ::FFFF:127.0.0.1 status" ]
+      interval: 20s
+      timeout: 10s
+      retries: 12
+    logging:
+      driver: "json-file"
+      options:
+        max-size: 50m
+
   scylladb_with_auth:
     build:
       context: ./test/docker

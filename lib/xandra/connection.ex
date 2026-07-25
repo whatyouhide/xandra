@@ -395,6 +395,8 @@ defmodule Xandra.Connection do
       send(data.cluster_pid, {:xandra, :disconnected, data.peername, self()})
     end
 
+    notify_sharding_info_pid(data, {:xandra, :disconnected, data.peername, self()})
+
     Enum.each(data.in_flight_requests, fn {_stream_id, req_alias} ->
       send_reply(req_alias, {:error, :disconnected})
     end)
@@ -432,6 +434,11 @@ defmodule Xandra.Connection do
     # Now, build the state from the options.
     {address, port} = Keyword.fetch!(options, :node)
 
+    # When targeting a specific ScyllaDB shard, we connect to the host's
+    # shard-aware port instead of the regular CQL port.
+    shard_target = Keyword.get(options, :shard_target)
+    port = if shard_target, do: shard_target.port, else: port
+
     transport = %Transport{
       module: if(options[:encryption], do: :ssl, else: :gen_tcp),
       options:
@@ -459,7 +466,13 @@ defmodule Xandra.Connection do
             Backoff.new(Keyword.take(options, [:backoff_type, :backoff_min, :backoff_max]))
     }
 
-    case Transport.connect(transport, String.to_charlist(address), port, data.connect_timeout) do
+    case connect_transport(
+           transport,
+           String.to_charlist(address),
+           port,
+           data.connect_timeout,
+           shard_target
+         ) do
       {:ok, transport} ->
         {:ok, peername} = Transport.address_and_port(transport)
         data = %__MODULE__{data | transport: transport, peername: peername}
@@ -486,6 +499,13 @@ defmodule Xandra.Connection do
 
           if data.cluster_pid do
             send(data.cluster_pid, {:xandra, :connected, data.peername, self()})
+          end
+
+          notify_sharding_info_pid(data, {:xandra, :connected, data.peername, self()})
+
+          if sharding_info_pid = Keyword.get(data.options, :sharding_info_pid) do
+            sharding_info = Utils.parse_scylla_sharding_info(supported_options)
+            send(sharding_info_pid, {:xandra, :sharding_info, self(), sharding_info})
           end
 
           {:next_state, :connected, data}
@@ -715,6 +735,47 @@ defmodule Xandra.Connection do
 
   ## Helpers
 
+  # How many local source ports we try to bind to when targeting a ScyllaDB
+  # shard, before giving up on the connection attempt.
+  @shard_aware_source_port_attempts 20
+
+  # The IANA ephemeral port range, which is also what other ScyllaDB drivers
+  # use for the local source ports of shard-aware connections.
+  @ephemeral_port_range 49_152..65_535
+
+  defp connect_transport(%Transport{} = transport, address, port, timeout, nil = _shard_target) do
+    Transport.connect(transport, address, port, timeout)
+  end
+
+  # When connecting to ScyllaDB's shard-aware port, the server assigns the
+  # connection to the shard equal to our *source port* modulo the number of
+  # shards, so we bind the socket to a local port that targets the shard we
+  # want. We start from a random port (that is congruent to the shard modulo the
+  # number of shards) in the ephemeral range and step by the number of shards on
+  # EADDRINUSE, wrapping around at the end of the range.
+  defp connect_transport(%Transport{} = transport, address, port, timeout, %{
+         shard: shard,
+         nr_shards: nr_shards
+       }) do
+    first_port =
+      @ephemeral_port_range.first + Integer.mod(shard - @ephemeral_port_range.first, nr_shards)
+
+    candidate_count = div(@ephemeral_port_range.last - first_port, nr_shards) + 1
+    start_index = Enum.random(0..(candidate_count - 1))
+    attempts = min(@shard_aware_source_port_attempts, candidate_count)
+
+    Enum.reduce_while(0..(attempts - 1), {:error, :eaddrinuse}, fn attempt, _last_error ->
+      source_port = first_port + Integer.mod(start_index + attempt, candidate_count) * nr_shards
+      transport_with_port = update_in(transport.options, &(&1 ++ [port: source_port]))
+
+      case Transport.connect(transport_with_port, address, port, timeout) do
+        {:ok, transport} -> {:halt, {:ok, transport}}
+        {:error, :eaddrinuse} -> {:cont, {:error, :eaddrinuse}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
   defp startup_connection(
          %Transport{} = transport,
          supported_options,
@@ -758,6 +819,20 @@ defmodule Xandra.Connection do
         options
       )
     end
+  end
+
+  # Forwards connection lifecycle messages to the pool that tracks sharding
+  # info (if there is one), which needs to know whether connections are usable.
+  # When the connection targets a specific shard, its :cluster_pid *is* that
+  # pool, so we avoid sending the message twice.
+  defp notify_sharding_info_pid(%__MODULE__{} = data, message) do
+    sharding_info_pid = Keyword.get(data.options, :sharding_info_pid)
+
+    if is_pid(sharding_info_pid) and sharding_info_pid != data.cluster_pid do
+      send(sharding_info_pid, message)
+    end
+
+    :ok
   end
 
   defp disconnect(%__MODULE__{} = data, reason) do
