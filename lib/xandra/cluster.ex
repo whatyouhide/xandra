@@ -268,8 +268,12 @@ defmodule Xandra.Cluster do
       hop between coordinator and replica for most queries. Token-aware routing is
       best-effort: if the replica is not connected (or the token cannot be computed, for
       example for simple queries, batches, or with native protocol v3), the query falls
-      back to the load-balancing policy. Only the Murmur3 partitioner (the default in both
-      Cassandra and ScyllaDB) is supported. *Available since v0.20.0*.
+      back to the load-balancing policy. It also never overrides the load-balancing
+      policy's *data-center order*: a primary replica in a remote data center is not
+      preferred over hosts in the local data center (with a data-center-aware policy
+      such as `Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin`). Only the Murmur3
+      partitioner (the default in both Cassandra and ScyllaDB) is supported.
+      *Available since v0.20.0*.
       """
     ],
     debug: [
