@@ -286,11 +286,18 @@ defmodule Xandra.Cluster.Pool do
   def handle_event(:info, {:host_down, address, port}, _state, %__MODULE__{} = data) do
     # Set the host's status as :down, regardless of its current state.
     peername = {address, port}
-    data = set_host_status(data, peername, :down)
-    host = data.peers[peername].host
-    data = stop_pool(data, host)
-    data = maybe_start_pools(data)
-    {:keep_state, data}
+
+    case data.peers[peername] do
+      nil ->
+        send(data.control_connection, :refresh_topology)
+        {:keep_state, data}
+
+      %{host: %Host{} = host} ->
+        data = set_host_status(data, peername, :down)
+        data = stop_pool(data, host)
+        data = maybe_start_pools(data)
+        {:keep_state, data}
+    end
   end
 
   def handle_event(:info, {:discovered_hosts, new_peers}, _state, %__MODULE__{} = data)
