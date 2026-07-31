@@ -227,9 +227,18 @@ defmodule Xandra.ClusterTest do
       assert_received {[:xandra, :connected], ^telemetry_ref, %{}, %{}}
     end
 
-    test "times out correctly with :sync_connect", %{base_options: opts} do
-      opts = Keyword.merge(opts, sync_connect: 0)
+    test "stops the cluster if :sync_connect times out", %{base_options: opts} do
+      name = :sync_connect_timeout_cluster
+
+      opts =
+        Keyword.merge(opts,
+          control_connection_module: ControlConnectionMock,
+          name: name,
+          sync_connect: 0
+        )
+
       assert {:error, :sync_connect_timeout} = Cluster.start_link(opts)
+      refute Process.whereis(name)
     end
 
     @tag :capture_log
