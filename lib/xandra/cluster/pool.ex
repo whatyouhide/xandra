@@ -32,7 +32,7 @@ defmodule Xandra.Cluster.Pool do
            {cluster_opts, connection_opts, sync_connect_alias_or_nil},
            gen_statem_opts
          ) do
-      {:ok, pid} when is_integer(sync_connect_timeout) ->
+      {:ok, pid} when is_integer(sync_connect_timeout) or sync_connect_timeout == :infinity ->
         receive do
           {^sync_connect_alias_or_nil, :connected} ->
             {:ok, pid}
