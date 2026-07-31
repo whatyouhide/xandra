@@ -198,6 +198,7 @@ defmodule Xandra.Cluster.ControlConnectionTest do
     ctrl_conn = start_control_connection!(start_options)
 
     assert_receive {^mirror_ref, {:discovered_hosts, _peers}}
+    initial_timer_ref = :sys.get_state(ctrl_conn).refresh_topology_timer_ref
 
     send_change_event(ctrl_conn, %TopologyChange{
       effect: "NEW_NODE",
@@ -205,14 +206,19 @@ defmodule Xandra.Cluster.ControlConnectionTest do
       port: @port
     })
 
+    new_node_timer_ref = :sys.get_state(ctrl_conn).refresh_topology_timer_ref
+    assert Process.read_timer(initial_timer_ref) == false
+    assert is_integer(Process.read_timer(new_node_timer_ref))
+
     send_change_event(ctrl_conn, %TopologyChange{
       effect: "REMOVED_NODE",
       address: {127, 0, 0, 102},
       port: @port
     })
 
-    # Wait for the messages to be processed.
-    :sys.get_state(ctrl_conn)
+    removed_node_timer_ref = :sys.get_state(ctrl_conn).refresh_topology_timer_ref
+    assert Process.read_timer(new_node_timer_ref) == false
+    assert is_integer(Process.read_timer(removed_node_timer_ref))
   end
 
   test "ignores TopologyChange events of type MOVED_NODE",
