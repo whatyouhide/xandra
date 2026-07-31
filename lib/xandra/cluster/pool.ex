@@ -39,6 +39,7 @@ defmodule Xandra.Cluster.Pool do
         after
           sync_connect_timeout ->
             if sync_connect_alias_or_nil, do: Process.unalias(sync_connect_alias_or_nil)
+            stop_after_sync_connect_timeout(pid)
             {:error, :sync_connect_timeout}
         end
 
@@ -754,6 +755,16 @@ defmodule Xandra.Cluster.Pool do
 
   defp timeout_action(name, time) do
     {{:timeout, name}, time, _event_content = nil}
+  end
+
+  defp stop_after_sync_connect_timeout(pid) do
+    monitor_ref = Process.monitor(pid)
+    Process.unlink(pid)
+    Process.exit(pid, :kill)
+
+    receive do
+      {:DOWN, ^monitor_ref, :process, ^pid, _reason} -> :ok
+    end
   end
 
   defp execute_telemetry(%__MODULE__{} = state, event_postfix, measurements, extra_meta) do
