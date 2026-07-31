@@ -227,6 +227,33 @@ defmodule Xandra.ClusterTest do
       assert_received {[:xandra, :connected], ^telemetry_ref, %{}, %{}}
     end
 
+    test "waits with an infinite :sync_connect timeout", %{
+      base_options: opts,
+      test_ref: test_ref
+    } do
+      name = :sync_connect_infinity_cluster
+
+      opts =
+        Keyword.merge(opts,
+          control_connection_module: ControlConnectionMock,
+          name: name,
+          sync_connect: :infinity,
+          xandra_module: PoolMock
+        )
+
+      task = Task.async(fn -> Cluster.start_link(opts) end)
+      assert_control_connection_started(test_ref)
+      refute Task.yield(task, 0)
+
+      cluster = Process.whereis(name)
+      host = %Host{address: {127, 0, 0, 1}, port: @port}
+      send(cluster, {:discovered_hosts, [host]})
+      :sys.get_state(cluster)
+      send(cluster, {:xandra, :connected, Host.to_peername(host), self()})
+
+      assert {:ok, ^cluster} = Task.await(task)
+    end
+
     test "stops the cluster if :sync_connect times out", %{base_options: opts} do
       name = :sync_connect_timeout_cluster
 
