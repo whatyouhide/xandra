@@ -48,6 +48,11 @@ defmodule Xandra.ClusterTest do
     def handle_info({:started_pool, %Host{}}, state) do
       {:noreply, state}
     end
+
+    def handle_info(:refresh_topology, {test_pid, test_ref} = state) do
+      send(test_pid, {test_ref, __MODULE__, :refresh_topology})
+      {:noreply, state}
+    end
   end
 
   defmacrop assert_telemetry(postfix, meta) do
@@ -893,31 +898,27 @@ defmodule Xandra.ClusterTest do
       get_state(pid)
     end
 
-    @tag telemetry_events: [
-           [:xandra, :cluster, :pool, :started],
-           [:xandra, :cluster, :change_event],
-           [:xandra, :cluster, :discovered_peers]
-         ]
     test "receiving change events of a yet unknown host triggers a :refresh_topology", %{
       base_options: opts,
-      telemetry_ref: telemetry_ref
+      test_ref: test_ref
     } do
+      opts =
+        Keyword.merge(opts,
+          control_connection_module: ControlConnectionMock,
+          sync_connect: false
+        )
+
       pid = start_supervised!({Cluster, opts})
       bad_host = %Host{address: {127, 0, 0, 1}, port: 9999}
-      assert_receive {[:xandra, :cluster, :pool, :started], ^telemetry_ref, %{}, %{}}
+      assert_control_connection_started(test_ref)
 
-      assert_receive {[:xandra, :cluster, :change_event], ^telemetry_ref, %{},
-                      %{event_type: :host_added}}
+      send(pid, {:host_up, bad_host.address, bad_host.port})
+      assert_receive {^test_ref, ControlConnectionMock, :refresh_topology}
 
-      send(pid, {:host_up, bad_host})
+      send(pid, {:host_down, bad_host.address, bad_host.port})
+      assert_receive {^test_ref, ControlConnectionMock, :refresh_topology}
 
-      assert_receive {[:xandra, :cluster, :discovered_peers], ^telemetry_ref,
-                      %{peers: [%Host{address: {127, 0, 0, 1}, port: @port}]}, _cluster_info}
-
-      send(pid, {:host_down, bad_host})
-
-      assert_receive {[:xandra, :cluster, :discovered_peers], ^telemetry_ref,
-                      %{peers: [%Host{address: {127, 0, 0, 1}, port: @port}]}, _cluster_info}
+      assert Process.alive?(pid)
     end
   end
 
