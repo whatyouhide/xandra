@@ -127,6 +127,37 @@ defmodule Xandra.RetryStrategiesTest do
       :code.purge(AllNodesStrategy)
     end
 
+    test "uses options returned by the retry strategy", %{start_options: start_options} do
+      defmodule ConsistencyStrategy do
+        @behaviour Xandra.RetryStrategy
+
+        @impl true
+        def new(options) do
+          [{conn_pid, _host} | _rest] = Keyword.fetch!(options, :connected_hosts)
+          conn_pid
+        end
+
+        @impl true
+        def retry(%Xandra.Error{reason: :invalid}, options, conn_pid) do
+          {:retry, Keyword.put(options, :consistency, :one), :retried, conn_pid}
+        end
+
+        def retry(_error, _options, :retried), do: :error
+      end
+
+      start_options = Keyword.merge(start_options, sync_connect: 1000)
+      cluster = start_supervised!({Xandra.Cluster, start_options})
+
+      assert {:ok, %Xandra.Page{}} =
+               Xandra.Cluster.execute(cluster, "SELECT * FROM system.local", [],
+                 retry_strategy: ConsistencyStrategy,
+                 consistency: :any
+               )
+    after
+      :code.delete(ConsistencyStrategy)
+      :code.purge(ConsistencyStrategy)
+    end
+
     test "raises an error if c:retry/3 returns an invalid value", %{conn: conn} do
       defmodule InvalidClusterStrategy do
         @behaviour Xandra.RetryStrategy

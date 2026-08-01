@@ -483,14 +483,12 @@ defmodule Xandra.Cluster do
   end
 
   def execute(cluster, %Batch{} = batch, options) when is_list(options) do
-    options_without_retry_strategy = Keyword.delete(options, :retry_strategy)
-
     with_conn_and_retrying(
       cluster,
       options,
       _token = nil,
-      fn conn ->
-        Xandra.execute(conn, batch, options_without_retry_strategy)
+      fn conn, retry_options ->
+        Xandra.execute(conn, batch, retry_options)
       end
     )
   end
@@ -508,14 +506,12 @@ defmodule Xandra.Cluster do
   @spec execute(cluster, Xandra.statement() | Xandra.Prepared.t(), Xandra.values(), keyword) ::
           {:ok, Xandra.result()} | {:error, Xandra.error()}
   def execute(cluster, query, params, options) do
-    options_without_retry_strategy = Keyword.delete(options, :retry_strategy)
-
     with_conn_and_retrying(
       cluster,
       options,
       routing_token(query, params),
-      fn conn ->
-        Xandra.execute(conn, query, params, options_without_retry_strategy)
+      fn conn, retry_options ->
+        Xandra.execute(conn, query, params, retry_options)
       end
     )
   end
@@ -591,7 +587,7 @@ defmodule Xandra.Cluster do
     Pool.connected_hosts(cluster)
   end
 
-  defp with_conn_and_retrying(cluster, options, token, fun) when is_function(fun, 1) do
+  defp with_conn_and_retrying(cluster, options, token, fun) when is_function(fun, 2) do
     case Pool.checkout(cluster, token) do
       {:error, :empty} ->
         action = "checkout from cluster #{inspect(cluster)}"

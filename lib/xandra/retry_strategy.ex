@@ -282,17 +282,17 @@ defmodule Xandra.RetryStrategy do
   end
 
   @doc false
-  @spec run_on_cluster(keyword(), [host, ...], (pid() -> result)) :: result
+  @spec run_on_cluster(keyword(), [host, ...], (pid(), keyword() -> result)) :: result
         when result: return_value(), host: {pid(), Host.t()}
   def run_on_cluster(options, [{conn_pid, _host} | _rest] = connected_hosts, fun)
-      when is_function(fun, 1) do
+      when is_function(fun, 2) do
     if Keyword.has_key?(options, :execution_level) do
       raise ArgumentError, "the :execution_level option must be set by Xandra"
     end
 
     case Keyword.pop(options, :retry_strategy) do
-      {nil, _options} ->
-        fun.(conn_pid)
+      {nil, options} ->
+        fun.(conn_pid, options)
 
       {retry_strategy, options} ->
         # Let's initialize the retry state even if the query hasn't failed yet.
@@ -306,7 +306,7 @@ defmodule Xandra.RetryStrategy do
   end
 
   defp run_on_cluster(retry_strategy, retry_state, options, conn_pid, fun) do
-    case fun.(conn_pid) do
+    case fun.(conn_pid, options) do
       {:error, error} ->
         case retry_strategy.retry(error, options, retry_state) do
           :error ->
