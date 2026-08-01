@@ -306,6 +306,7 @@ defmodule Xandra.Cluster.Pool do
 
     new_peers_map = Map.new(new_peers, &{Host.to_peername(&1), &1})
     new_peers_set = MapSet.new(new_peers, &Host.to_peername/1)
+    new_peers_order = new_peers |> Enum.map(&Host.to_peername/1) |> Enum.uniq()
     old_peers_set = data.peers |> Map.keys() |> MapSet.new()
 
     # Find the peers that are not in the set of known peers anymore, remove them
@@ -319,8 +320,12 @@ defmodule Xandra.Cluster.Pool do
     # For the new peers that we didn't know about, add them to the LBP, emit a
     # telemetry event, and potentially start pools.
     data =
-      Enum.reduce(MapSet.difference(new_peers_set, old_peers_set), data, fn peername, data_acc ->
-        handle_host_added(data_acc, Map.fetch!(new_peers_map, peername))
+      Enum.reduce(new_peers_order, data, fn peername, data_acc ->
+        if MapSet.member?(old_peers_set, peername) do
+          data_acc
+        else
+          handle_host_added(data_acc, Map.fetch!(new_peers_map, peername))
+        end
       end)
 
     # For the peers that we already knew about, refresh their info (their

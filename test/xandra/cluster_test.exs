@@ -888,6 +888,38 @@ defmodule Xandra.ClusterTest do
              |> List.keyfind({{127, 0, 0, 1}, 8092}, 0) == nil
     end
 
+    test "adds discovered hosts to the load balancing policy in order", %{test_ref: test_ref} do
+      opts = [
+        xandra_module: PoolMock,
+        control_connection_module: ControlConnectionMock,
+        nodes: ["node1"],
+        sync_connect: false,
+        target_pools: 2,
+        load_balancing: {Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin, []}
+      ]
+
+      pid = start_supervised!({Cluster, opts})
+      assert_control_connection_started(test_ref)
+
+      first_host = %Host{
+        address: {198, 10, 0, 9},
+        port: @port,
+        data_center: "first_dc"
+      }
+
+      second_host = %Host{
+        address: {198, 0, 0, 1},
+        port: @port,
+        data_center: "second_dc"
+      }
+
+      send(pid, {:discovered_hosts, [first_host, second_host]})
+
+      assert Xandra.Cluster.LoadBalancingPolicy.DCAwareRoundRobin.local_dc(
+               get_state(pid).load_balancing_state
+             ) == "first_dc"
+    end
+
     @tag telemetry_events: [[:xandra, :cluster, :pool, :started]]
     test ":host_up is idempotent", %{base_options: opts, telemetry_ref: telemetry_ref} do
       pid = start_supervised!({Cluster, opts})
