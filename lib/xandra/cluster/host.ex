@@ -108,6 +108,12 @@ defmodule Xandra.Cluster.Host do
   @doc since: "0.15.0"
   @spec format_peername({:inet.ip_address() | String.t(), :inet.port_number()}) ::
           String.t()
+  def format_peername({address, port})
+      when is_tuple(address) and tuple_size(address) == 8 and is_integer(port) and
+             port in 0..65_535 do
+    "[#{:inet.ntoa(address)}]:#{port}"
+  end
+
   def format_peername({address, port}) when is_integer(port) and port in 0..65_535 do
     if ip_address?(address) do
       "#{:inet.ntoa(address)}:#{port}"

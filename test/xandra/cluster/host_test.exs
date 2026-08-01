@@ -13,7 +13,7 @@ defmodule Xandra.Cluster.HostTest do
 
     test "formats an IPv6 address" do
       host = %Host{address: {0, 0, 0, 0, 0, 0, 0, 1}, port: 9042}
-      assert Host.format_address(host) == "::1:9042"
+      assert Host.format_address(host) == "[::1]:9042"
     end
 
     test "formats a hostname" do
