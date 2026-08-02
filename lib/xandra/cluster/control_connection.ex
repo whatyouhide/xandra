@@ -57,6 +57,7 @@ defmodule Xandra.Cluster.ControlConnection do
 
     # The interval at which to refresh the cluster topology.
     :refresh_topology_interval,
+    :refresh_topology_timer_ref,
 
     # The protocol module of the node we're connected to.
     :protocol_module,
@@ -125,7 +126,7 @@ defmodule Xandra.Cluster.ControlConnection do
         send(state.cluster_pid, {:host_up, state.ip, state.port})
 
         # We set up a timer to periodically refresh the topology.
-        schedule_refresh_topology(state.refresh_topology_interval)
+        state = schedule_refresh_topology(state, state.refresh_topology_interval)
 
         {:ok, state}
 
@@ -155,7 +156,7 @@ defmodule Xandra.Cluster.ControlConnection do
          {:ok, local_host, peers} <- fetch_cluster_topology(state),
          :ok <- Transport.setopts(state.transport, active: :once) do
       state = refresh_topology(state, [local_host | peers])
-      schedule_refresh_topology(state.refresh_topology_interval)
+      state = schedule_refresh_topology(state, state.refresh_topology_interval)
       {:noreply, state}
     else
       {:error, reason} ->
@@ -287,8 +288,7 @@ defmodule Xandra.Cluster.ControlConnection do
   # Might as well just refresh the topology, right?
   defp handle_change_event(state, %TopologyChange{effect: effect})
        when effect in ["NEW_NODE", "REMOVED_NODE"] do
-    schedule_refresh_topology(@delay_after_topology_change)
-    state
+    schedule_refresh_topology(state, @delay_after_topology_change)
   end
 
   defp handle_change_event(state, %TopologyChange{effect: "MOVED_NODE"} = event) do
@@ -296,8 +296,13 @@ defmodule Xandra.Cluster.ControlConnection do
     state
   end
 
-  defp schedule_refresh_topology(timeout) do
-    Process.send_after(self(), :refresh_topology, timeout)
+  defp schedule_refresh_topology(%__MODULE__{} = state, timeout) do
+    if timer_ref = state.refresh_topology_timer_ref do
+      Process.cancel_timer(timer_ref)
+    end
+
+    timer_ref = Process.send_after(self(), :refresh_topology, timeout)
+    %__MODULE__{state | refresh_topology_timer_ref: timer_ref}
   end
 
   defp consume_new_data(%__MODULE__{} = state) do
