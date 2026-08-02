@@ -120,8 +120,18 @@ jobs:
 
       - name: Start Docker and wait for it to be up
         run: |
-          docker compose up --detach --build
-          ./test/docker/health-check-services.sh
+          for attempt in 1 2; do
+            if docker compose up --detach --build && ./test/docker/health-check-services.sh; then
+              exit 0
+            fi
+
+            if [[ "$attempt" == 1 ]]; then
+              echo "Docker services failed to start, retrying once..."
+              docker compose down
+            fi
+          done
+
+          exit 1
 
       - name: Install OTP and Elixir
         uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1

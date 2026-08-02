@@ -8,7 +8,7 @@ defmodule Xandra.ConnectionErrorTest do
     property "whatever the reason, it supports any binary action" do
       check all action <- string(:printable), max_runs: 10 do
         assert message(action, :econnrefused) ==
-                 "action #{inspect(action)} failed with reason: connection refused"
+                 ~s(action "#{action}" failed with reason: connection refused)
       end
     end
 
