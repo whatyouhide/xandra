@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.20.0
+
+This release now requires Elixir 1.17+.
+
+### Features
+
+  * Add support for **token-aware routing** to `Xandra.Cluster`.
+  * Add support for **schema agreement**.
+  * Add support for ScyllaDB **shard awareness**.
+  * Add support for Cassandra-originating **auth challenges**.
+  * Add support for the `duration` type, using Elixir's `Duration` struct.
+  * Support IPv6 nodes and transport options.
+
+### Bug Fixes
+
+  * Return an error in stead of *exiting* on cluster connection shutdown.
+  * Fix an error where we now handle already-fired timeouts in the connection checkout queue.
+
 ## v0.19.4
 
   * Refresh topology when we get events for hosts we don't know about.
